@@ -1,0 +1,32 @@
+{
+    "id":"disciple_001",
+
+    "name":"巡查宗门附近",
+
+    "description":
+    "派遣弟子巡视宗门周围区域，防止妖兽侵扰。",
+
+    "type":"Disciple",
+
+    "needDays":3,
+
+
+    "goldReward":50,
+
+    "expReward":30,
+
+
+    "itemRewards":
+    [
+    ],
+
+
+    "requiredAttack":5,
+
+    "requiredIntelligence":5,
+
+
+    "nodes":
+    [
+    ]
+}

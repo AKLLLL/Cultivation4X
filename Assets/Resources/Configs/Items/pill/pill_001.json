@@ -1,0 +1,22 @@
+{
+    "itemId":"pill_001",
+
+    "itemName":"筑基丹",
+
+    "description":
+    "辅助练气修士突破筑基境界的珍贵丹药。",
+
+    "itemType":"Pill",
+
+    "quality":"Rare",
+
+    "rank":5,
+
+    "price":5000,
+
+    "stackable":true,
+
+    "maxStack":10,
+
+    "icon":"Items/pill_003"
+}

@@ -1,0 +1,21 @@
+{
+    "itemId":"herb_001",
+
+    "itemName":"云麓草",
+
+    "description":"增加修炼速度。",
+
+    "itemType":"Herb",
+
+    "quality":"Normal",
+
+    "rank":1,
+
+    "price":80,
+
+    "stackable":true,
+
+    "maxStack":999,
+
+    "icon":"Icons/herb_001"
+} 

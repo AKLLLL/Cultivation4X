@@ -1,0 +1,36 @@
+{
+    "id":"sect_001",
+
+    "name":"修复护山阵法",
+
+    "description":
+    "宗门阵法出现损坏，需要弟子寻找材料进行修复。",
+
+    "type":"Sect",
+
+    "needDays":10,
+
+
+    "goldReward":0,
+
+    "expReward":0,
+
+
+    "itemRewards":
+    [
+        {
+            "itemId":"material_001",
+            "count":3
+        }
+    ],
+
+
+    "requiredAttack":0,
+
+    "requiredIntelligence":20,
+
+
+    "nodes":
+    [
+    ]
+}

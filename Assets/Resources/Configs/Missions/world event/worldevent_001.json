@@ -1,0 +1,44 @@
+{
+    "id":"worldevent_001",
+
+    "name":"妖兽潮",
+
+    "description":
+    "附近妖兽大量出现，威胁附近修士。",
+
+    "type":"WorldEvent",
+
+    "needDays":5,
+
+
+    "goldReward":500,
+
+    "expReward":100,
+
+
+    "itemRewards":
+    [
+    ],
+
+
+    "requiredAttack":30,
+
+
+    "nodes":
+    [
+        {
+            "triggerType":"Day",
+
+            "triggerValue":2,
+
+            "title":"妖兽袭击",
+
+            "description":
+            "大量妖兽冲击防线。",
+
+            "options":
+            [
+            ]
+        }
+    ]
+}

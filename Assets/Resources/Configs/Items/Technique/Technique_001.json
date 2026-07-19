@@ -1,0 +1,21 @@
+{
+"itemId":"Technique_001",
+
+"itemName":"赤炎诀",
+
+"description":"火属性修炼功法。",
+
+"itemType":"Technique",
+
+ "quality":"Normal",
+
+    "rank":2,
+
+    "price":500,
+
+    "stackable":false,
+
+    "maxStack":1,
+
+    "icon":"Items/lingshouEgg_001"
+}

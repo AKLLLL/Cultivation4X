@@ -1,0 +1,21 @@
+{
+"itemId":"fuzhuan_001",
+
+"itemName":"火球符",
+
+"description":"释放一次火球术。",
+
+"itemType":"Talisman",
+
+ "quality":"Normal",
+
+    "rank":2,
+
+    "price":500,
+
+    "stackable":false,
+
+    "maxStack":1,
+
+    "icon":"Items/lingshouEgg_001"
+}

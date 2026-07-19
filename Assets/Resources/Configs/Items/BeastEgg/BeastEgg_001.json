@@ -1,0 +1,21 @@
+{
+"itemId":"lingshouEgg_001",
+
+"itemName":"白鹿灵兽蛋",
+
+"description":"可能孵化出灵兽白鹿。",
+
+"itemType":"BeastEgg",
+
+ "quality":"Normal",
+
+    "rank":2,
+
+    "price":500,
+
+    "stackable":false,
+
+    "maxStack":1,
+
+    "icon":"Items/lingshouEgg_001"
+}

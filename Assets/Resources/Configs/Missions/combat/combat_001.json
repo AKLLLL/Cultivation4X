@@ -1,0 +1,61 @@
+
+    {
+    "id": "combat_001",
+    "name": "清理妖兽巢穴",
+    "description":"附近出现妖兽袭击村庄。",
+    "type":"Combat",
+    "needDays": 4,
+
+    "goldReward": 120,
+    "expReward": 80,
+
+    "itemRewards":
+    [
+    {
+     "itemId":"weapon_001",
+     "count":5
+    }
+    ],
+
+     "requiredAttack": 15,
+     "requiredIntelligence": 8,
+    
+    "nodes":
+    [
+        {
+            "triggerType": "Day",
+            "triggerValue": 2,
+
+            "title": "哥布林伏击",
+            "description": "哥布林提前发现了你的踪迹。",
+
+            "options":
+            [
+                {
+                    "text": "正面迎战",
+                    "requirementType":"Attack",
+                    "requirementValue":20,
+            "effects":
+            [
+                {
+                    "type":"Reward",
+                    "value":30
+                }
+            ]
+                },
+                {
+                    "text": "绕路前进",
+                    "requirementType":"None",
+                    "requirementValue":0,
+            "effects":
+            [
+                {
+                    "type":"Delay",
+                    "value":2
+                }
+            ]
+                }
+            ]
+        }
+    ]
+}

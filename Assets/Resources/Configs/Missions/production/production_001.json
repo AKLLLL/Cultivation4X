@@ -1,0 +1,34 @@
+{
+    "id":"production_001",
+
+    "name":"炼制疗伤丹",
+
+    "description":
+    "使用灵草炼制基础疗伤丹药。",
+
+    "type":"Production",
+
+    "needDays":2,
+
+
+    "goldReward":0,
+
+    "expReward":50,
+
+
+    "itemRewards":
+    [
+        {
+            "itemId":"pill_001",
+            "count":3
+        }
+    ],
+
+
+    "requiredIntelligence":30,
+
+
+    "nodes":
+    [
+    ]
+}

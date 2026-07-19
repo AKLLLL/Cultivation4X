@@ -1,0 +1,32 @@
+{
+    "id":"cultivation_001",
+
+    "name":"闭关修炼",
+
+    "description":
+    "弟子进入闭关状态提升修为。",
+
+    "type":"Cultivation",
+
+    "needDays":30,
+
+
+    "goldReward":0,
+
+    "expReward":200,
+
+
+    "itemRewards":
+    [
+    ],
+
+
+    "requiredAttack":0,
+
+    "requiredIntelligence":20,
+
+
+    "nodes":
+    [
+    ]
+}

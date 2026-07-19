@@ -1,0 +1,65 @@
+
+    {
+    "id": "resource_001",
+    "name": "寻找灵草",
+    "description":
+    "收集灵草资源。",
+
+    "type":"Resource",
+
+    "needDays": 6,
+
+    "goldReward": 60,
+    "expReward": 100,
+
+    "itemRewards":
+    [
+    {
+     "itemId":"herb_001",
+     "count":3
+    }
+    ],
+
+     "requiredAttack": 15,
+    "requiredIntelligence": 8,
+    
+    "nodes":
+    [
+        {
+            "triggerType": "Day",
+            "triggerValue": 2,
+
+            "title": "发现珍贵灵草",
+            "description": "山谷中散发着淡淡灵气。",
+
+             "options":
+            [
+                {
+                    "text": "深入采集",
+                    "requirementType":"Intelligence",
+                    "requirementValue":20,
+            "effects":
+            [
+                {
+                    "type":"AddItem",
+                    "itemId":"herb_002",
+                    "count":1
+                }
+            ]
+                },
+                {
+                    "text": "绕路前进",
+                    "requirementType":"None",
+                    "requirementValue":0,
+            "effects":
+            [
+                {
+                    "type":"Delay",
+                    "value":2
+                }
+            ]
+                }
+            ]
+        }
+    ]
+}

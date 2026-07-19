@@ -1,0 +1,66 @@
+{
+    "id":"merchant_001",
+
+    "name":"受伤的商人",
+
+    "needDays":1,
+
+    "goldReward":0,
+
+    "expReward":0,
+
+    "itemRewards":
+    [
+    ],
+
+    "nodes":
+    [
+        {
+            "triggerType":"Day",
+            "triggerValue":1,
+
+            "title":"受伤的商人",
+
+            "description":
+            "你发现一名受伤的商人倒在路边。",
+
+            "options":
+            [
+                {
+                    "text":"帮助他",
+
+                    "requirementType":"None",
+
+                    "requirementValue":0,
+
+                    "effects":
+                    [
+                        {
+                            "type":"RemoveItem",
+                            "itemId":"heal_pill",
+                            "count":1
+                        },
+
+                        {
+                            "type":"TriggerEvent",
+                            "eventId":"merchant_help_001"
+                        }
+                    ]
+                },
+
+
+                {
+                    "text":"离开",
+
+                    "requirementType":"None",
+
+                    "requirementValue":0,
+
+                    "effects":
+                    [
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,67 @@
+{
+    "id":"merchant_help_001",
+
+    "name":"商人的请求",
+
+    "needDays":1,
+
+    "goldReward":200,
+
+    "expReward":50,
+
+
+    "itemRewards":
+    [
+    ],
+
+
+    "nodes":
+    [
+        {
+            "triggerType":"Day",
+
+            "triggerValue":1,
+
+
+            "title":"商人的请求",
+
+            "description":
+            "商人恢复了一些，他请求你帮忙找回丢失的货物。",
+
+
+            "options":
+            [
+                {
+                    "text":"帮助寻找货物",
+
+                    "requirementType":"None",
+
+                    "requirementValue":0,
+
+
+                    "effects":
+                    [
+                        {
+                            "type":"AddGold",
+                            "value":200
+                        }
+                    ]
+                },
+
+
+                {
+                    "text":"拒绝",
+
+                    "requirementType":"None",
+
+                    "requirementValue":0,
+
+
+                    "effects":
+                    [
+                    ]
+                }
+            ]
+        }
+    ]
+}

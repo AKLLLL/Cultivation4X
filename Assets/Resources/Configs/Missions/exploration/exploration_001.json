@@ -1,0 +1,63 @@
+
+    {
+    "id": "exploration_001",
+    "name": "探索遗迹",
+    "description":
+    "探索遗迹洞府。",
+
+    "type":"Exploration",
+    "needDays": 5,
+
+    "goldReward": 100,
+    "expReward": 50,
+
+    "itemRewards":
+    [
+    {
+     "itemId":"treasure_001",
+     "count":1
+    }
+    ],
+
+     "requiredAttack": 15,
+    "requiredIntelligence": 8,
+    
+    "nodes":
+    [
+        {
+            "triggerType": "Day",
+            "triggerValue": 2,
+
+            "title": "受伤的商人",
+            "description": "你发现一名受伤的商人倒在路边。",
+
+            "options":
+            [
+                {
+                    "text": "帮助他",
+                    "requirementType":"None",
+                    "requirementValue":0,
+            "effects":
+            [
+                {
+                    "type":"Delay",
+                    "value":100
+                }
+            ]
+                },
+                {
+                    "text": "坐视不管",
+                    "requirementType":"None",
+                    "requirementValue":0,
+            "effects":
+            [
+                {
+                    "type":"None",
+                    "value":0
+                }
+            ]
+                }
+            ]
+        }
+    ]
+}

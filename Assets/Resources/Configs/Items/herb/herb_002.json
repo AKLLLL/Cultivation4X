@@ -1,0 +1,21 @@
+{
+    "itemId":"herb_002",
+
+    "itemName":"归元青芽",
+
+    "description":"帮助修士归纳自身灵气。",
+
+     "itemType":"Herb",
+
+    "quality":"Normal",
+
+    "rank":1,
+
+    "price":80,
+
+    "stackable":true,
+
+    "maxStack":999,
+    
+    "icon":"Icons/herb_002"
+}

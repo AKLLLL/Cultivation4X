@@ -1,0 +1,22 @@
+{
+    "itemId":"weapon_001",
+
+    "itemName":"青云剑",
+
+    "description":
+    "低阶修士使用的飞剑。",
+
+    "itemType":"Weapon",
+
+    "quality":"Normal",
+
+    "rank":2,
+
+    "price":500,
+
+    "stackable":false,
+
+    "maxStack":1,
+
+    "icon":"Items/weapon_001"
+}
