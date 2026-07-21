@@ -2,8 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 测试随机事件按钮
-/// 后期可以删除
+/// 娴嬭瘯闅忔満浜嬩欢鎸夐挳
+/// 鍚庢湡鍙互鍒犻櫎
 /// </summary>
 public class RandomEventButton : MonoBehaviour
 {
@@ -23,7 +23,7 @@ public class RandomEventButton : MonoBehaviour
     public void TriggerEvent()
     {
 
-        //测试获取第一个NPC
+        //娴嬭瘯鑾峰彇绗竴涓狽PC
 
         NPCRuntime npc =
             NPCManager.Instance

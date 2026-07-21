@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 public class MissionPanel : MonoBehaviour
 {
-    [Header("UIÒıÓÃ")]
+    [Header("UIå¼•ç”¨")]
     [SerializeField] private GameObject missionPanel;
     [SerializeField] private GameObject npcSelectPanel;
 
@@ -20,10 +20,10 @@ public class MissionPanel : MonoBehaviour
 
     public MissionButton[] buttons;
 
-    // µ±Ç°Ñ¡ÔñµÄÈÎÎñ
+    // å½“å‰é€‰æ‹©çš„ä»»åŠ¡
     private MissionData selectedMissionData;
-    // µ±Ç°ÅÉÇ²µÄNPC
-    [Header("NPCÑ¡Ôñ")]
+    // å½“å‰æ´¾é£çš„NPC
+    [Header("NPCé€‰æ‹©")]
     private NPCRuntime selectedNPC;
     public TMP_Text npcNameText;
 
@@ -43,22 +43,22 @@ public class MissionPanel : MonoBehaviour
 
   public  void SelectMission(string id)
     {
-        // ¸ù¾İÈÎÎñID»ñÈ¡Mission¶ÔÏó
+        // æ ¹æ®ä»»åŠ¡IDè·å–Missionå¯¹è±¡
         selectedMissionData = MissionManager.Instance.GetMissionData(id);
 
         if (selectedMissionData == null)
         {
-            Debug.LogError($"ÕÒ²»µ½ÈÎÎñ£º{id}");
+            Debug.LogError($"æ‰¾ä¸åˆ°ä»»åŠ¡ï¼š{id}");
             return;
         }
 
-        Debug.Log($"ÒÑÑ¡ÔñÈÎÎñ£º{selectedMissionData.name}");
+        Debug.Log($"å·²é€‰æ‹©ä»»åŠ¡ï¼š{selectedMissionData.name}");
 
   
     }
    
     /// <summary>
-    /// ÉèÖÃµ±Ç°ÅÉÇ²NPC
+    /// è®¾ç½®å½“å‰æ´¾é£NPC
     /// </summary>
     public void SetSelectedNPC(NPCRuntime npc)
     {
@@ -66,12 +66,12 @@ public class MissionPanel : MonoBehaviour
 
         if (npc == null)
         {
-            npcNameText.text = "ÇëÑ¡ÔñNPC";
+            npcNameText.text = "è¯·é€‰æ‹©NPC";
         }
         else
         {
             npcNameText.text = npc.Data.name;
-            Debug.Log($"ÒÑÑ¡ÔñNPC£º{npc.Data.name}");
+            Debug.Log($"å·²é€‰æ‹©NPCï¼š{npc.Data.name}");
         }
         
     }
@@ -81,17 +81,17 @@ public class MissionPanel : MonoBehaviour
     {
         if (selectedMissionData == null)
         {
-            Debug.Log("ÇëÑ¡ÔñÈÎÎñ");
+            Debug.Log("è¯·é€‰æ‹©ä»»åŠ¡");
             return;
         }
         if (selectedNPC == null)
         {
-            Debug.Log("ÇëÑ¡ÔñNPC");
+            Debug.Log("è¯·é€‰æ‹©NPC");
             return;
         }
         MissionManager.Instance.TriggerMission(selectedMissionData.id, selectedNPC);
 
-        // ¹Ø±ÕÈÎÎñÃæ°å
+        // å…³é—­ä»»åŠ¡é¢æ¿
         UIManager.Instance.ClosePanel(missionPanel);
     }
 

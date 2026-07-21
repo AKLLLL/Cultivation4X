@@ -5,10 +5,10 @@ using System.Collections.Generic;
 
 public class NPCSelectPanel : MonoBehaviour
 {
-    [Header("ÁĞ±í")]
+    [Header("åˆ—è¡¨")]
     public Transform content;
 
-    [Header("°´Å¥Ô¤ÖÆÌå")]
+    [Header("æŒ‰é’®é¢„åˆ¶ä½“")]
     public GameObject npcButtonPrefab;
 
     [SerializeField]
@@ -21,11 +21,11 @@ public class NPCSelectPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Ë¢ĞÂNPCÁĞ±í
+    /// åˆ·æ–°NPCåˆ—è¡¨
     /// </summary>
     private void RefreshList()
     {
-        // É¾³ı¾É°´Å¥
+        // åˆ é™¤æ—§æŒ‰é’®
         foreach (Transform child in content)
         {
             Destroy(child.gameObject);
@@ -43,13 +43,12 @@ public class NPCSelectPanel : MonoBehaviour
             text.text = npc.Data.name;
 
             Button button = obj.GetComponent<Button>();
-            // Ã¦ÂµÊ±²»¿Éµã»÷
+            // å¿™ç¢Œæ—¶ä¸å¯ç‚¹å‡»
 
-            NPCRuntime runtime =
-              NPCManager.Instance.GetRuntime(npc.Data);
+            NPCRuntime runtime = npc;
             if (runtime == null)
             {
-                Debug.LogError("ÕÒ²»µ½NPCÔËĞĞÊı¾İ£º" + npc.Data.name);
+                Debug.LogError("æ‰¾ä¸åˆ°NPCè¿è¡Œæ•°æ®ï¼š" + npc.Data.name);
                 continue;
             }
 
@@ -67,7 +66,7 @@ public class NPCSelectPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Ñ¡ÔñNPC
+    /// é€‰æ‹©NPC
     /// </summary>
     private void SelectNPC(NPCRuntime npc)
     {

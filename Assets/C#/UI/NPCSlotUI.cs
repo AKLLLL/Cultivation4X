@@ -3,14 +3,14 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// ×ÚÃÅNPCÁĞ±íÖĞµÄµ¥¸ö¸ñ×Ó
-/// ¸ºÔğÏÔÊ¾NPCĞÅÏ¢
-/// ²»¸ºÔğNPCÂß¼­
+/// å®—é—¨NPCåˆ—è¡¨ä¸­çš„å•ä¸ªæ ¼å­
+/// è´Ÿè´£æ˜¾ç¤ºNPCä¿¡æ¯
+/// ä¸è´Ÿè´£NPCé€»è¾‘
 /// </summary>
 public class NPCSlotUI : MonoBehaviour
 {
 
-    [Header("ÏÔÊ¾")]
+    [Header("æ˜¾ç¤º")]
     public TMP_Text npcNameText;
 
     public TMP_Text levelText;
@@ -18,7 +18,7 @@ public class NPCSlotUI : MonoBehaviour
     public TMP_Text stateText;
 
 
-    //µ±Ç°ÏÔÊ¾µÄNPC
+    //å½“å‰æ˜¾ç¤ºçš„NPC
     private NPCRuntime currentNPC;
 
 
@@ -40,8 +40,8 @@ public class NPCSlotUI : MonoBehaviour
 
 
     /// <summary>
-    /// ³õÊ¼»¯¸ñ×Ó
-    /// SectPanel´´½¨Ê±µ÷ÓÃ
+    /// åˆå§‹åŒ–æ ¼å­
+    /// SectPanelåˆ›å»ºæ—¶è°ƒç”¨
     /// </summary>
 
     public void SetNPC(
@@ -61,12 +61,12 @@ public class NPCSlotUI : MonoBehaviour
 
 
         levelText.text =
-            "µÈ¼¶£º" + npc.Level;
+            "ç­‰çº§ï¼š" + npc.Level;
 
 
 
         stateText.text =
-            "×´Ì¬£º" + npc.State;
+            "çŠ¶æ€ï¼š" + npc.State;
 
 
     }

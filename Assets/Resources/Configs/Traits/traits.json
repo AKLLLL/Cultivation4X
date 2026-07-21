@@ -1,0 +1,20 @@
+[
+  {"id":"cautious","displayName":"谨慎","description":"更愿意避开未知风险。","intelligenceModifier":2,"eventWeightModifier":-0.1,"isExperience":false},
+  {"id":"reckless","displayName":"鲁莽","description":"面对危险时更容易选择冒险。","attackModifier":2,"eventWeightModifier":0.2,"isExperience":false},
+  {"id":"kind","displayName":"善良","description":"倾向帮助他人和灵兽。","eventWeightModifier":0.1,"isExperience":false},
+  {"id":"selfish","displayName":"自利","description":"优先考虑自身收益。","intelligenceModifier":1,"isExperience":false},
+  {"id":"diligent","displayName":"勤勉","description":"日常修炼更加专注。","eventWeightModifier":0.05,"isExperience":false},
+  {"id":"lazy","displayName":"散漫","description":"不喜欢按部就班地修炼。","eventWeightModifier":-0.05,"isExperience":false},
+  {"id":"loyal","displayName":"重情","description":"重视同门与宗门。","isExperience":false},
+  {"id":"ambitious","displayName":"野心","description":"渴望境界与地位。","attackModifier":1,"isExperience":false},
+  {"id":"insight_memory","displayName":"悟道余韵","description":"曾在夜半捕捉到一丝大道灵光。","intelligenceModifier":2,"isExperience":true},
+  {"id":"cautious_survivor","displayName":"劫后谨慎","description":"一次险境改变了处事方式。","intelligenceModifier":1,"isExperience":true},
+  {"id":"beast_friend","displayName":"灵兽之友","description":"曾救治一只受伤的灵兽。","isExperience":true},
+  {"id":"spirit_beast_bond","displayName":"灵兽羁绊","description":"与山林灵兽建立了联系。","isExperience":true},
+  {"id":"detached","displayName":"看淡生死","description":"见证山野生死后心境改变。","intelligenceModifier":1,"isExperience":true},
+  {"id":"mentor_heart","displayName":"传道之心","description":"从教导后辈中体会传承。","isExperience":true},
+  {"id":"ancient_legacy","displayName":"古修传承","description":"从残破洞府中获得传承。","attackModifier":3,"intelligenceModifier":3,"isExperience":true},
+  {"id":"ruins_trauma","displayName":"废墟创伤","description":"洞府坍塌留下永久伤痕。","attackModifier":-2,"isExperience":true},
+  {"id":"trauma_survivor","displayName":"直面梦魇","description":"承认恐惧后学会与伤痕共处。","intelligenceModifier":2,"isExperience":true},
+  {"id":"near_death_survivor","displayName":"死里逃生","description":"本应死亡，却成为宗门最后的火种。","attackModifier":-2,"intelligenceModifier":2,"isExperience":true}
+]

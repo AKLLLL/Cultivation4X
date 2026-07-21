@@ -3,14 +3,14 @@ using UnityEngine;
 using Newtonsoft.Json;
 
 /// <summary>
-/// ÈÎÎñ¹ÜÀíÆ÷
+/// ä»»åŠ¡ç®¡ç†å™¨
 ///
-/// Ö°Ôğ£º
-/// 1. ¼ÓÔØÈÎÎñÄ£°å MissionData
-/// 2. ¸ù¾İÄ£°å´´½¨ MissionÊµÀı
-/// 3. ¹ÜÀíÕıÔÚÔËĞĞµÄÈÎÎñ
-/// 4. ÍÆ½øÈÎÎñÊ±¼ä
-/// 5. ÅĞ¶ÏÈÎÎñ½á¹û
+/// èŒè´£ï¼š
+/// 1. åŠ è½½ä»»åŠ¡æ¨¡æ¿ MissionData
+/// 2. æ ¹æ®æ¨¡æ¿åˆ›å»º Missionå®ä¾‹
+/// 3. ç®¡ç†æ­£åœ¨è¿è¡Œçš„ä»»åŠ¡
+/// 4. æ¨è¿›ä»»åŠ¡æ—¶é—´
+/// 5. åˆ¤æ–­ä»»åŠ¡ç»“æœ
 /// </summary>
 public class MissionManager : MonoBehaviour
 {
@@ -20,14 +20,14 @@ public class MissionManager : MonoBehaviour
 
 
     /// <summary>
-    /// ¹Ì¶¨ÈÎÎñÄ£°å¿â
+    /// å›ºå®šä»»åŠ¡æ¨¡æ¿åº“
     /// </summary>
     private Dictionary<string, MissionData> missionTemplates
         =
         new Dictionary<string, MissionData>();
     /// <summary>
-    /// ¸ù¾İÈÎÎñÀàĞÍ»ñÈ¡ÈÎÎñÁĞ±í
-    /// ¸øUIÈë¿ÚÊ¹ÓÃ
+    /// æ ¹æ®ä»»åŠ¡ç±»å‹è·å–ä»»åŠ¡åˆ—è¡¨
+    /// ç»™UIå…¥å£ä½¿ç”¨
     /// </summary>
     public List<MissionData> GetMissionByType(MissionType type)
     {
@@ -53,7 +53,7 @@ public class MissionManager : MonoBehaviour
 
 
     /// <summary>
-    /// µ±Ç°ÕıÔÚ½øĞĞµÄÈÎÎñ
+    /// å½“å‰æ­£åœ¨è¿›è¡Œçš„ä»»åŠ¡
     /// </summary>
     private List<Mission> activeMissions =
         new List<Mission>();
@@ -93,7 +93,7 @@ public class MissionManager : MonoBehaviour
 
 
     /// <summary>
-    /// ¼ÓÔØËùÓĞÈÎÎñÄ£°å
+    /// åŠ è½½æ‰€æœ‰ä»»åŠ¡æ¨¡æ¿
     /// </summary>
     public void LoadMissionsFromJson()
     {
@@ -108,7 +108,7 @@ public class MissionManager : MonoBehaviour
         if (jsonFiles.Length == 0)
         {
             Debug.LogError(
-                "Mission Json²»´æÔÚ"
+                "Mission Jsonä¸å­˜åœ¨"
             );
 
             return;
@@ -125,7 +125,7 @@ public class MissionManager : MonoBehaviour
             if (data == null)
             {
                 Debug.LogError(
-                    $"½âÎöÊ§°Ü:{json.name}"
+                    $"è§£æå¤±è´¥:{json.name}"
                 );
 
                 continue;
@@ -134,7 +134,7 @@ public class MissionManager : MonoBehaviour
             if (missionTemplates.ContainsKey(data.id))
             {
                 Debug.LogError(
-                    $"ÈÎÎñIDÖØ¸´:{data.id}"
+                    $"ä»»åŠ¡IDé‡å¤:{data.id}"
                 );
 
                 continue;
@@ -145,19 +145,19 @@ public class MissionManager : MonoBehaviour
                 data
             );
             Debug.Log(
-                $"¼ÓÔØÈÎÎñÄ£°å:{data.id} {data.name}"
+                $"åŠ è½½ä»»åŠ¡æ¨¡æ¿:{data.id} {data.name}"
             );
 
         }
         Debug.Log(
-            $"ÈÎÎñÄ£°åÊıÁ¿:{missionTemplates.Count}"
+            $"ä»»åŠ¡æ¨¡æ¿æ•°é‡:{missionTemplates.Count}"
         );
 
     }
 
 
     /// <summary>
-    /// ¸ù¾İÈÎÎñID´´½¨Ò»¸öĞÂµÄÈÎÎñÊµÀı
+    /// æ ¹æ®ä»»åŠ¡IDåˆ›å»ºä¸€ä¸ªæ–°çš„ä»»åŠ¡å®ä¾‹
     /// </summary>
     public Mission CreateMission(string missionId)
     {
@@ -165,7 +165,7 @@ public class MissionManager : MonoBehaviour
         if (!missionTemplates.ContainsKey(missionId))
         {
             Debug.LogError(
-                $"²»´æÔÚÈÎÎñÄ£°å:{missionId}"
+                $"ä¸å­˜åœ¨ä»»åŠ¡æ¨¡æ¿:{missionId}"
             );
 
             return null;
@@ -181,10 +181,10 @@ public class MissionManager : MonoBehaviour
 
     }
     /// <summary>
-    /// Ìí¼ÓÔËĞĞÖĞµÄÈÎÎñ
+    /// æ·»åŠ è¿è¡Œä¸­çš„ä»»åŠ¡
     ///
-    /// ¸øËæ»úÊÂ¼ş¡¢¾çÇéÊÂ¼şÊ¹ÓÃ
-    /// ÒòÎªÕâĞ©ÈÎÎñ²»ÊÇ´Ó¹Ì¶¨ÈÎÎñÁĞ±íÖ±½Ó¿ªÊ¼
+    /// ç»™éšæœºäº‹ä»¶ã€å‰§æƒ…äº‹ä»¶ä½¿ç”¨
+    /// å› ä¸ºè¿™äº›ä»»åŠ¡ä¸æ˜¯ä»å›ºå®šä»»åŠ¡åˆ—è¡¨ç›´æ¥å¼€å§‹
     /// </summary>
     public void AddActiveMission(Mission mission)
     {
@@ -192,7 +192,7 @@ public class MissionManager : MonoBehaviour
         if (mission == null)
         {
             Debug.LogWarning(
-                "³¢ÊÔ¼ÓÈë¿ÕÈÎÎñ"
+                "å°è¯•åŠ å…¥ç©ºä»»åŠ¡"
             );
 
             return;
@@ -205,14 +205,14 @@ public class MissionManager : MonoBehaviour
 
 
             Debug.Log(
-                $"¼ÓÈëÔËĞĞÈÎÎñ:{mission.Data.name}"
+                $"åŠ å…¥è¿è¡Œä»»åŠ¡:{mission.Data.name}"
             );
         }
 
     }
     /// <summary>
-    /// ÈÎÎñ½Úµã´¥·¢
-    /// Í¨ÖªUIÏÔÊ¾
+    /// ä»»åŠ¡èŠ‚ç‚¹è§¦å‘
+    /// é€šçŸ¥UIæ˜¾ç¤º
     /// </summary>
     public void OnMissionNodeTriggered(Mission mission)
     {
@@ -220,7 +220,7 @@ public class MissionManager : MonoBehaviour
         if (missionNodePanel == null)
         {
             Debug.LogWarning(
-            "Ã»ÓĞ°ó¶¨MissionNodePanel"
+            "æ²¡æœ‰ç»‘å®šMissionNodePanel"
             );
 
             return;
@@ -231,8 +231,8 @@ public class MissionManager : MonoBehaviour
 
     }
     /// <summary>
-    /// UIµ÷ÓÃ
-    /// ¿ªÊ¼ÈÎÎñ
+    /// UIè°ƒç”¨
+    /// å¼€å§‹ä»»åŠ¡
     /// </summary>
     public void TriggerMission(
         string missionId,
@@ -241,7 +241,7 @@ public class MissionManager : MonoBehaviour
         if (!npc.CanDispatch())
         {
             Debug.Log(
-            $"{npc.Data.npcName} µ±Ç°ÎŞ·¨Ö´ĞĞÈÎÎñ"
+            $"{npc.Data.npcName} å½“å‰æ— æ³•æ‰§è¡Œä»»åŠ¡"
             );
 
             return;
@@ -254,17 +254,17 @@ public class MissionManager : MonoBehaviour
 
         activeMissions.Add(mission); 
         Debug.Log(
-        $"´´½¨ÈÎÎñÊµÀı:{mission.Data.name}"
+        $"åˆ›å»ºä»»åŠ¡å®ä¾‹:{mission.Data.name}"
     );
         Debug.Log(
-            $"¿ªÊ¼ÈÎÎñ:{mission.Data.name}"
+            $"å¼€å§‹ä»»åŠ¡:{mission.Data.name}"
         );
 
     }
 
 
     /// <summary>
-    /// ÈÎÎñÍê³ÉÅĞ¶Ï
+    /// ä»»åŠ¡å®Œæˆåˆ¤æ–­
     /// </summary>
     public void EvaluateMission(Mission mission)
     {
@@ -279,7 +279,7 @@ public class MissionManager : MonoBehaviour
         {
 
             Debug.LogWarning(
-                "ÈÎÎñÃ»ÓĞÖ´ĞĞNPC"
+                "ä»»åŠ¡æ²¡æœ‰æ‰§è¡ŒNPC"
             );
 
             return;
@@ -290,13 +290,13 @@ public class MissionManager : MonoBehaviour
             npc.Attack >= data.requiredAttack;
 
         bool intelligencePass =
-            npc.Data.intelligence >= data.requiredIntelligence;
+            npc.Intelligence >= data.requiredIntelligence;
 
         if (attackPass && intelligencePass)
         {
 
             Debug.Log(
-                $"¡¾{npc.Data.npcName}¡¿³É¹¦Íê³ÉÈÎÎñ£º¡¾{data.name}¡¿"
+                $"ã€{npc.Data.npcName}ã€‘æˆåŠŸå®Œæˆä»»åŠ¡ï¼šã€{data.name}ã€‘"
             );
 
             mission.CompleteMission();
@@ -314,14 +314,11 @@ public class MissionManager : MonoBehaviour
         {
 
             Debug.Log(
-                $"ÈÎÎñÊ§°Ü£º¡¾{npc.Data.npcName}¡¿ÄÜÁ¦²»×ã"
+                $"ä»»åŠ¡å¤±è´¥ï¼šã€{npc.Data.npcName}ã€‘èƒ½åŠ›ä¸è¶³"
             );
 
 
             mission.FailMission();
-
-
-            RemoveMission(mission);
 
         }
 
@@ -329,7 +326,7 @@ public class MissionManager : MonoBehaviour
 
 
     /// <summary>
-    /// É¾³ıÒÑ¾­½áÊøµÄÈÎÎñ
+    /// åˆ é™¤å·²ç»ç»“æŸçš„ä»»åŠ¡
     /// </summary>
     public void RemoveMission(
         Mission mission)
@@ -340,22 +337,52 @@ public class MissionManager : MonoBehaviour
 
             activeMissions.Remove(mission);
 
+            if (mission.AssignedNPC != null &&
+                mission.AssignedNPC.CurrentMission == mission &&
+                mission.AssignedNPC.Character.IsAlive &&
+                mission.AssignedNPC.State != NPCState.Injured)
+            {
+                NPCManager.Instance.Recover(mission.AssignedNPC);
+            }
+
             Debug.Log(
-                $"ÒÆ³ıÈÎÎñ:{mission.Data.name}"
+                $"ç§»é™¤ä»»åŠ¡:{mission.Data.name}"
             );
 
         }
 
     }
 
+    public IReadOnlyList<Mission> GetActiveMissions()
+    {
+        return activeMissions.AsReadOnly();
+    }
+
+    public void RestoreMissions(IEnumerable<MissionSaveData> savedMissions)
+    {
+        activeMissions.Clear();
+        if (savedMissions == null) return;
+        foreach (MissionSaveData saved in savedMissions)
+        {
+            MissionData data = GetMissionData(saved.missionId);
+            NPCRuntime npc = NPCManager.Instance.GetRuntime(saved.assignedCharacterId);
+            if (data == null || npc == null || !npc.Character.IsAlive)
+            {
+                Debug.LogWarning($"è·³è¿‡æ— æ³•æ¢å¤çš„ä»»åŠ¡: {saved.missionId}");
+                continue;
+            }
+            activeMissions.Add(new Mission(data, saved, npc));
+        }
+    }
+
 
     /// <summary>
-    /// Ã¿ÌìÍÆ½øÈÎÎñ
+    /// æ¯å¤©æ¨è¿›ä»»åŠ¡
     /// </summary>
     private void OnDayPassed(int currentDay)
     {
-        //¸´ÖÆÁĞ±í
-        //±ÜÃâÈÎÎñÍê³ÉºóÉ¾³ıµ¼ÖÂforeachÒì³£
+        //å¤åˆ¶åˆ—è¡¨
+        //é¿å…ä»»åŠ¡å®Œæˆååˆ é™¤å¯¼è‡´foreachå¼‚å¸¸
         List<Mission> missions =
             new List<Mission>(
                 activeMissions
@@ -374,9 +401,9 @@ public class MissionManager : MonoBehaviour
 
 
     /// <summary>
-    /// »ñÈ¡ÈÎÎñÄ£°å
+    /// è·å–ä»»åŠ¡æ¨¡æ¿
     ///
-    /// ¸øUIÏÔÊ¾Ê¹ÓÃ
+    /// ç»™UIæ˜¾ç¤ºä½¿ç”¨
     /// </summary>
     public MissionData GetMissionData(
         string id)
@@ -402,15 +429,15 @@ public class MissionManager : MonoBehaviour
         Mission m = CreateMission("combat_001");
 
         Debug.Log(
-            m == null ? "Ê§°Ü" : "³É¹¦´´½¨"
+            m == null ? "å¤±è´¥" : "æˆåŠŸåˆ›å»º"
         );
     }
 
 
     /// <summary>
-    /// »ñÈ¡ËùÓĞÈÎÎñÄ£°å
+    /// è·å–æ‰€æœ‰ä»»åŠ¡æ¨¡æ¿
     ///
-    /// ¸øÈÎÎñÁĞ±íÊ¹ÓÃ
+    /// ç»™ä»»åŠ¡åˆ—è¡¨ä½¿ç”¨
     /// </summary>
     public List<MissionData> GetMissionPool()
     {

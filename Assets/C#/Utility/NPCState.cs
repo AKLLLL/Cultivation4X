@@ -1,8 +1,8 @@
 public enum NPCState
 {
-    Idle,       // ¿ÕÏĞ£¬¿ÉÒÔÅÉÇ²
-    Busy,       // Ö´ĞĞÈÎÎñ
-    Injured,    // ÊÜÉË
-    ClosedDoor, // ±Õ¹Ø
-    Traveling   // Íâ³ö
+    Idle,       // ç©ºé—²ï¼Œå¯ä»¥æ´¾é£
+    Busy,       // æ‰§è¡Œä»»åŠ¡
+    Injured,    // å—ä¼¤
+    ClosedDoor, // é—­å…³
+    Traveling   // å¤–å‡º
 }

@@ -2,26 +2,26 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// ×ÚÃÅNPC¹ÜÀíÃæ°å
-/// ÏÔÊ¾ËùÓĞµÜ×Ó
+/// å®—é—¨NPCç®¡ç†é¢æ¿
+/// æ˜¾ç¤ºæ‰€æœ‰å¼Ÿå­
 /// </summary>
 public class SectPanel : MonoBehaviour
 {
 
 
-    [Header("NPC¸ñ×ÓPrefab")]
+    [Header("NPCæ ¼å­Prefab")]
 
     public NPCSlotUI npcSlotPrefab;
 
 
 
-    [Header("ÁĞ±í¸¸½Úµã")]
+    [Header("åˆ—è¡¨çˆ¶èŠ‚ç‚¹")]
 
     public Transform content;
 
 
 
-    [Header("NPCÏêÇé")]
+    [Header("NPCè¯¦æƒ…")]
 
     public NPCInfoPanel infoPanel;
 
@@ -43,13 +43,13 @@ public class SectPanel : MonoBehaviour
 
 
     /// <summary>
-    /// Ë¢ĞÂNPCÁĞ±í
+    /// åˆ·æ–°NPCåˆ—è¡¨
     /// </summary>
 
     public void Refresh()
     {
 
-        //ÇåÀí¾É¸ñ×Ó
+        //æ¸…ç†æ—§æ ¼å­
 
         foreach (var slot in slots)
         {
@@ -93,7 +93,7 @@ public class SectPanel : MonoBehaviour
 
 
     /// <summary>
-    /// µã»÷NPC
+    /// ç‚¹å‡»NPC
     /// </summary>
 
     public void SelectNPC(
@@ -101,7 +101,7 @@ public class SectPanel : MonoBehaviour
     {
 
         Debug.Log(
-        $"²é¿´NPC£º{npc.Data.npcName}"
+        $"æŸ¥çœ‹NPCï¼š{npc.Data.npcName}"
         );
 
 

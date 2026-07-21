@@ -1,10 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// 物品类型显示转换
+/// 鐗╁搧绫诲瀷鏄剧ず杞崲
 /// 
-/// 程序使用Enum
-/// UI显示中文
+/// 绋嬪簭浣跨敤Enum
+/// UI鏄剧ず涓枃
 /// </summary>
 public static class ItemTypeUtility
 {
@@ -17,47 +17,47 @@ public static class ItemTypeUtility
         {
 
             case ItemType.Resource:
-                return "基础资源";
+                return "鍩虹璧勬簮";
 
 
             case ItemType.Herb:
-                return "灵草";
+                return "鐏佃崏";
 
 
             case ItemType.Material:
-                return "炼器材料";
+                return "鐐煎櫒鏉愭枡";
 
 
             case ItemType.AlchemyMaterial:
-                return "炼丹材料";
+                return "鐐间腹鏉愭枡";
 
 
             case ItemType.Pill:
-                return "丹药";
+                return "涓硅嵂";
 
 
             case ItemType.Weapon:
-                return "法宝";
+                return "娉曞疂";
 
 
             case ItemType.Technique:
-                return "功法";
+                return "鍔熸硶";
 
 
             case ItemType.Talisman:
-                return "符箓";
+                return "绗︾畵";
 
 
             case ItemType.BeastEgg:
-                return "灵兽";
+                return "鐏靛吔";
 
 
             case ItemType.QuestItem:
-                return "任务物品";
+                return "浠诲姟鐗╁搧";
 
 
             default:
-                return "未知";
+                return "鏈煡";
         }
 
     }

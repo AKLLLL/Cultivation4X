@@ -3,12 +3,12 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// ÎïÆ·ÏêÇéÃæ°å
-/// ¸ºÔğÏÔÊ¾ºÍÒş²ØÎïÆ·ĞÅÏ¢
+/// ç‰©å“è¯¦æƒ…é¢æ¿
+/// è´Ÿè´£æ˜¾ç¤ºå’Œéšè—ç‰©å“ä¿¡æ¯
 /// </summary>
 public class ItemInfoPanel : MonoBehaviour
 {
-    [Header("ÏêÏ¸ĞÅÏ¢")]
+    [Header("è¯¦ç»†ä¿¡æ¯")]
     public Image icon;
     public TMP_Text itemName;
     public TMP_Text itemType;
@@ -18,21 +18,21 @@ public class ItemInfoPanel : MonoBehaviour
     public TMP_Text itemDescription;
 
     /// <summary>
-    /// ÏÔÊ¾ÎïÆ·ĞÅÏ¢
+    /// æ˜¾ç¤ºç‰©å“ä¿¡æ¯
     /// </summary>
     public void Show(ItemData data, ItemStack stack)
     {
         itemName.text = data.itemName;
-        itemType.text = "ÀàĞÍ£º" + ItemTypeUtility.GetDisplayName(data.itemType);
-        itemQuality.text = "Æ·ÖÊ£º" + ItemTypeUtility.GetDisplayName(data.itemType);
-        itemCount.text = "ÊıÁ¿£º" + stack.count;
-        itemPrice.text = "ÊÛ¼Û£º" + data.price;
+        itemType.text = "ç±»å‹ï¼š" + ItemTypeUtility.GetDisplayName(data.itemType);
+        itemQuality.text = "å“è´¨ï¼š" + ItemTypeUtility.GetDisplayName(data.itemType);
+        itemCount.text = "æ•°é‡ï¼š" + stack.count;
+        itemPrice.text = "å”®ä»·ï¼š" + data.price;
         itemDescription.text = data.description;
 
-        // ÏÂÒ»²½½ÓÈëÍ¼±êÏµÍ³
+        // ä¸‹ä¸€æ­¥æ¥å…¥å›¾æ ‡ç³»ç»Ÿ
         // icon.sprite = data.icon;
 
-        Debug.Log($"ÏÔÊ¾ÎïÆ·ÏêÇé£º{data.itemName}");
+        Debug.Log($"æ˜¾ç¤ºç‰©å“è¯¦æƒ…ï¼š{data.itemName}");
     }
     public void Hide()
     {

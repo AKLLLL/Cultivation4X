@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
 /// <summary>
-/// ÈÎÎñ½ÚµãÑ¡Ïî
+/// ä»»åŠ¡èŠ‚ç‚¹é€‰é¡¹
 /// </summary>
 
 [Serializable]
 public class MissionOptionData
 {
-    //ÏÔÊ¾ÎÄ×Ö
+    //æ˜¾ç¤ºæ–‡å­—
     public string text;
 
     /// <summary>
-    /// Ìõ¼şÀàĞÍ
-    /// ÀıÈç:
+    /// æ¡ä»¶ç±»å‹
+    /// ä¾‹å¦‚:
     /// Attack
     /// Intelligence
     /// None
@@ -22,14 +22,14 @@ public class MissionOptionData
 
 
     /// <summary>
-    /// Ìõ¼şÊıÖµ
+    /// æ¡ä»¶æ•°å€¼
     /// </summary>
     public int requirementValue;
 
 
 
     /// <summary>
-    /// ³É¹¦ºóµÄĞ§¹û
+    /// æˆåŠŸåçš„æ•ˆæœ
     /// </summary>
     public List<MissionEffectData> effects;
 

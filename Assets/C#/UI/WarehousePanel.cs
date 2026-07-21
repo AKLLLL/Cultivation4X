@@ -3,21 +3,21 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 /// <summary>
-/// ²Ö¿â½çÃæ
-/// ¸ºÔğ¶ÁÈ¡²Ö¿âÊı¾İ²¢Éú³ÉÎïÆ·¸ñ×Ó
+/// ä»“åº“ç•Œé¢
+/// è´Ÿè´£è¯»å–ä»“åº“æ•°æ®å¹¶ç”Ÿæˆç‰©å“æ ¼å­
 /// </summary>
 public class WarehousePanel : MonoBehaviour
 {
-    [Header("¸ñ×Ó¸¸ÎïÌå£¨ScrollView/Viewport/Content£©")]
+    [Header("æ ¼å­çˆ¶ç‰©ä½“ï¼ˆScrollView/Viewport/Contentï¼‰")]
     public Transform content;
 
-    [Header("ÎïÆ·¸ñ×ÓÔ¤ÖÆÌå")]
+    [Header("ç‰©å“æ ¼å­é¢„åˆ¶ä½“")]
     public GameObject itemSlotPrefab;
-    [Header("ÎïÆ·ÏêÇéÃæ°å")]
+    [Header("ç‰©å“è¯¦æƒ…é¢æ¿")]
     public ItemInfoPanel itemInfoPanel;
     /// <summary>
-    /// µ±Ç°Éú³É³öÀ´µÄËùÓĞ¸ñ×Ó
-    /// ÓÃÓÚË¢ĞÂÊ±É¾³ı
+    /// å½“å‰ç”Ÿæˆå‡ºæ¥çš„æ‰€æœ‰æ ¼å­
+    /// ç”¨äºåˆ·æ–°æ—¶åˆ é™¤
     /// </summary>
     private List<GameObject> slotObjects =
         new List<GameObject>();
@@ -32,12 +32,12 @@ public class WarehousePanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Ë¢ĞÂÕû¸ö²Ö¿â
+    /// åˆ·æ–°æ•´ä¸ªä»“åº“
     /// </summary>
     public void RefreshWarehouse()
     {
         //==============================
-        // É¾³ı¾É¸ñ×Ó
+        // åˆ é™¤æ—§æ ¼å­
         //==============================
 
         foreach (GameObject obj in slotObjects)
@@ -48,49 +48,49 @@ public class WarehousePanel : MonoBehaviour
         slotObjects.Clear();
 
         //==============================
-        // »ñÈ¡²Ö¿âÊı¾İ
+        // è·å–ä»“åº“æ•°æ®
         //=============================
         WarehouseData data =
             WarehouseManager.Instance.GetWarehouseData();
 
         if (data == null)
         {
-            Debug.LogWarning("²Ö¿âÊı¾İÎª¿Õ£¡");
+            Debug.LogWarning("ä»“åº“æ•°æ®ä¸ºç©ºï¼");
             return;
         }
 
         //==============================
-        // ±éÀúËùÓĞÎïÆ·
+        // éå†æ‰€æœ‰ç‰©å“
         //==============================
 
         foreach (ItemStack item in data.items)
         {
-            // ´´½¨Ò»¸öĞÂµÄ¸ñ×Ó
+            // åˆ›å»ºä¸€ä¸ªæ–°çš„æ ¼å­
             GameObject slot =
                 Instantiate(itemSlotPrefab, content);
 
-            // ±£´æÆğÀ´
+            // ä¿å­˜èµ·æ¥
             slotObjects.Add(slot);
 
-            // »ñÈ¡¸ñ×Ó½Å±¾
+            // è·å–æ ¼å­è„šæœ¬
             ItemSlotUI slotUI =
                 slot.GetComponent<ItemSlotUI>();
 
             if (slotUI == null)
             {
-                Debug.LogError("ItemSlotPrefabÃ»ÓĞ¹ÒItemSlotUI½Å±¾£¡");
+                Debug.LogError("ItemSlotPrefabæ²¡æœ‰æŒ‚ItemSlotUIè„šæœ¬ï¼");
                 continue;
             }
 
-            // ³õÊ¼»¯¸ñ×Ó
+            // åˆå§‹åŒ–æ ¼å­
             slotUI.SetItem(item, this);
         }
 
-        Debug.Log($"²Ö¿âË¢ĞÂ£¬¹²ÏÔÊ¾ {data.items.Count} ¸öÎïÆ·");
+        Debug.Log($"ä»“åº“åˆ·æ–°ï¼Œå…±æ˜¾ç¤º {data.items.Count} ä¸ªç‰©å“");
     }
     /// <summary>
-    /// Ñ¡ÔñÒ»¸öÎïÆ·
-    /// Ë¢ĞÂÓÒ²àÏêÇé
+    /// é€‰æ‹©ä¸€ä¸ªç‰©å“
+    /// åˆ·æ–°å³ä¾§è¯¦æƒ…
     /// </summary>
     public void SelectItem(ItemStack item)
     {
@@ -100,10 +100,10 @@ public class WarehousePanel : MonoBehaviour
         if (data == null)
             return;
 
-        // ÏÈ´ò¿ªÏêÇéÃæ°å£¨¼ÓÈëUIManagerÕ»£©
+        // å…ˆæ‰“å¼€è¯¦æƒ…é¢æ¿ï¼ˆåŠ å…¥UIManageræ ˆï¼‰
         UIManager.Instance.OpenPanel(itemInfoPanel.gameObject);
 
         itemInfoPanel.Show(data, item);
-        Debug.Log($"²é¿´ÎïÆ·£º{data.itemName}");
+        Debug.Log($"æŸ¥çœ‹ç‰©å“ï¼š{data.itemName}");
     }
 }

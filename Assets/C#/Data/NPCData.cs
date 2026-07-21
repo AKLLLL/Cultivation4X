@@ -1,8 +1,9 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
-/// NPCÊı¾İÄ£°å¡£
-/// Ã¿¸öNPC¶¼ÊÇÒ»¸öScriptableObject×Ê²ú£¬·½±ãÔÚ±à¼­Æ÷ÖĞÅäÖÃ¡£
+/// NPCæ•°æ®æ¨¡æ¿ã€‚
+/// æ¯ä¸ªNPCéƒ½æ˜¯ä¸€ä¸ªScriptableObjectèµ„äº§ï¼Œæ–¹ä¾¿åœ¨ç¼–è¾‘å™¨ä¸­é…ç½®ã€‚
 /// </summary>
 [CreateAssetMenu(
     fileName = "NewNPC",
@@ -10,28 +11,30 @@ using UnityEngine;
     order = 1)]
 public class NPCData : ScriptableObject
 {
-    [Header("»ù´¡ĞÅÏ¢")]
-    // NPCÎ¨Ò»ID
+    [Header("åŸºç¡€ä¿¡æ¯")]
+    // NPCå”¯ä¸€ID
     public string npcID;
-    // NPCÃû³Æ
+    // NPCåç§°
     public string npcName;
+    public int age = 16;
+    public List<string> initialTraits = new List<string>();
 
-    [Header("³õÊ¼³É³¤")]
-    //³öÉúµÈ¼¶
+    [Header("åˆå§‹æˆé•¿")]
+    //å‡ºç”Ÿç­‰çº§
     public int level = 1;
-    //³öÉú¾­Ñé
+    //å‡ºç”Ÿç»éªŒ
     public int exp = 0;
-    //Éı¼¶ËùĞè¾­Ñé
+    //å‡çº§æ‰€éœ€ç»éªŒ
     public int expToNextLevel = 100;
 
-    [Header("»ù´¡ÊôĞÔ")]
+    [Header("åŸºç¡€å±æ€§")]
     public int attack;
     public int intelligence;
     public int agility;
 
-    [Header("Ìì¸³")]
-    //ÎòĞÔ
+    [Header("å¤©èµ‹")]
+    //æ‚Ÿæ€§
     public int comprehension;
-    //¸ù¹Ç
+    //æ ¹éª¨
     public int physique;
 }

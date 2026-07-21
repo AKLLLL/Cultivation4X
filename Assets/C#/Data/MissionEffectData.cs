@@ -4,17 +4,17 @@ using System;
 [Serializable]
 public class MissionEffectData
 {
-    // Ğ§¹ûÀàĞÍ
+    // æ•ˆæœç±»å‹
     public string type;
 
-    // ÊıÖµ
+    // æ•°å€¼
     public int value;
-    //ÎïÆ·ID
-    //AddItem RemoveItemÊ¹ÓÃ
+    //ç‰©å“ID
+    //AddItem RemoveItemä½¿ç”¨
     public string itemId;
-    //ÎïÆ·ÊıÁ¿
+    //ç‰©å“æ•°é‡
     public int count;
-    //´¥·¢ÊÂ¼şID
-    //TriggerEventÊ¹ÓÃ
+    //è§¦å‘äº‹ä»¶ID
+    //TriggerEventä½¿ç”¨
     public string eventId;
 }

@@ -6,7 +6,7 @@
     "description":
     "派遣弟子巡视宗门周围区域，防止妖兽侵扰。",
 
-    "type":"Disciple",
+    "missionType":"Disciple",
 
     "needDays":3,
 

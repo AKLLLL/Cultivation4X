@@ -2,7 +2,7 @@ using UnityEngine;
 
 
 /// <summary>
-/// ½±Àø¹ÜÀíÆ÷
+/// å¥–åŠ±ç®¡ç†å™¨
 /// </summary>
 public class RewardManager : MonoBehaviour
 {
@@ -20,43 +20,43 @@ public class RewardManager : MonoBehaviour
         }
     }
     /// <summary>
-    /// ·¢·ÅÈÎÎñ½±Àø
+    /// å‘æ”¾ä»»åŠ¡å¥–åŠ±
     /// </summary>
-    /// <param name="npc">Ö´ĞĞÈÎÎñµÄNPC</param>
-    /// <param name="reward">ÈÎÎñ×îÖÕ½±Àø</param>
+    /// <param name="npc">æ‰§è¡Œä»»åŠ¡çš„NPC</param>
+    /// <param name="reward">ä»»åŠ¡æœ€ç»ˆå¥–åŠ±</param>
     public void GiveReward(NPCRuntime npc, Reward reward)
     {
         if (npc == null)
         {
-            Debug.LogWarning("RewardManager£ºNPCÎª¿Õ¡£");
+            Debug.LogWarning("RewardManagerï¼šNPCä¸ºç©ºã€‚");
             return;
         }
 
         if (reward == null)
         {
-            Debug.LogWarning("RewardManager£ºRewardÎª¿Õ¡£");
+            Debug.LogWarning("RewardManagerï¼šRewardä¸ºç©ºã€‚");
             return;
         }
-        // ·¢·Å½ğ±Ò
+        // é‡‘å¸æ˜¯å®—é—¨å…±äº«èµ„æºï¼›å¼Ÿå­åªè·å¾—ç»éªŒ/ä¿®ä¸ºã€‚
         if (reward.Gold > 0)
         {
-            NPCGrow.AddGold(npc, reward.Gold);
+            PlayerManager.Instance.AddGold(reward.Gold);
         }
-        // ·¢·Å¾­Ñé
+        // å‘æ”¾ç»éªŒ
         if (reward.Exp > 0)
         {
             NPCGrow.AddExp(npc, reward.Exp);
         }
-        // ·¢·ÅÎïÆ·
+        // å‘æ”¾ç‰©å“
         foreach (ItemReward item in reward.Items)
         {
-            Debug.Log($"×¼±¸·¢·ÅÎïÆ·£º{item.itemId} ¡Á {item.count}");
+            Debug.Log($"å‡†å¤‡å‘æ”¾ç‰©å“ï¼š{item.itemId} Ã— {item.count}");
             WarehouseManager.Instance.AddItem(
                 item.itemId,
                 item.count
             );
         }
 
-        Debug.Log($"½±Àø·¢·ÅÍê³É£º{npc.Data.npcName}£¬»ñµÃÁË{reward.Gold}½ğ±Ò¡¢{reward.Exp}¾­Ñé");
+        Debug.Log($"å¥–åŠ±å‘æ”¾å®Œæˆï¼š{npc.Data.npcName}ï¼Œè·å¾—äº†{reward.Gold}é‡‘å¸ã€{reward.Exp}ç»éªŒ");
     }
 }

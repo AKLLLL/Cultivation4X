@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class NPCManager : MonoBehaviour
@@ -10,9 +11,18 @@ public class NPCManager : MonoBehaviour
     private Dictionary<NPCData, NPCRuntime> npcMap
         = new Dictionary<NPCData, NPCRuntime>();
 
+    private readonly Dictionary<string, NPCRuntime> npcById =
+        new Dictionary<string, NPCRuntime>();
+    private readonly List<NPCRuntime> runtimes = new List<NPCRuntime>();
+
     public List<NPCRuntime> GetAllNPC()
     {
-        return new List<NPCRuntime>(npcMap.Values);
+        return new List<NPCRuntime>(runtimes);
+    }
+
+    public List<NPCRuntime> GetLivingNPC()
+    {
+        return runtimes.Where(npc => npc.Character.IsAlive).ToList();
     }
     private void Awake()
     {
@@ -30,11 +40,13 @@ public class NPCManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ³õÊ¼»¯NPC
+    /// åˆå§‹åŒ–NPC
     /// </summary>
     public void InitNPC()
     {
-       
+        npcMap.Clear();
+        npcById.Clear();
+        runtimes.Clear();
         NPCData[] npcs = Resources.LoadAll<NPCData>("NPC");
 
         
@@ -44,15 +56,17 @@ public class NPCManager : MonoBehaviour
             NPCRuntime runtime = new NPCRuntime(npc);
 
             npcMap.Add(npc, runtime);
+            npcById[runtime.CharacterId] = runtime;
+            runtimes.Add(runtime);
            
         }
 
 
-        Debug.Log("NPCÔËĞĞÊ±³õÊ¼»¯Íê³É");
+        Debug.Log("NPCè¿è¡Œæ—¶åˆå§‹åŒ–å®Œæˆ");
     }
 
     /// <summary>
-    /// ÉèÖÃNPC×´Ì¬
+    /// è®¾ç½®NPCçŠ¶æ€
     /// </summary>
     public void SetState(NPCData npc, NPCState state, int days = 0)
     {
@@ -60,14 +74,20 @@ public class NPCManager : MonoBehaviour
 
         if (runtime == null)
         {
-            Debug.LogError("ÕÒ²»µ½NPCÔËĞĞÊı¾İ£º" + npc.npcName);
+            Debug.LogError("æ‰¾ä¸åˆ°NPCè¿è¡Œæ•°æ®ï¼š" + npc.npcName);
             return;
         }
 
 
         runtime.SetState(state, days);
     }
-    //¿ªÊ¼ÈÎÎñ
+
+    public void SetState(NPCRuntime runtime, NPCState state, int days = 0)
+    {
+        if (runtime == null) return;
+        runtime.SetState(state, days);
+    }
+    //å¼€å§‹ä»»åŠ¡
     public void StartMission(NPCData npc, Mission mission)
     {
         NPCRuntime runtime = GetRuntime(npc);
@@ -77,35 +97,43 @@ public class NPCManager : MonoBehaviour
             return;
 
 
-        runtime.State = NPCState.Busy;
+        runtime.SetState(NPCState.Busy);
 
+        runtime.CurrentMission = mission;
+    }
+
+    public void StartMission(NPCRuntime runtime, Mission mission)
+    {
+        if (runtime == null || !runtime.CanDispatch()) return;
+        runtime.SetState(NPCState.Busy);
         runtime.CurrentMission = mission;
     }
 
 
     public void Injured(NPCRuntime npc, int days)
     {
-        SetState(npc.Data, NPCState.Injured, days);
+        if (npc == null || !npc.Character.IsAlive) return;
+        npc.Character.health = days >= 5 ? HealthState.SeriousInjury : HealthState.LightInjury;
+        npc.Character.AddLifeRecord(CurrentDay, "Injury", $"å—ä¼¤ï¼Œéœ€è¦ä¼‘å…» {days} å¤©");
+        SetState(npc, NPCState.Injured, days);
     }
 
-    //»Ö¸´¿ÕÏĞ×´Ì¬
+    //æ¢å¤ç©ºé—²çŠ¶æ€
     public void Recover(NPCRuntime npc)
     {
-        NPCRuntime runtime = GetRuntime(npc.Data);
-
-
+        NPCRuntime runtime = npc;
         if (runtime == null)
             return;
 
 
-        runtime.State = NPCState.Idle;
-
-        runtime.StateRemainDays = 0;
+        runtime.SetState(NPCState.Idle, 0);
+        if (runtime.Character.health != HealthState.PermanentTrauma)
+            runtime.Character.health = HealthState.Healthy;
 
         runtime.CurrentMission = null;
     }
     /// <summary>
-    /// »ñÈ¡NPCÔËĞĞÊı¾İ
+    /// è·å–NPCè¿è¡Œæ•°æ®
     /// </summary>
     public NPCRuntime GetRuntime(NPCData npc)
     {
@@ -118,16 +146,117 @@ public class NPCManager : MonoBehaviour
         return null;
     }
 
+    public NPCRuntime GetRuntime(string characterId)
+    {
+        npcById.TryGetValue(characterId, out NPCRuntime runtime);
+        return runtime;
+    }
+
+    public bool AddRelationship(string sourceId, string targetId, RelationshipTag tag)
+    {
+        NPCRuntime source = GetRuntime(sourceId);
+        if (source == null || GetRuntime(targetId) == null || sourceId == targetId) return false;
+        if (source.Character.relationships.Any(r => r.targetCharacterId == targetId && r.tag == tag)) return false;
+        source.Character.relationships.Add(new RelationshipRecord
+        {
+            sourceCharacterId = sourceId,
+            targetCharacterId = targetId,
+            tag = tag,
+            createdDay = CurrentDay
+        });
+        return true;
+    }
+
+    public bool Kill(NPCRuntime npc, string cause)
+    {
+        if (npc == null || !npc.Character.IsAlive) return false;
+        // é˜²æ­¢å…¨å‘˜æ­»äº¡åæ¡£ï¼šæœ€åä¸€åå¼Ÿå­è½¬ä¸ºæ°¸ä¹…åˆ›ä¼¤ã€‚
+        if (GetLivingNPC().Count <= 1)
+        {
+            npc.Character.health = HealthState.PermanentTrauma;
+            npc.Character.AddTrait("near_death_survivor");
+            npc.Character.AddLifeRecord(CurrentDay, "NearDeath", $"æ­»é‡Œé€ƒç”Ÿï¼š{cause}");
+            Recover(npc);
+            return false;
+        }
+
+        npc.Character.health = HealthState.Dead;
+        npc.Character.activityState = NPCState.Idle;
+        npc.State = NPCState.Idle;
+        Mission mission = npc.CurrentMission;
+        npc.CurrentMission = null;
+        npc.Character.AddLifeRecord(CurrentDay, "Death", cause);
+        if (mission != null) MissionManager.Instance?.RemoveMission(mission);
+        return true;
+    }
+
+    public NPCRuntime RecruitFromTemplate(string templateId)
+    {
+        NPCData template = Resources.LoadAll<NPCData>("NPC")
+            .FirstOrDefault(data => data.npcID == templateId);
+        if (template == null) return null;
+
+        CharacterState state = new CharacterState
+        {
+            characterId = $"{templateId}_{System.Guid.NewGuid():N}",
+            templateId = templateId,
+            displayName = template.npcName,
+            age = template.age,
+            level = template.level,
+            exp = template.exp,
+            traitIds = new List<string>(template.initialTraits)
+        };
+        NPCRuntime runtime = new NPCRuntime(template, state);
+        if (!npcMap.ContainsKey(template)) npcMap[template] = runtime;
+        npcById[state.characterId] = runtime;
+        runtimes.Add(runtime);
+        state.AddLifeRecord(CurrentDay, "Recruit", "åŠ å…¥å®—é—¨");
+        return runtime;
+    }
+
 
 
     /// <summary>
-    /// Ã¿ÌìÍÆ½ø
+    /// æ¯å¤©æ¨è¿›
     /// </summary>
     public void OnDayPassed()
     {
-        foreach (var npc in npcMap.Values)
+        foreach (var npc in runtimes)
         {
             npc.OnDayPassed();
+            if (npc.Character.IsAlive && npc.State == NPCState.Idle)
+            {
+                int amount = Mathf.Max(1, PlayerManager.Instance.playerData.trainingRoomLevel);
+                if (npc.Character.HasTrait("diligent")) amount += 1;
+                if (npc.Character.HasTrait("lazy")) amount = Mathf.Max(1, amount - 1);
+                npc.AddCultivation(amount);
+            }
+        }
+    }
+
+    private int CurrentDay => TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+
+    public void RestoreCharacters(IEnumerable<CharacterState> states)
+    {
+        npcMap.Clear();
+        npcById.Clear();
+        runtimes.Clear();
+        Dictionary<string, NPCData> templates = Resources.LoadAll<NPCData>("NPC")
+            .Where(item => !string.IsNullOrWhiteSpace(item.npcID))
+            .GroupBy(item => item.npcID)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (CharacterState state in states ?? Enumerable.Empty<CharacterState>())
+        {
+            if (!templates.TryGetValue(state.templateId, out NPCData template))
+            {
+                Debug.LogWarning($"å­˜æ¡£è§’è‰²ç¼ºå°‘æ¨¡æ¿: {state.templateId}");
+                continue;
+            }
+            NPCRuntime runtime = new NPCRuntime(template, state);
+            if (!npcMap.ContainsKey(template)) npcMap[template] = runtime;
+            npcById[state.characterId] = runtime;
+            runtimes.Add(runtime);
         }
     }
 

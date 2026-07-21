@@ -2,20 +2,20 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// UI¹ÜÀíÆ÷
-/// ËùÓĞUIÍ³Ò»ÓÉÕâÀï¹ÜÀí¡£
+/// UIç®¡ç†å™¨
+/// æ‰€æœ‰UIç»Ÿä¸€ç”±è¿™é‡Œç®¡ç†ã€‚
 /// </summary>
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
-    [Header("ËùÓĞUIÃæ°å")]
+    [Header("æ‰€æœ‰UIé¢æ¿")]
     [SerializeField]
     private List<GameObject> panels = new List<GameObject>();
 
     /// <summary>
-    /// µ±Ç°´ò¿ªµÄÃæ°å
-    /// ºó´ò¿ªµÄÎ»ÓÚÕ»¶¥¡£
+    /// å½“å‰æ‰“å¼€çš„é¢æ¿
+    /// åæ‰“å¼€çš„ä½äºæ ˆé¡¶ã€‚
     /// </summary>
     private Stack<GameObject> panelStack = new Stack<GameObject>();
 
@@ -32,10 +32,10 @@ public class UIManager : MonoBehaviour
             return;
         }
 
-        // ÓÎÏ·¿ªÊ¼È«²¿¹Ø±Õ
+        // æ¸¸æˆå¼€å§‹å…¨éƒ¨å…³é—­
         foreach (GameObject panel in panels)
         {
-            if (panel== null)
+            if (panel != null)
             {
                 panel.SetActive(false);
             }
@@ -51,16 +51,16 @@ public class UIManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ´ò¿ªÃæ°å
+    /// æ‰“å¼€é¢æ¿
     /// </summary>
     public void OpenPanel(GameObject panel)
     {
         if (panel == null)
         {
-            Debug.LogWarning("UIPanelÎª¿Õ");
+            Debug.LogWarning("UIPanelä¸ºç©º");
             return;
         }
-        // ÒÑ¾­´ò¿ª£¬²»ÖØ¸´Ñ¹Õ»
+        // å·²ç»æ‰“å¼€ï¼Œä¸é‡å¤å‹æ ˆ
         if (panel.activeSelf)
             return;
 
@@ -70,7 +70,7 @@ public class UIManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ¹Ø±ÕÖ¸¶¨Ãæ°å
+    /// å…³é—­æŒ‡å®šé¢æ¿
     /// </summary>
     public void ClosePanel(GameObject panel)
     {
@@ -81,11 +81,11 @@ public class UIManager : MonoBehaviour
 
         RemoveFromStack(panel);
 
-       // Debug.Log($"¹Ø±ÕÃæ°å£º{panel.panelName}");
+       // Debug.Log($"å…³é—­é¢æ¿ï¼š{panel.panelName}");
     }
 
     /// <summary>
-    /// Esc¹Ø±Õ×îÉÏ²ãÃæ°å
+    /// Escå…³é—­æœ€ä¸Šå±‚é¢æ¿
     /// </summary>
     public void CloseTopPanel()
     {
@@ -95,7 +95,7 @@ public class UIManager : MonoBehaviour
 
             if (panel==null)
                 continue;
-            Debug.Log("¹Ø±Õ£º" + panel.name);
+            Debug.Log("å…³é—­ï¼š" + panel.name);
             panel.SetActive(false);
 
             return;
@@ -103,8 +103,8 @@ public class UIManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ´ÓStackÒÆ³ıÖ¸¶¨Ãæ°å
-    /// Stack±¾Éí²»ÄÜÉ¾³ıÖĞ¼äÔªËØ£¬Òò´ËĞèÒªÖØ½¨¡£
+    /// ä»Stackç§»é™¤æŒ‡å®šé¢æ¿
+    /// Stackæœ¬èº«ä¸èƒ½åˆ é™¤ä¸­é—´å…ƒç´ ï¼Œå› æ­¤éœ€è¦é‡å»ºã€‚
     /// </summary>
     private void RemoveFromStack(GameObject panel)
     {

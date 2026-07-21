@@ -14,6 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   npcID: 2
   npcName: "\u674E\u56DB"
+  age: 21
+  initialTraits:
+  - cautious
+  - kind
+  - ambitious
+  level: 1
+  exp: 0
+  expToNextLevel: 100
   attack: 20
   intelligence: 0
   agility: 0
+  comprehension: 14
+  physique: 8

@@ -6,7 +6,7 @@
     "description":
     "宗门阵法出现损坏，需要弟子寻找材料进行修复。",
 
-    "type":"Sect",
+    "missionType":"Sect",
 
     "needDays":10,
 

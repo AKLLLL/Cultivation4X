@@ -6,7 +6,7 @@
     "description":
     "弟子进入闭关状态提升修为。",
 
-    "type":"Cultivation",
+    "missionType":"Cultivation",
 
     "needDays":30,
 

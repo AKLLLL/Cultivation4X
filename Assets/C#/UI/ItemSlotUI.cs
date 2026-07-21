@@ -4,20 +4,20 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// µ¥¸ö²Ö¿âÎïÆ·¸ñ×Ó
-/// ¸ºÔğÏÔÊ¾Ò»¸öÎïÆ·
-/// ²»¸ºÔğ²Ö¿âÂß¼­
+/// å•ä¸ªä»“åº“ç‰©å“æ ¼å­
+/// è´Ÿè´£æ˜¾ç¤ºä¸€ä¸ªç‰©å“
+/// ä¸è´Ÿè´£ä»“åº“é€»è¾‘
 /// </summary>
 public class ItemSlotUI : MonoBehaviour
 
 {
-    [Header("ÎïÆ·Í¼±ê")]
+    [Header("ç‰©å“å›¾æ ‡")]
     public Image iconImage;
 
-    [Header("ÊıÁ¿ÎÄ×Ö")]
+    [Header("æ•°é‡æ–‡å­—")]
     public TMP_Text countText;
 
-    [Header("Æ·ÖÊ±ß¿ò£¨ÒÔºóÊ¹ÓÃ£©")]
+    [Header("å“è´¨è¾¹æ¡†ï¼ˆä»¥åä½¿ç”¨ï¼‰")]
     public Image borderImage;
 
 
@@ -28,13 +28,13 @@ public class ItemSlotUI : MonoBehaviour
     private ItemData currentItemData;
     private Button button;
     /// <summary>
-    /// µ±Ç°¸ñ×Ó±£´æµÄÎïÆ·
+    /// å½“å‰æ ¼å­ä¿å­˜çš„ç‰©å“
     /// </summary>
     private ItemStack currentItem;
 
     /// <summary>
-    /// ³õÊ¼»¯Ò»¸ö¸ñ×Ó
-    /// WarehousePanel ´´½¨¸ñ×ÓÊ±µ÷ÓÃ
+    /// åˆå§‹åŒ–ä¸€ä¸ªæ ¼å­
+    /// WarehousePanel åˆ›å»ºæ ¼å­æ—¶è°ƒç”¨
     /// </summary>
 
     private void Awake()
@@ -47,41 +47,41 @@ public class ItemSlotUI : MonoBehaviour
     {
         currentItem = item;
         warehousePanel = panel;
-        // ÏÔÊ¾ÊıÁ¿
-        countText.text = "¡Á" + item.count;
-        // ¶ÁÈ¡ÎïÆ·Êı¾İ¿â
+        // æ˜¾ç¤ºæ•°é‡
+        countText.text = "Ã—" + item.count;
+        // è¯»å–ç‰©å“æ•°æ®åº“
         ItemData itemData =
             ItemDatabase.Instance.GetItem(item.itemId);
 
         if (itemData == null)
         {
-            Debug.LogWarning($"ÕÒ²»µ½ÎïÆ·£º{item.itemId}");
+            Debug.LogWarning($"æ‰¾ä¸åˆ°ç‰©å“ï¼š{item.itemId}");
             return;
         }
 
         //==============================
-        // ÔİÊ±Ã»ÓĞÍ¼±ê
-        // ËùÒÔÕâÀïÖ»´òÓ¡Ãû×Ö
-        // ÏÂÒ»²½ÔÙ¼ÓÔØSprite
+        // æš‚æ—¶æ²¡æœ‰å›¾æ ‡
+        // æ‰€ä»¥è¿™é‡Œåªæ‰“å°åå­—
+        // ä¸‹ä¸€æ­¥å†åŠ è½½Sprite
         //==============================
 
-        Debug.Log($"ÏÔÊ¾ÎïÆ·£º{itemData.itemName}");
+        Debug.Log($"æ˜¾ç¤ºç‰©å“ï¼š{itemData.itemName}");
 
         //==============================
         // TODO
-        // ÏÂÒ»²½£º
+        // ä¸‹ä¸€æ­¥ï¼š
         // iconImage.sprite = ...
         //==============================
 
     }
 
 
-    // »ñÈ¡µ±Ç°ÎïÆ·
+    // è·å–å½“å‰ç‰©å“
     public ItemStack GetItem()
     {
         return currentItem;
     }
-    // µã»÷¸ñ×Ó
+    // ç‚¹å‡»æ ¼å­
     public void OnPointerClick(PointerEventData eventData)
     {
         if (warehousePanel == null)

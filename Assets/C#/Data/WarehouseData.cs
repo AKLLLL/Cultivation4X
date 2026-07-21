@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 /// <summary>
-/// ²Ö¿â¾²Ì¬Êı¾İ
+/// ä»“åº“é™æ€æ•°æ®
 /// </summary>
 [Serializable]
 public class WarehouseData
 {
 
     /// <summary>
-    /// ²Ö¿âÀïÃæËùÓĞÎïÆ·
+    /// ä»“åº“é‡Œé¢æ‰€æœ‰ç‰©å“
     /// </summary>
     public List<ItemStack> items = new List<ItemStack>();
 

@@ -1,9 +1,10 @@
 using UnityEngine;
+using System;
 
 
 /// <summary>
-/// ²Ö¿â¹ÜÀíÆ÷
-/// ËùÓĞÔö¼Ó¡¢¼õÉÙÎïÆ·²Ù×÷¶¼Í¨¹ıÕâÀï
+/// ä»“åº“ç®¡ç†å™¨
+/// æ‰€æœ‰å¢åŠ ã€å‡å°‘ç‰©å“æ“ä½œéƒ½é€šè¿‡è¿™é‡Œ
 /// </summary>
 public class WarehouseManager : MonoBehaviour
 {
@@ -12,10 +13,12 @@ public class WarehouseManager : MonoBehaviour
 
 
     /// <summary>
-    /// µ±Ç°²Ö¿âÊı¾İ
+    /// å½“å‰ä»“åº“æ•°æ®
     /// </summary>
     public WarehouseData warehouseData =
         new WarehouseData();
+
+    public event Action OnInventoryChanged;
 
 
 
@@ -33,31 +36,42 @@ public class WarehouseManager : MonoBehaviour
         }
     }
 
-    // UIÍ¨¹ıÕâ¸ö½Ó¿Ú¶ÁÈ¡²Ö¿âÄÚÈİ
+    // UIé€šè¿‡è¿™ä¸ªæ¥å£è¯»å–ä»“åº“å†…å®¹
     public WarehouseData GetWarehouseData()
     {
         return warehouseData;
     }
 
     /// <summary>
-    /// Ìí¼ÓÎïÆ·
+    /// æ·»åŠ ç‰©å“
     /// </summary>
     public void AddItem(string itemId, int count)
     {
+        if (string.IsNullOrWhiteSpace(itemId) || count <= 0)
+        {
+            Debug.LogWarning($"æ‹’ç»æ— æ•ˆç‰©å“å˜æ›´: {itemId} x {count}");
+            return;
+        }
 
-        //Ñ°ÕÒ²Ö¿âÊÇ·ñÒÑÓĞÕâ¸öÎïÆ·
+        if (ItemDatabase.Instance != null && ItemDatabase.Instance.GetItem(itemId) == null)
+        {
+            Debug.LogWarning($"æ‹’ç»æ·»åŠ æœªçŸ¥ç‰©å“: {itemId}");
+            return;
+        }
+
+        //å¯»æ‰¾ä»“åº“æ˜¯å¦å·²æœ‰è¿™ä¸ªç‰©å“
         ItemStack item =
             warehouseData.items.Find(
                 x => x.itemId == itemId
             );
 
-        //ÒÑÓĞ¸ÃÎïÆ·
+        //å·²æœ‰è¯¥ç‰©å“
         if (item != null)
         {
             item.count += count;
         }
 
-        //Ã»ÓĞ¸ÃÎïÆ·
+        //æ²¡æœ‰è¯¥ç‰©å“
         else
         {
             ItemStack newItem = new ItemStack();
@@ -70,14 +84,17 @@ public class WarehouseManager : MonoBehaviour
 
 
         Debug.Log(
-            $"²Ö¿â»ñµÃ {itemId} x {count}"
+            $"ä»“åº“è·å¾— {itemId} x {count}"
         );
+        OnInventoryChanged?.Invoke();
     }
 
     public bool RemoveItem(
     string itemId,
     int count)
     {
+        if (string.IsNullOrWhiteSpace(itemId) || count <= 0)
+            return false;
 
         ItemStack item =
             warehouseData.items.Find(
@@ -87,7 +104,7 @@ public class WarehouseManager : MonoBehaviour
         if (item == null)
         {
             Debug.Log(
-            $"Ã»ÓĞÎïÆ·:{itemId}"
+            $"æ²¡æœ‰ç‰©å“:{itemId}"
             );
 
             return false;
@@ -95,7 +112,7 @@ public class WarehouseManager : MonoBehaviour
         if (item.count < count)
         {
             Debug.Log(
-            $"ÎïÆ·ÊıÁ¿²»×ã:{itemId}"
+            $"ç‰©å“æ•°é‡ä¸è¶³:{itemId}"
             );
 
             return false;
@@ -110,12 +127,20 @@ public class WarehouseManager : MonoBehaviour
 
 
         Debug.Log(
-        $"ÏûºÄ {itemId} x {count}"
+            $"æ¶ˆè€— {itemId} x {count}"
         );
+
+        OnInventoryChanged?.Invoke();
 
 
         return true;
 
+    }
+
+    public int GetItemCount(string itemId)
+    {
+        ItemStack item = warehouseData.items.Find(x => x.itemId == itemId);
+        return item == null ? 0 : item.count;
     }
 
 }

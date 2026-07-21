@@ -6,7 +6,7 @@
     "description":
     "使用灵草炼制基础疗伤丹药。",
 
-    "type":"Production",
+    "missionType":"Production",
 
     "needDays":2,
 

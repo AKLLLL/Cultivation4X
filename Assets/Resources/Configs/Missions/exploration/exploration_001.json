@@ -5,7 +5,7 @@
     "description":
     "探索遗迹洞府。",
 
-    "type":"Exploration",
+    "missionType":"Exploration",
     "needDays": 5,
 
     "goldReward": 100,

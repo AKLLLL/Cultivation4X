@@ -6,7 +6,7 @@
     "description":
     "前往其他宗门建立关系。",
 
-    "type":"Diplomacy",
+    "missionType":"Diplomacy",
 
     "needDays":7,
 

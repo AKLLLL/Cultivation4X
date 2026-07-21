@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc2169c3c28fdf744857e491289ab761, type: 3}
+  m_Name: "\u8D75\u7075"
+  m_EditorClassIdentifier:
+  npcID: 4
+  npcName: "\u8D75\u7075"
+  age: 20
+  initialTraits:
+  - ambitious
+  - selfish
+  - reckless
+  level: 1
+  exp: 0
+  expToNextLevel: 100
+  attack: 17
+  intelligence: 11
+  agility: 13
+  comprehension: 10
+  physique: 11

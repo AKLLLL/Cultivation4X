@@ -2,21 +2,21 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// ÓÎÏ·Ê±¼ä¹ÜÀíÆ÷¡£
-/// ¸ºÔğÍÆ½øÓÎÏ·ÌìÊı£¬²¢Í¨ÖªÆäËûÏµÍ³¡£
+/// æ¸¸æˆæ—¶é—´ç®¡ç†å™¨ã€‚
+/// è´Ÿè´£æ¨è¿›æ¸¸æˆå¤©æ•°ï¼Œå¹¶é€šçŸ¥å…¶ä»–ç³»ç»Ÿã€‚
 /// </summary>
 public class TimeManager : MonoBehaviour
 {
     public static TimeManager Instance;
 
     /// <summary>
-    /// µ±Ç°ÊÇµÚ¼¸Ìì¡£
+    /// å½“å‰æ˜¯ç¬¬å‡ å¤©ã€‚
     /// </summary>
     public int CurrentDay { get; private set; } = 0;
 
     /// <summary>
-    /// Ã¿¾­¹ıÒ»Ìì´¥·¢Ò»´Î¡£
-    /// ²ÎÊı£ºµ±Ç°ÌìÊı¡£
+    /// æ¯ç»è¿‡ä¸€å¤©è§¦å‘ä¸€æ¬¡ã€‚
+    /// å‚æ•°ï¼šå½“å‰å¤©æ•°ã€‚
     /// </summary>
     public event Action<int> OnDayPassed;
 
@@ -33,18 +33,23 @@ public class TimeManager : MonoBehaviour
     }
 
     /// <summary>
-    /// µã»÷"½áÊø½ñÌì"°´Å¥µ÷ÓÃ¡£
+    /// ç‚¹å‡»"ç»“æŸä»Šå¤©"æŒ‰é’®è°ƒç”¨ã€‚
     /// </summary>
     public void EndDay()
     {
         CurrentDay++;
 
-        Debug.Log($"½ñÌìÊÇµÚ {CurrentDay} Ìì");
+        Debug.Log($"ä»Šå¤©æ˜¯ç¬¬ {CurrentDay} å¤©");
 
+        // å›ºå®šé¡ºåºï¼šè§’è‰²æ¢å¤/ä¿®ç‚¼ -> ä»»åŠ¡æ¨è¿› -> äº‹ä»¶æŠ½å– -> è‡ªåŠ¨ä¿å­˜ã€‚
+        NPCManager.Instance?.OnDayPassed();
         OnDayPassed?.Invoke(CurrentDay);
-        
-        
+        EventManager.Instance?.ProcessDay(CurrentDay);
+        SaveManager.Instance?.AutoSave();
+    }
 
-        NPCManager.Instance.OnDayPassed();
+    public void RestoreDay(int day)
+    {
+        CurrentDay = Mathf.Max(0, day);
     }
 }

@@ -3,7 +3,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.UI;
 /// <summary>
-/// ÈÎÎñ½ÚµãÑ¡Ôñ½çÃæ
+/// ä»»åŠ¡èŠ‚ç‚¹é€‰æ‹©ç•Œé¢
 /// </summary>
 public class MissionNodePanel : MonoBehaviour
 {
@@ -12,20 +12,20 @@ public class MissionNodePanel : MonoBehaviour
 
     public TMP_Text descriptionText;
 
-    [Header("Èı¸öÑ¡Ïî°´Å¥")]
+    [Header("ä¸‰ä¸ªé€‰é¡¹æŒ‰é’®")]
     public Button option1Button;
     public Button option2Button;
     public Button option3Button;
-    [Header("°´Å¥ÎÄ×Ö")]
+    [Header("æŒ‰é’®æ–‡å­—")]
     public TMP_Text option1Text;
     public TMP_Text option2Text;
     public TMP_Text option3Text;
-    //µ±Ç°µÈ´ıÑ¡ÔñµÄÈÎÎñ
+    //å½“å‰ç­‰å¾…é€‰æ‹©çš„ä»»åŠ¡
     private Mission currentMission;
 
    // private List<MissionOptionButton> buttons =new List<MissionOptionButton>();
     /// <summary>
-    /// ´ò¿ª½Úµã½çÃæ
+    /// æ‰“å¼€èŠ‚ç‚¹ç•Œé¢
     /// </summary>
 
     public void Show(
@@ -43,14 +43,14 @@ public class MissionNodePanel : MonoBehaviour
 
         descriptionText.text =
             node.description;
-        //ÏÈÈ«²¿Òş²Ø
+        //å…ˆå…¨éƒ¨éšè—
 
         option1Button.gameObject.SetActive(false);
 
         option2Button.gameObject.SetActive(false);
 
         option3Button.gameObject.SetActive(false);
-        //¸ù¾İÑ¡ÏîÊıÁ¿ÏÔÊ¾
+        //æ ¹æ®é€‰é¡¹æ•°é‡æ˜¾ç¤º
 
         if (node.options.Count >= 1)
         {
@@ -109,7 +109,7 @@ public class MissionNodePanel : MonoBehaviour
 
 
     /// <summary>
-    /// Íæ¼ÒÑ¡Ôñ
+    /// ç©å®¶é€‰æ‹©
     /// </summary>
     public void SelectOption(
         int index)

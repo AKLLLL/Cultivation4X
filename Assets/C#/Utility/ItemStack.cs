@@ -1,15 +1,15 @@
 using System;
 
 /// <summary>
-/// µ¥¸öÎïÆ·¶Ñ
+/// å•ä¸ªç‰©å“å †
 /// </summary>
 [Serializable]
 public class ItemStack
 {
     /// <summary>
-    /// ÎïÆ·ID
-    /// ¶ÔÓ¦JSONÀïµÄitemId
-    /// ÀıÈç£º
+    /// ç‰©å“ID
+    /// å¯¹åº”JSONé‡Œçš„itemId
+    /// ä¾‹å¦‚ï¼š
     /// herb
     /// spiritStone
     /// </summary>
@@ -17,7 +17,7 @@ public class ItemStack
 
 
     /// <summary>
-    /// ÊıÁ¿
+    /// æ•°é‡
     /// </summary>
     public int count;
 }

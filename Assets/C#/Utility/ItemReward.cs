@@ -1,18 +1,18 @@
 using System;
 /// <summary>
-/// µ¥¸öÎïÆ·½±Àø
+/// å•ä¸ªç‰©å“å¥–åŠ±
 /// </summary>
 [Serializable]
 public class ItemReward
 {
     /// <summary>
-    /// ÎïÆ·ID
-    /// Óë ItemData.json ¶ÔÓ¦
+    /// ç‰©å“ID
+    /// ä¸ ItemData.json å¯¹åº”
     /// </summary>
     public string itemId;
 
     /// <summary>
-    /// ÊıÁ¿
+    /// æ•°é‡
     /// </summary>
     public int count;
 }

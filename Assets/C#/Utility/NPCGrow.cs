@@ -1,42 +1,44 @@
 using UnityEngine;
 
 /// <summary>
-/// NPC³É³¤Ïà¹Ø¹¤¾ß
-/// ËùÓĞ¾­Ñé¡¢Éı¼¶¡¢½ğ±Ò²Ù×÷Í³Ò»·ÅÔÚÕâÀï¡£
+/// NPCæˆé•¿ç›¸å…³å·¥å…·
+/// æ‰€æœ‰ç»éªŒã€å‡çº§ã€é‡‘å¸æ“ä½œç»Ÿä¸€æ”¾åœ¨è¿™é‡Œã€‚
 /// </summary>
 public static class NPCGrow
 {
     /// <summary>
-    /// »ñÈ¡µ±Ç°µÈ¼¶Éı¼¶ËùĞè¾­Ñé
+    /// è·å–å½“å‰ç­‰çº§å‡çº§æ‰€éœ€ç»éªŒ
     /// </summary>
     public static int GetNeedExp(int level)
     {
-        // Ä¿Ç°²ÉÓÃ¼òµ¥¹«Ê½
+        // ç›®å‰é‡‡ç”¨ç®€å•å…¬å¼
         return 100 + (level - 1) * 50;
     }
 
     /// <summary>
-    /// Ôö¼Ó¾­Ñé
-    /// ×Ô¶¯´¦ÀíÉı¼¶
+    /// å¢åŠ ç»éªŒ
+    /// è‡ªåŠ¨å¤„ç†å‡çº§
     /// </summary>
     public static void AddExp(NPCRuntime npc, int exp)
     {
         npc.Exp += exp;
+        npc.Character.exp = npc.Exp;
 
-        // ¾­Ñé×ã¹»ÔòÁ¬ĞøÉı¼¶
+        // ç»éªŒè¶³å¤Ÿåˆ™è¿ç»­å‡çº§
         while (npc.Exp >= GetNeedExp(npc.Level))
         {
             npc.Exp -= GetNeedExp(npc.Level);
 
             npc.Level++;
+            npc.Character.level = npc.Level;
 
-            Debug.Log($"{npc.Data.npcName} Éıµ½ÁË {npc.Level} ¼¶");
+            Debug.Log($"{npc.Data.npcName} å‡åˆ°äº† {npc.Level} çº§");
         }
       
     }
 
     /// <summary>
-    /// Ôö¼Ó½ğ±Ò
+    /// å¢åŠ é‡‘å¸
     /// </summary>
     public static void AddGold(NPCRuntime npc, int gold)
     {

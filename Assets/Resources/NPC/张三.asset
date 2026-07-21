@@ -14,6 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   npcID: 1
   npcName: "\u5F20\u4E09"
+  age: 18
+  initialTraits:
+  - reckless
+  - loyal
+  - diligent
+  level: 1
+  exp: 0
+  expToNextLevel: 100
   attack: 20
   intelligence: 10
   agility: 10
+  comprehension: 8
+  physique: 12

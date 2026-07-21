@@ -5,7 +5,7 @@
     "description":
     "收集灵草资源。",
 
-    "type":"Resource",
+    "missionType":"Resource",
 
     "needDays": 6,
 

@@ -2,41 +2,41 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// ÈÎÎñ½Úµã¾²Ì¬Êı¾İ
-/// ´ÓJson¶ÁÈ¡
+/// ä»»åŠ¡èŠ‚ç‚¹é™æ€æ•°æ®
+/// ä»Jsonè¯»å–
 /// </summary>
 
 [Serializable]
 public class MissionNodeData
 {
 
-    //½Úµã´¥·¢ÀàĞÍ
-    //ÀıÈç£º
+    //èŠ‚ç‚¹è§¦å‘ç±»å‹
+    //ä¾‹å¦‚ï¼š
     //Day
     //Combat
     //Random
     public string triggerType;
 
 
-    //´¥·¢ÊıÖµ
-    //ÀıÈçµÚ¼¸Ìì´¥·¢
+    //è§¦å‘æ•°å€¼
+    //ä¾‹å¦‚ç¬¬å‡ å¤©è§¦å‘
     public int triggerValue;
 
 
 
-    //ÊÂ¼ş±êÌâ
+    //äº‹ä»¶æ ‡é¢˜
 
     public string title;
 
 
 
-    //ÊÂ¼şÃèÊö
+    //äº‹ä»¶æè¿°
 
     public string description;
 
 
 
-    //Íæ¼ÒÑ¡Ôñ
+    //ç©å®¶é€‰æ‹©
 
     public List<MissionOptionData> options;
 

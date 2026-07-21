@@ -5,28 +5,28 @@ using System.Collections.Generic;
 public class MissionData
 {
    
-    // ÈÎÎñID
+    // ä»»åŠ¡ID
     public string id;
-    // ÈÎÎñÃû³Æ
+    // ä»»åŠ¡åç§°
     public string name;
-    // ÃèÊö
+    // æè¿°
     public string description;
-    // Ä¿±êÀàÐÍ
+    // ç›®æ ‡ç±»åž‹
     public MissionType missionType;
 
-    // Íê³ÉËùÐèÌìÊý
+    // å®Œæˆæ‰€éœ€å¤©æ•°
     public int needDays;
-    // ½±Àø½ð±Ò
+    // å¥–åŠ±é‡‘å¸
     public int goldReward;
-    // ¾­Ñé½±Àø
+    // ç»éªŒå¥–åŠ±
     public int expReward;
-    //ÎïÆ·½±Àø
+    //ç‰©å“å¥–åŠ±
     public List<ItemReward> itemRewards;
-    // ËùÐèÁ¦Á¿
+    // æ‰€éœ€åŠ›é‡
     public int requiredAttack;
-    // ËùÐèÖÇÁ¦
+    // æ‰€éœ€æ™ºåŠ›
     public int requiredIntelligence;
-    // ÊÂ¼þ½Úµã
+    // äº‹ä»¶èŠ‚ç‚¹
     // </summary>
     public List<MissionNodeData> nodes;
 }

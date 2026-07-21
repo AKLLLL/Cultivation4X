@@ -1,14 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// Íæ¼Ò¹ÜÀíÆ÷
+/// ç©å®¶ç®¡ç†å™¨
 /// </summary>
 public class PlayerManager : MonoBehaviour
 {
     public static PlayerManager Instance;
 
     /// <summary>
-    /// Íæ¼ÒÊı¾İ
+    /// ç©å®¶æ•°æ®
     /// </summary>
     public PlayerData playerData = new PlayerData();
 
@@ -18,10 +18,36 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Ôö¼Ó½ğ±Ò
+    /// å¢åŠ é‡‘å¸
     /// </summary>
     public void AddGold(int gold)
     {
-        playerData.gold += gold;
+        playerData.gold = Mathf.Max(0, playerData.gold + gold);
+    }
+
+    public bool SpendGold(int amount)
+    {
+        if (amount < 0 || playerData.gold < amount) return false;
+        playerData.gold -= amount;
+        return true;
+    }
+
+    public void AddReputation(int amount)
+    {
+        playerData.reputation = Mathf.Max(0, playerData.reputation + amount);
+    }
+
+    public bool UpgradeFacility(string facility, int goldCost)
+    {
+        if (!SpendGold(goldCost)) return false;
+        switch (facility)
+        {
+            case "TrainingRoom": playerData.trainingRoomLevel++; return true;
+            case "MissionHall": playerData.missionHallLevel++; return true;
+            case "Infirmary": playerData.infirmaryLevel++; return true;
+            default:
+                AddGold(goldCost);
+                return false;
+        }
     }
 }

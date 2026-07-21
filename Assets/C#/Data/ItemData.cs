@@ -1,30 +1,30 @@
 using System;
 
 /// <summary>
-/// µ¥¸öÎïÆ·ÅäÖÃ
-/// ¶ÔÓ¦Ò»¸ö Json ÎÄ¼ş
+/// å•ä¸ªç‰©å“é…ç½®
+/// å¯¹åº”ä¸€ä¸ª Json æ–‡ä»¶
 /// </summary>
 [Serializable]
 public class ItemData
 {
-    // ÎïÆ·ID£¨Î¨Ò»£©
+    // ç‰©å“IDï¼ˆå”¯ä¸€ï¼‰
     public string itemId;
-    // Ãû³Æ
+    // åç§°
     public string itemName;
-   // ÃèÊö
+   // æè¿°
     public string description;
-    // ÀàĞÍ
+    // ç±»å‹
     public ItemType itemType;
-    // Æ·ÖÊ
+    // å“è´¨
     public string quality;
-    //Æ·½×
+    //å“é˜¶
     public int rank;
-    // ÊÛ¼Û
+    // å”®ä»·
     public int price;
-    // ÊÇ·ñ¿ÉÒÔ¶Ñµş
+    // æ˜¯å¦å¯ä»¥å †å 
     public bool stackable;
-    // ×î´ó¶ÑµşÊıÁ¿
+    // æœ€å¤§å †å æ•°é‡
     public int maxStack;
-    // Í¼±êÂ·¾¶(Resources)
+    // å›¾æ ‡è·¯å¾„(Resources)
     public string icon;
 }

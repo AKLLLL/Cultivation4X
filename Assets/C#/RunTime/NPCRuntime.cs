@@ -1,11 +1,12 @@
+using System;
 using UnityEngine;
 
 public class NPCRuntime
 {
-    // ¶ÔÓ¦¾²Ì¬Êı¾İ
+    // å¯¹åº”é™æ€æ•°æ®
     public NPCData Data;
     //-----------------
-    //³É³¤Êı¾İ
+    //æˆé•¿æ•°æ®
     //-----------------
 
     public int Level;
@@ -13,17 +14,28 @@ public class NPCRuntime
     public int Exp;
 
     public int Gold;
-    // µ±Ç°×´Ì¬
+    // å½“å‰çŠ¶æ€
     public NPCState State;
 
-    // ×´Ì¬Ê£ÓàÊ±¼ä
+    // çŠ¶æ€å‰©ä½™æ—¶é—´
     public int StateRemainDays;
-    // µ±Ç°ÈÎÎñ
+    // å½“å‰ä»»åŠ¡
     public Mission CurrentMission;
+    public CharacterState Character { get; private set; }
     public NPCRuntime(NPCData data)
     {
         Data = data;
-        //¶ÁÈ¡³õÊ¼Öµ
+        Character = new CharacterState
+        {
+            characterId = string.IsNullOrWhiteSpace(data.npcID) ? Guid.NewGuid().ToString("N") : data.npcID,
+            templateId = data.npcID,
+            displayName = data.npcName,
+            age = data.age,
+            level = data.level,
+            exp = data.exp,
+            traitIds = new System.Collections.Generic.List<string>(data.initialTraits)
+        };
+        //è¯»å–åˆå§‹å€¼
         Level = data.level;
         Exp = data.exp;
         Gold = 0;
@@ -32,31 +44,65 @@ public class NPCRuntime
 
         StateRemainDays = 0;
     }
+
+    public NPCRuntime(NPCData data, CharacterState state)
+    {
+        Data = data;
+        Character = state;
+        Level = state.level;
+        Exp = state.exp;
+        Gold = 0;
+        State = state.activityState;
+        StateRemainDays = state.stateRemainDays;
+    }
+
+    public string CharacterId => Character.characterId;
+    public HealthState Health => Character.health;
+    public CultivationRealm Realm => Character.realm;
+    public int Cultivation => Character.cultivation;
     public int Attack
     {
         get
         {
-            return Data.attack;
+            int modifier = 0;
+            if (TraitDatabase.Instance != null)
+                foreach (string id in Character.traitIds)
+                    modifier += TraitDatabase.Instance.Get(id)?.attackModifier ?? 0;
+            return Data.attack + modifier;
+        }
+    }
+
+    public int Intelligence
+    {
+        get
+        {
+            int modifier = 0;
+            if (TraitDatabase.Instance != null)
+                foreach (string id in Character.traitIds)
+                    modifier += TraitDatabase.Instance.Get(id)?.intelligenceModifier ?? 0;
+            return Data.intelligence + modifier;
         }
     }
     /// <summary>
-    /// ÉèÖÃ×´Ì¬
+    /// è®¾ç½®çŠ¶æ€
     /// </summary>
     public void SetState(NPCState state, int days = 0)
     {
         Debug.Log(
-        $"{Data.npcName} ×´Ì¬±ä»¯: {State} -> {state}"
+        $"{Data.npcName} çŠ¶æ€å˜åŒ–: {State} -> {state}"
     );
         State = state;
         StateRemainDays = days;
+        Character.activityState = state;
+        Character.stateRemainDays = days;
     }
     /// <summary>
-    /// Ã¿ÈÕÍÆ½ø
+    /// æ¯æ—¥æ¨è¿›
     /// </summary>
     public void OnDayPassed()
     {
         Debug.Log(
-       $"{Data.npcName} µ±Ç°×´Ì¬:{State} Ê£Óà:{StateRemainDays}"
+       $"{Data.npcName} å½“å‰çŠ¶æ€:{State} å‰©ä½™:{StateRemainDays}"
    );
         if (StateRemainDays > 0)
         {
@@ -68,11 +114,38 @@ public class NPCRuntime
                 CurrentMission = null;
             }
         }
+        Character.activityState = State;
+        Character.stateRemainDays = StateRemainDays;
+        Character.level = Level;
+        Character.exp = Exp;
     }
 
 
     public bool CanDispatch()
     {
-        return State == NPCState.Idle;
+        return Character.IsAlive && State == NPCState.Idle;
+    }
+
+    public void AddCultivation(int amount)
+    {
+        if (!Character.IsAlive || amount <= 0) return;
+        Character.cultivation += amount;
+    }
+
+    public bool TryBreakthrough(float bonusChance = 0f)
+    {
+        int need = Character.realm == CultivationRealm.QiRefining ? 100 : 300;
+        if (!Character.IsAlive || Character.realm == CultivationRealm.GoldenCore || Character.cultivation < need)
+            return false;
+
+        float healthPenalty = Character.health == HealthState.PermanentTrauma ? 0.2f : 0f;
+        float chance = Mathf.Clamp01(0.65f + bonusChance - healthPenalty);
+        Character.cultivation -= need;
+        if (UnityEngine.Random.value > chance) return false;
+
+        Character.realm = (CultivationRealm)((int)Character.realm + 1);
+        Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            "Breakthrough", $"çªç ´è‡³ {Character.realm}");
+        return true;
     }
 }

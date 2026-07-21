@@ -3,7 +3,7 @@
     "id": "combat_001",
     "name": "清理妖兽巢穴",
     "description":"附近出现妖兽袭击村庄。",
-    "type":"Combat",
+    "missionType":"Combat",
     "needDays": 4,
 
     "goldReward": 120,

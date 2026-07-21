@@ -1,44 +1,43 @@
 using UnityEngine;
 
 /// <summary>
-/// µ¥¸öÈÎÎñÔËĞĞÊ±ÊµÀı
-/// ±£´æÔËĞĞÊ±×´Ì¬
+/// å•ä¸ªä»»åŠ¡è¿è¡Œæ—¶å®ä¾‹
+/// ä¿å­˜è¿è¡Œæ—¶çŠ¶æ€
 /// </summary>
 public class Mission
 {
 
-   public MissionState state { get; private set; }
     public NPCRuntime AssignedNPC { get; private set; }
 
-    // ¾²Ì¬ÅäÖÃ
+    // é™æ€é…ç½®
     public MissionData Data { get; private set; }
 
-    // µ±Ç°×´Ì¬
+    // å½“å‰çŠ¶æ€
     public MissionState State { get; private set; }
-    // Ê£ÓàÌìÊı
+    // å‰©ä½™å¤©æ•°
     public int RemainingDays { get; private set; }
-    // ÒÑ¾­¹ıÌìÊı
+    // å·²ç»è¿‡å¤©æ•°
     public int ElapsedDays { get; private set; }
-    // µ±Ç°½ÚµãË÷Òı
+    // å½“å‰èŠ‚ç‚¹ç´¢å¼•
     public int CurrentNodeIndex { get; private set; }
     public MissionNodeData CurrentNode { get; private set; }
-    // µ±Ç°ÈÎÎñ×îÖÕ½±Àø¡£
-    // ÈÎÎñÔËĞĞ¹ı³ÌÖĞ¿ÉÒÔ²»¶ÏĞŞ¸Ä¡£
+    // å½“å‰ä»»åŠ¡æœ€ç»ˆå¥–åŠ±ã€‚
+    // ä»»åŠ¡è¿è¡Œè¿‡ç¨‹ä¸­å¯ä»¥ä¸æ–­ä¿®æ”¹ã€‚
     private Reward reward;
 
    
     public Mission(MissionData data)
     {
         Data = data;
-        // ´´½¨½±Àø
+        // åˆ›å»ºå¥–åŠ±
         reward = CreateReward(data);
         State = MissionState.NotStarted;
         CurrentNodeIndex = 0;
         ElapsedDays = 0;
     }
  
-    // »ñÈ¡½±Àø¶ÔÏó¡£
-    // ÓÃÓÚÈÎÎñ½ÚµãĞŞ¸Ä½±Àø¡£
+    // è·å–å¥–åŠ±å¯¹è±¡ã€‚
+    // ç”¨äºä»»åŠ¡èŠ‚ç‚¹ä¿®æ”¹å¥–åŠ±ã€‚
     public Reward Reward
     {
         get
@@ -46,18 +45,18 @@ public class Mission
             return reward;
         }
     }
-    // ¸ù¾İ MissionData ´´½¨½±Àø¶ÔÏó¡£
+    // æ ¹æ® MissionData åˆ›å»ºå¥–åŠ±å¯¹è±¡ã€‚
     private Reward CreateReward(MissionData data)
     {
         Reward reward = new Reward();
 
-        // ½ğ±Ò½±Àø
+        // é‡‘å¸å¥–åŠ±
         reward.Gold = data.goldReward;
 
-        // ¾­Ñé½±Àø
+        // ç»éªŒå¥–åŠ±
         reward.Exp = data.expReward;
 
-        // ÎïÆ·½±Àø
+        // ç‰©å“å¥–åŠ±
         if (data.itemRewards != null)
         {
             foreach (ItemReward item in data.itemRewards)
@@ -74,7 +73,7 @@ public class Mission
         return reward;
     }
     /// <summary>
-    /// ¿ªÊ¼ÈÎÎñ
+    /// å¼€å§‹ä»»åŠ¡
     /// </summary>
     public void StartMission(NPCRuntime npc)
     {
@@ -82,28 +81,28 @@ public class Mission
             return;
         AssignedNPC = npc;
         State = MissionState.Active;
-        // ´ÓÅäÖÃ¶ÁÈ¡ºÄÊ±
+        // ä»é…ç½®è¯»å–è€—æ—¶
         RemainingDays = Data.needDays;
-        // NPC½øÈëÈÎÎñ×´Ì¬
-        NPCManager.Instance.StartMission(npc.Data,this);
-        Debug.Log($"NPC {npc.Data.name} ÒÑ¾­½øÈëÃ¦Âµ×´Ì¬£¡");
-        Debug.Log($"ÈÎÎñ¿ªÊ¼£º{Data.name}£¬ĞèÒª {RemainingDays} Ìì");
+        // NPCè¿›å…¥ä»»åŠ¡çŠ¶æ€
+        NPCManager.Instance.StartMission(npc, this);
+        Debug.Log($"NPC {npc.Data.npcName} å·²ç»è¿›å…¥å¿™ç¢ŒçŠ¶æ€ï¼");
+        Debug.Log($"ä»»åŠ¡å¼€å§‹ï¼š{Data.name}ï¼Œéœ€è¦ {RemainingDays} å¤©");
     }
     /// <summary>
-    /// ÍÆ½øÒ»Ìì
+    /// æ¨è¿›ä¸€å¤©
     /// </summary>
     public void PassOneDay()
     {
         
         if (State != MissionState.Active)
             return;
-        //¾­¹ıÒ»Ìì
+        //ç»è¿‡ä¸€å¤©
 
         ElapsedDays++;
 
         CheckNode();
         RemainingDays--;
-        // Debug.Log($"{Data.name} Ê£Óà {RemainingDays} Ìì");
+        // Debug.Log($"{Data.name} å‰©ä½™ {RemainingDays} å¤©");
 
         if (RemainingDays <= 0)
         {
@@ -115,7 +114,7 @@ public class Mission
         
     }
     /// <summary>
-    /// ¼ì²éÈÎÎñ½Úµã
+    /// æ£€æŸ¥ä»»åŠ¡èŠ‚ç‚¹
     /// </summary>
     private void CheckNode()
     {
@@ -127,7 +126,7 @@ public class Mission
 
         MissionNodeData node =
             Data.nodes[CurrentNodeIndex];
-        //Ä¿Ç°Ö»×ö°´Ìì´¥·¢
+        //ç›®å‰åªåšæŒ‰å¤©è§¦å‘
         if (node.triggerType == "Day")
         {
             if (ElapsedDays >= node.triggerValue)
@@ -137,26 +136,26 @@ public class Mission
         }
     }
     /// <summary>
-     /// ´¥·¢½Úµã
+     /// è§¦å‘èŠ‚ç‚¹
      /// </summary>
     private void TriggerNode(MissionNodeData node){
         CurrentNode = node;
 
-        Debug.Log($"ÈÎÎñÊÂ¼ş£º{node.title}" );
+        Debug.Log($"ä»»åŠ¡äº‹ä»¶ï¼š{node.title}" );
         Debug.Log(node.description);
 
-        //ÔİÍ£ÈÎÎñÁ÷³Ì
+        //æš‚åœä»»åŠ¡æµç¨‹
 
-        //µÈ´ıÍæ¼ÒÑ¡Ôñ
+        //ç­‰å¾…ç©å®¶é€‰æ‹©
 
         State = MissionState.WaitingNode;
-        //Í¨ÖªÈÎÎñ¹ÜÀíÆ÷
+        //é€šçŸ¥ä»»åŠ¡ç®¡ç†å™¨
         MissionManager.Instance.OnMissionNodeTriggered(this);
 
 
     }
     /// <summary>
-    /// Íæ¼ÒÑ¡ÔñÈÎÎñ½ÚµãÑ¡Ïî
+    /// ç©å®¶é€‰æ‹©ä»»åŠ¡èŠ‚ç‚¹é€‰é¡¹
     /// </summary>
     public void SelectOption(int index)
     {
@@ -173,12 +172,12 @@ public class Mission
         MissionOptionData option =
             CurrentNode.options[index];
         Debug.Log(
-            $"Ñ¡Ôñ£º{option.text}"
+            $"é€‰æ‹©ï¼š{option.text}"
          );
         if (!CheckRequirement(option))
         {
             Debug.Log(
-            $"Ñ¡ÔñÊ§°Ü£º{option.text} Ìõ¼ş²»×ã"
+            $"é€‰æ‹©å¤±è´¥ï¼š{option.text} æ¡ä»¶ä¸è¶³"
             );
             FailMission();
             return;
@@ -192,7 +191,7 @@ public class Mission
        
 
     }
-    // ¼ì²éÑ¡ÏîÌõ¼ş
+    // æ£€æŸ¥é€‰é¡¹æ¡ä»¶
     private bool CheckRequirement(
     MissionOptionData option)
     {
@@ -211,13 +210,13 @@ public class Mission
 
             case "Attack":
 
-                return AssignedNPC.Data.attack
+                return AssignedNPC.Attack
                     >= option.requirementValue;
 
 
             case "Intelligence":
 
-                return AssignedNPC.Data.intelligence
+                return AssignedNPC.Intelligence
                     >= option.requirementValue;
 
 
@@ -227,7 +226,7 @@ public class Mission
         return true;
 
     }
-    //Ğ§¹ûÖ´ĞĞ
+    //æ•ˆæœæ‰§è¡Œ
     private void ApplyEffects(
     MissionOptionData option)
     {
@@ -239,29 +238,30 @@ public class Mission
             switch (effect.type)
             {
 
-                //Ôö¼Ó½ğ±Ò
+                //å¢åŠ é‡‘å¸
+                case "Reward":
                 case "AddGold":
 
                     Reward.Gold += effect.value;
 
                     Debug.Log(
-                    $"»ñµÃ½ğ±Ò:{effect.value}"
+                    $"è·å¾—é‡‘å¸:{effect.value}"
                     );
 
                     break;
 
-                //Ôö¼Ó¾­Ñé
+                //å¢åŠ ç»éªŒ
                 case "AddExp":
 
                     Reward.Exp += effect.value;
 
                     Debug.Log(
-                    $"»ñµÃ¾­Ñé:{effect.value}"
+                    $"è·å¾—ç»éªŒ:{effect.value}"
                     );
 
                     break;
 
-                //»ñµÃÎïÆ·
+                //è·å¾—ç‰©å“
                 case "AddItem":
 
                     WarehouseManager.Instance.AddItem(
@@ -270,37 +270,43 @@ public class Mission
                     );
 
                     Debug.Log(
-                    $"»ñµÃÎïÆ·:{effect.itemId} x {effect.count}"
+                    $"è·å¾—ç‰©å“:{effect.itemId} x {effect.count}"
                     );
 
                     break;
 
-                //ÏûºÄÎïÆ·
+                //æ¶ˆè€—ç‰©å“
                 case "RemoveItem":
 
-                    WarehouseManager.Instance.RemoveItem(
+                    bool removed = WarehouseManager.Instance.RemoveItem(
                         effect.itemId,
                         effect.count
                     );
 
+                    if (!removed)
+                    {
+                        Debug.LogWarning($"ä»»åŠ¡æ•ˆæœå¤±è´¥ï¼Œç‰©å“ä¸è¶³: {effect.itemId}");
+                        return;
+                    }
+
                     Debug.Log(
-                    $"ÏûºÄÎïÆ·:{effect.itemId} x {effect.count}"
+                    $"æ¶ˆè€—ç‰©å“:{effect.itemId} x {effect.count}"
                     );
 
                     break;
 
-                //Ôö¼ÓÈÎÎñÊ±¼ä
+                //å¢åŠ ä»»åŠ¡æ—¶é—´
                 case "Delay":
 
                     RemainingDays += effect.value;
 
                     Debug.Log(
-                    $"ÈÎÎñÔö¼ÓÊ±¼ä:{effect.value}Ìì"
+                    $"ä»»åŠ¡å¢åŠ æ—¶é—´:{effect.value}å¤©"
                     );
 
                     break;
 
-                //NPCÊÜÉË
+                //NPCå—ä¼¤
                 case "Injury":
 
                     NPCManager.Instance.Injured(
@@ -310,7 +316,7 @@ public class Mission
 
                     break;
 
-                //´¥·¢ÊÂ¼ş
+                //è§¦å‘äº‹ä»¶
                 case "TriggerEvent":
 
                     RandomEventManager.Instance.TriggerEvent(
@@ -325,7 +331,7 @@ public class Mission
 
     }
    
-    //½ÚµãÑ¡Ôñºó¼ÌĞøÈÎÎñ
+    //èŠ‚ç‚¹é€‰æ‹©åç»§ç»­ä»»åŠ¡
     private void ContinueMission()
     {
 
@@ -340,7 +346,7 @@ public class Mission
 
     }
     /// <summary>
-    /// Íê³ÉÈÎÎñ
+    /// å®Œæˆä»»åŠ¡
     /// </summary>
     public void CompleteMission()
     {
@@ -352,7 +358,7 @@ public class Mission
         
         State = MissionState.Completed;
 
-        Debug.Log($"ÈÎÎñÍê³É£º{Data.name}");
+        Debug.Log($"ä»»åŠ¡å®Œæˆï¼š{Data.name}");
 
         //RewardManager.Instance.GiveReward(AssignedNPC, reward);
         MissionManager.Instance.RemoveMission(this);
@@ -360,12 +366,12 @@ public class Mission
         if (AssignedNPC != null)
         {
         
-            Debug.Log($"NPC {AssignedNPC.Data.npcName} ÈÎÎñÍê³É£¬»Ö¸´¿ÕÏĞ£¡");
+            Debug.Log($"NPC {AssignedNPC.Data.npcName} ä»»åŠ¡å®Œæˆï¼Œæ¢å¤ç©ºé—²ï¼");
         }
 
         CurrentNode = null;
     }
-    //ÈÎÎñÊ§°Ü
+    //ä»»åŠ¡å¤±è´¥
     public void FailMission()
     {
         if (
@@ -384,10 +390,43 @@ public class Mission
             );
 
             Debug.Log(
-                $"NPC {AssignedNPC.Data.name} ÈÎÎñÊ§°Ü£¬ÊÜÉË3Ìì£¡"
+                $"NPC {AssignedNPC.Data.npcName} ä»»åŠ¡å¤±è´¥ï¼Œå—ä¼¤3å¤©ï¼"
             );
         }
 
-        Debug.Log($"ÈÎÎñÊ§°Ü£º{Data.name}");
+        Debug.Log($"ä»»åŠ¡å¤±è´¥ï¼š{Data.name}");
+        MissionManager.Instance.RemoveMission(this);
+    }
+
+    public Mission(MissionData data, MissionSaveData saved, NPCRuntime npc)
+    {
+        Data = data;
+        reward = saved.reward ?? CreateReward(data);
+        State = saved.state;
+        RemainingDays = saved.remainingDays;
+        ElapsedDays = saved.elapsedDays;
+        CurrentNodeIndex = saved.currentNodeIndex;
+        AssignedNPC = npc;
+        if (Data.nodes != null && CurrentNodeIndex < Data.nodes.Count && State == MissionState.WaitingNode)
+            CurrentNode = Data.nodes[CurrentNodeIndex];
+        if (npc != null && (State == MissionState.Active || State == MissionState.WaitingNode))
+        {
+            npc.CurrentMission = this;
+            npc.SetState(NPCState.Busy);
+        }
+    }
+
+    public MissionSaveData ToSaveData()
+    {
+        return new MissionSaveData
+        {
+            missionId = Data.id,
+            assignedCharacterId = AssignedNPC?.CharacterId,
+            state = State,
+            remainingDays = RemainingDays,
+            elapsedDays = ElapsedDays,
+            currentNodeIndex = CurrentNodeIndex,
+            reward = reward
+        };
     }
 }

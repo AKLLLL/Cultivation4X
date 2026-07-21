@@ -6,7 +6,7 @@
     "description":
     "附近妖兽大量出现，威胁附近修士。",
 
-    "type":"WorldEvent",
+    "missionType":"WorldEvent",
 
     "needDays":5,
 

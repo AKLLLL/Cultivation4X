@@ -3,21 +3,21 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 
 /// <summary>
-/// Ëæ»úÈÎÎñÉú³ÉÆ÷
-/// ¸ºÔğ´ÓÈÎÎñ³ØÖĞÉú³ÉËæ»úÈÎÎñ
+/// éšæœºä»»åŠ¡ç”Ÿæˆå™¨
+/// è´Ÿè´£ä»ä»»åŠ¡æ± ä¸­ç”Ÿæˆéšæœºä»»åŠ¡
 /// </summary>
 public class RandomEventManager : MonoBehaviour
 {
 
     public static RandomEventManager Instance;
 
-    //ÊÂ¼şÄ£°å
+    //äº‹ä»¶æ¨¡æ¿
     private Dictionary<string, MissionData> eventTemplates
         =
         new Dictionary<string, MissionData>();
     /// <summary>
-    /// ËùÓĞÈÎÎñÅäÖÃ
-    /// À´×ÔJson¶ÁÈ¡ºóµÄÈÎÎñ³Ø
+    /// æ‰€æœ‰ä»»åŠ¡é…ç½®
+    /// æ¥è‡ªJsonè¯»å–åçš„ä»»åŠ¡æ± 
     /// </summary>
     private void Awake()
     {
@@ -37,7 +37,7 @@ public class RandomEventManager : MonoBehaviour
         LoadEvents();
     }
     /// <summary>
-    /// ¼ÓÔØÊÂ¼şJSON
+    /// åŠ è½½äº‹ä»¶JSON
     /// </summary>
     private void LoadEvents()
     {
@@ -65,13 +65,13 @@ public class RandomEventManager : MonoBehaviour
             );
 
             Debug.Log(
-            $"¼ÓÔØËæ»úÊÂ¼ş:{data.name}"
+            $"åŠ è½½éšæœºäº‹ä»¶:{data.name}"
             );
 
         }
 
         Debug.Log(
-        $"Ëæ»úÊÂ¼şÊıÁ¿:{eventTemplates.Count}"
+        $"éšæœºäº‹ä»¶æ•°é‡:{eventTemplates.Count}"
         );
     }
     public void TriggerRandomEvent(
@@ -102,7 +102,7 @@ public class RandomEventManager : MonoBehaviour
 
     }
     /// <summary>
-    /// ´´½¨ÊÂ¼şÈÎÎñ
+    /// åˆ›å»ºäº‹ä»¶ä»»åŠ¡
     /// </summary>
     private void CreateEvent(
         MissionData data,
@@ -121,13 +121,13 @@ public class RandomEventManager : MonoBehaviour
         );
 
         Debug.Log(
-        $"´¥·¢Ëæ»úÊÂ¼ş:{data.name}"
+        $"è§¦å‘éšæœºäº‹ä»¶:{data.name}"
         );
 
     }
     /// <summary>
-    /// ¸ù¾İID´¥·¢Ö¸¶¨ÊÂ¼ş
-    /// ¸øTriggerEventÊ¹ÓÃ
+    /// æ ¹æ®IDè§¦å‘æŒ‡å®šäº‹ä»¶
+    /// ç»™TriggerEventä½¿ç”¨
     /// </summary>
     public void TriggerEvent(
         string id,
@@ -138,7 +138,7 @@ public class RandomEventManager : MonoBehaviour
         if (!eventTemplates.ContainsKey(id))
         {
             Debug.LogWarning(
-            $"²»´æÔÚÊÂ¼ş:{id}"
+            $"ä¸å­˜åœ¨äº‹ä»¶:{id}"
             );
 
             return;

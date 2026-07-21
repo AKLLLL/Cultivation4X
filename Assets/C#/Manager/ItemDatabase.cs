@@ -3,15 +3,15 @@ using UnityEngine;
 using Newtonsoft.Json;
 
 /// <summary>
-/// ÎïÆ·Êı¾İ¿â
-/// ¸ºÔğ¶ÁÈ¡ËùÓĞ ItemData
+/// ç‰©å“æ•°æ®åº“
+/// è´Ÿè´£è¯»å–æ‰€æœ‰ ItemData
 /// </summary>
 public class ItemDatabase : MonoBehaviour
 {
     public static ItemDatabase Instance;
 
     /// <summary>
-    /// ËùÓĞÎïÆ·
+    /// æ‰€æœ‰ç‰©å“
     /// Key = id
     /// </summary>
     private Dictionary<string, ItemData> items =
@@ -36,7 +36,7 @@ public class ItemDatabase : MonoBehaviour
     }
 
     /// <summary>
-    /// ¼ÓÔØËùÓĞÎïÆ·
+    /// åŠ è½½æ‰€æœ‰ç‰©å“
     /// </summary>
     void LoadItems()
     {
@@ -53,7 +53,7 @@ public class ItemDatabase : MonoBehaviour
             if (data == null)
             {
                 Debug.LogError(
-                $"ÎïÆ·½âÎöÊ§°Ü:{json.name}"
+                $"ç‰©å“è§£æå¤±è´¥:{json.name}"
                 );
 
                 continue;
@@ -61,34 +61,34 @@ public class ItemDatabase : MonoBehaviour
             if (string.IsNullOrEmpty(data.itemId))
             {
                 Debug.LogError(
-                $"ÎïÆ·IDÎª¿Õ:{json.name}"
+                $"ç‰©å“IDä¸ºç©º:{json.name}"
                 );
 
                 continue;
             }
             if (items.ContainsKey(data.itemId))
             {
-                Debug.LogError($"ÎïÆ·IDÖØ¸´£º{data.itemId}");
+                Debug.LogError($"ç‰©å“IDé‡å¤ï¼š{data.itemId}");
                 continue;
             }
 
             items.Add(data.itemId, data);
 
-            Debug.Log($"¼ÓÔØÎïÆ·£º{data.itemName}");
+            Debug.Log($"åŠ è½½ç‰©å“ï¼š{data.itemName}");
         }
 
-        Debug.Log($"¹²¼ÓÔØ {items.Count} ¸öÎïÆ·");
+        Debug.Log($"å…±åŠ è½½ {items.Count} ä¸ªç‰©å“");
     }
 
     /// <summary>
-    /// ¸ù¾İID»ñµÃÎïÆ·ÅäÖÃ
+    /// æ ¹æ®IDè·å¾—ç‰©å“é…ç½®
     /// </summary>
     public ItemData GetItem(string id)
     {
         if (items.TryGetValue(id, out ItemData item))
             return item;
 
-        Debug.LogWarning($"²»´æÔÚÎïÆ·£º{id}");
+        Debug.LogWarning($"ä¸å­˜åœ¨ç‰©å“ï¼š{id}");
 
         return null;
     }
