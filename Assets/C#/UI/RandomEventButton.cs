@@ -13,6 +13,9 @@ public class RandomEventButton : MonoBehaviour
 
     private void Start()
     {
+#if !UNITY_EDITOR
+        if (!Debug.isDebugBuild) { gameObject.SetActive(false); return; }
+#endif
         button.onClick.AddListener(
             TriggerEvent
         );
@@ -25,13 +28,9 @@ public class RandomEventButton : MonoBehaviour
 
         //测试获取第一个NPC
 
-        NPCRuntime npc =
-            NPCManager.Instance
-            .GetAllNPC()[0];
-
-
-        RandomEventManager.Instance
-        .TriggerRandomEvent(npc);
+        var living = NPCManager.Instance?.GetLivingNPC();
+        NPCRuntime npc = living != null && living.Count > 0 ? living[0] : null;
+        if (npc != null) EventManager.Instance?.DebugEnqueueEvent(npc);
 
     }
 

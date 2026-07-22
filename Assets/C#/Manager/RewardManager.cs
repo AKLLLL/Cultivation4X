@@ -45,7 +45,7 @@ public class RewardManager : MonoBehaviour
         // 发放经验
         if (reward.Exp > 0)
         {
-            NPCGrow.AddExp(npc, reward.Exp);
+            npc.AddCultivation(reward.Exp);
         }
         // 发放物品
         foreach (ItemReward item in reward.Items)
@@ -57,6 +57,17 @@ public class RewardManager : MonoBehaviour
             );
         }
 
-        Debug.Log($"奖励发放完成：{npc.Data.npcName}，获得了{reward.Gold}金币、{reward.Exp}经验");
+        int basicMaterialReward = 0;
+        foreach (ItemReward item in reward.Items)
+            if (item.itemId == FacilityRules.BasicMaterialId) basicMaterialReward += item.count;
+        TimeManager.Instance?.RecordPreAdvanceResourceChange(reward.Gold, basicMaterialReward);
+
+        Debug.Log($"奖励发放完成：{npc.Data.npcName}，宗门灵材 +{reward.Gold}，{npc.Data.npcName}修为 +{reward.Exp}");
+    }
+
+    public bool CanGiveReward(Reward reward)
+    {
+        return reward != null && WarehouseManager.Instance != null &&
+               WarehouseManager.Instance.CanAddRewards(reward.Items);
     }
 }

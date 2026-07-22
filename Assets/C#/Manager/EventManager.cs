@@ -13,9 +13,16 @@ public class EventManager : MonoBehaviour
     private readonly Dictionary<string, EventDefinition> definitions = new Dictionary<string, EventDefinition>();
     private readonly List<EventHistoryRecord> history = new List<EventHistoryRecord>();
     private readonly List<PendingEvent> pending = new List<PendingEvent>();
+    private readonly List<EventInboxEntry> inbox = new List<EventInboxEntry>();
     private ActiveCharacterEvent activeEvent;
     private int randomSeed = 48621;
     private int randomRollCount;
+    private int nextInboxSequence;
+    private int generatedDay = -1;
+    private int generatedOrdinaryCount;
+    private readonly List<string> newEventTitles = new List<string>();
+
+    public const int InboxCapacity = 5;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -27,7 +34,7 @@ public class EventManager : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+        DontDestroyUtility.MarkPersistent(gameObject);
         LoadDefinitions();
     }
 
@@ -43,6 +50,7 @@ public class EventManager : MonoBehaviour
                     : new List<EventDefinition> { JsonConvert.DeserializeObject<EventDefinition>(file.text) };
                 foreach (EventDefinition definition in loaded)
                 {
+                    NormalizeDefinition(definition);
                     if (!Validate(definition, out string error))
                     {
                         Debug.LogError($"事件配置无效 {file.name}: {error}");
@@ -65,33 +73,48 @@ public class EventManager : MonoBehaviour
 
     public void ProcessDay(int day)
     {
-        if (activeEvent != null) return;
-        PendingEvent due = pending.Where(item => item.dueDay <= day).OrderBy(item => item.dueDay).FirstOrDefault();
-        if (due != null)
-        {
-            pending.Remove(due);
-            if (TryCreateEvent(due.eventId, due.participantIds, out ActiveCharacterEvent queued))
-                Present(queued);
-            return;
-        }
+        ResetDailyGeneration(day);
+        ProcessDueEvents(day);
+        TryTriggerSource(EventSource.SectDaily);
+        if (day % 7 == 0) TryTriggerSource(EventSource.Recruitment);
+    }
 
-        List<ActiveCharacterEvent> candidates = new List<ActiveCharacterEvent>();
-        foreach (EventDefinition definition in definitions.Values)
-        {
-            if (definition.tags.Contains("FollowUp")) continue;
-            if (IsOnCooldown(definition, day) || HasReachedLimit(definition)) continue;
-            if (TryBind(definition, null, out Dictionary<string, NPCRuntime> participants))
-                candidates.Add(new ActiveCharacterEvent { Definition = definition, Participants = participants });
-        }
-        if (candidates.Count == 0) return;
+    public bool PrepareForDayAdvance(int day, out string reason)
+    {
+        CancelInvalidInbox(day);
+        ResolveExpired(day);
+        if (inbox.Any(item => IsCritical(item))) { reason = "存在尚未处理的关键事件"; return false; }
+        if (inbox.Count >= InboxCapacity) { reason = "事件收件箱已满"; return false; }
+        reason = null;
+        return true;
+    }
 
-        int total = candidates.Sum(EffectiveWeight);
-        int roll = Next(total);
+    public bool TryTriggerSource(EventSource source, NPCRuntime actor = null)
+    {
+        int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+        ResetDailyGeneration(day);
+        float chance = SourceChance(source);
+        if (Next(10000) >= Mathf.RoundToInt(chance * 10000f)) return false;
+
+        Dictionary<string, string> fixedIds = actor == null ? null : new Dictionary<string, string> { { "actor", actor.CharacterId } };
+        List<ActiveCharacterEvent> candidates = definitions.Values.OrderBy(item => item.id)
+            .Where(item => item.sources.Contains(source) && !IsOnCooldown(item, day) && !HasReachedLimit(item))
+            .Select(item => TryCreateEvent(item.id, fixedIds, out ActiveCharacterEvent candidate) ? candidate : null)
+            .Where(item => item != null &&
+                (source == EventSource.FollowUp || generatedOrdinaryCount < 2 || item.Definition.isCritical) &&
+                Next(10000) < Mathf.RoundToInt(Mathf.Clamp01(item.Definition.triggerChance) * 10000f))
+            .ToList();
+        if (candidates.Count == 0) return false;
+        int roll = Next(candidates.Sum(EffectiveWeight));
+        ActiveCharacterEvent selected = candidates.First();
         foreach (ActiveCharacterEvent candidate in candidates)
         {
             roll -= EffectiveWeight(candidate);
-            if (roll < 0) { Present(candidate); return; }
+            if (roll < 0) { selected = candidate; break; }
         }
+        Enqueue(selected, day);
+        if (!selected.Definition.isCritical) generatedOrdinaryCount++;
+        return true;
     }
 
     public bool ChooseOption(string optionId)
@@ -101,8 +124,9 @@ public class EventManager : MonoBehaviour
         if (option == null || !ConditionsPass(option.conditions, activeEvent.Participants)) return false;
         EventOutcomeDefinition outcome = WeightedOutcome(option.outcomes);
         if (outcome == null) return false;
+        if (!CanApplyEffects(outcome.effects, activeEvent.Participants)) return false;
 
-        foreach (EventEffect effect in outcome.effects)
+        foreach (EventEffect effect in outcome.effects ?? Enumerable.Empty<EventEffect>())
             ApplyEffect(effect, activeEvent.Participants);
 
         int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
@@ -118,10 +142,38 @@ public class EventManager : MonoBehaviour
         foreach (NPCRuntime participant in activeEvent.Participants.Values.Distinct())
             participant.Character.AddLifeRecord(day, "Event", record.resultText, record.eventId);
 
+        string effectText = FormatEffectSummary(outcome.effects, activeEvent.Participants);
+        Debug.Log(string.IsNullOrEmpty(effectText)
+            ? $"事件：{Format(activeEvent.Definition.title, activeEvent.Participants)}，选择：{option.text}，结果：{record.resultText}"
+            : $"事件：{Format(activeEvent.Definition.title, activeEvent.Participants)}，选择：{option.text}，结果：{record.resultText}，{effectText}");
+
+        string resolvedEntryId = activeEvent.EntryId;
         activeEvent = null;
+        inbox.RemoveAll(item => item.entryId == resolvedEntryId);
         OnEventResolved?.Invoke(record);
         SaveManager.Instance?.AutoSave();
         return true;
+    }
+
+    private bool CanApplyEffects(IEnumerable<EventEffect> effects, Dictionary<string, NPCRuntime> participants)
+    {
+        List<ItemReward> additions = new List<ItemReward>();
+        Dictionary<string, int> removals = new Dictionary<string, int>();
+        int goldChange = 0;
+        foreach (EventEffect effect in effects ?? Enumerable.Empty<EventEffect>())
+        {
+            if (!string.IsNullOrEmpty(effect.participant) && !participants.ContainsKey(effect.participant) && effect.type != EventEffectType.AddGold && effect.type != EventEffectType.AddReputation)
+                return false;
+            if (effect.type == EventEffectType.AddItem) additions.Add(new ItemReward { itemId = effect.value, count = effect.amount });
+            if (effect.type == EventEffectType.RemoveItem)
+                removals[effect.value] = removals.TryGetValue(effect.value, out int count) ? count + effect.amount : effect.amount;
+            if (effect.type == EventEffectType.ScheduleEvent && !definitions.ContainsKey(effect.value)) return false;
+            if (effect.type == EventEffectType.AddGold) goldChange += effect.amount;
+        }
+        if (goldChange < 0 && (PlayerManager.Instance == null || PlayerManager.Instance.playerData.gold < -goldChange)) return false;
+        if (WarehouseManager.Instance == null && (additions.Count > 0 || removals.Count > 0)) return false;
+        if (additions.Count > 0 && !WarehouseManager.Instance.CanAddRewards(additions)) return false;
+        return removals.All(item => WarehouseManager.Instance.GetItemCount(item.Key) >= item.Value);
     }
 
     private void ApplyEffect(EventEffect effect, Dictionary<string, NPCRuntime> participants)
@@ -130,7 +182,10 @@ public class EventManager : MonoBehaviour
         participants.TryGetValue(effect.targetParticipant ?? string.Empty, out NPCRuntime target);
         switch (effect.type)
         {
-            case EventEffectType.AddGold: PlayerManager.Instance?.AddGold(effect.amount); break;
+            case EventEffectType.AddGold:
+                PlayerManager.Instance?.AddGold(effect.amount);
+                TimeManager.Instance?.RecordPreAdvanceResourceChange(effect.amount, 0);
+                break;
             case EventEffectType.AddReputation: PlayerManager.Instance?.AddReputation(effect.amount); break;
             case EventEffectType.AddCultivation: actor?.AddCultivation(effect.amount); break;
             case EventEffectType.AddExperience: if (actor != null) NPCGrow.AddExp(actor, effect.amount); break;
@@ -141,11 +196,17 @@ public class EventManager : MonoBehaviour
                 break;
             case EventEffectType.Injure: if (actor != null) NPCManager.Instance.Injured(actor, Mathf.Max(1, effect.amount)); break;
             case EventEffectType.PermanentTrauma:
-                if (actor != null) { actor.Character.health = HealthState.PermanentTrauma; actor.Character.AddTrait(effect.value); }
+                if (actor != null) NPCManager.Instance.ApplyPermanentTrauma(actor, effect.value);
                 break;
             case EventEffectType.Kill: if (actor != null) NPCManager.Instance.Kill(actor, effect.value); break;
-            case EventEffectType.AddItem: WarehouseManager.Instance?.AddItem(effect.value, effect.amount); break;
-            case EventEffectType.RemoveItem: WarehouseManager.Instance?.RemoveItem(effect.value, effect.amount); break;
+            case EventEffectType.AddItem:
+                WarehouseManager.Instance?.AddItem(effect.value, effect.amount);
+                if (effect.value == FacilityRules.BasicMaterialId) TimeManager.Instance?.RecordPreAdvanceResourceChange(0, effect.amount);
+                break;
+            case EventEffectType.RemoveItem:
+                WarehouseManager.Instance?.RemoveItem(effect.value, effect.amount);
+                if (effect.value == FacilityRules.BasicMaterialId) TimeManager.Instance?.RecordPreAdvanceResourceChange(0, -effect.amount);
+                break;
             case EventEffectType.ScheduleEvent:
                 pending.Add(new PendingEvent
                 {
@@ -162,16 +223,22 @@ public class EventManager : MonoBehaviour
         out Dictionary<string, NPCRuntime> result)
     {
         result = new Dictionary<string, NPCRuntime>();
+        if (NPCManager.Instance == null) return definition.participants == null || definition.participants.Count == 0;
         Dictionary<string, NPCRuntime> bindings = result;
-        foreach (EventParticipantRule rule in definition.participants)
+        foreach (EventParticipantRule rule in definition.participants ?? Enumerable.Empty<EventParticipantRule>())
         {
             IEnumerable<NPCRuntime> pool = rule.allowDead ? NPCManager.Instance.GetAllNPC() : NPCManager.Instance.GetLivingNPC();
             NPCRuntime chosen = null;
             if (fixedIds != null && fixedIds.TryGetValue(rule.slot, out string fixedId))
             {
                 chosen = NPCManager.Instance.GetRuntime(fixedId);
-                if (chosen != null && ((!rule.allowDead && !chosen.Character.IsAlive) || bindings.ContainsValue(chosen)))
+                if (chosen != null && ((!rule.allowDead && !chosen.Character.IsAlive) || bindings.ContainsValue(chosen) ||
+                    !ConditionsPass(rule.conditions, Merge(bindings, rule.slot, chosen))))
                     chosen = null;
+            }
+            else if (fixedIds != null)
+            {
+                if (rule.required) return false;
             }
             else
             {
@@ -216,6 +283,107 @@ public class EventManager : MonoBehaviour
         Debug.Log($"事件：{Format(characterEvent.Definition.title, characterEvent.Participants)}");
     }
 
+    public bool OpenInboxEntry(string entryId)
+    {
+        EventInboxEntry entry = inbox.FirstOrDefault(item => item.entryId == entryId);
+        if (entry == null) return false;
+        if (!TryCreateEvent(entry.eventId, entry.participantIds, out ActiveCharacterEvent created))
+        {
+            inbox.Remove(entry);
+            if (activeEvent?.EntryId == entry.entryId) activeEvent = null;
+            RecordCancelled(entry.eventId, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                entry.participantIds, "事件参与者死亡或条件已经失效");
+            return false;
+        }
+        created.EntryId = entry.entryId;
+        Present(created);
+        return true;
+    }
+
+    public bool DebugEnqueueEvent(NPCRuntime actor)
+    {
+        if (actor == null || inbox.Count >= InboxCapacity) return false;
+        Dictionary<string, string> fixedIds = new Dictionary<string, string> { { "actor", actor.CharacterId } };
+        ActiveCharacterEvent created = definitions.Values.OrderBy(item => item.id)
+            .Select(item => TryCreateEvent(item.id, fixedIds, out ActiveCharacterEvent value) ? value : null)
+            .FirstOrDefault(item => item != null);
+        if (created == null) return false;
+        Enqueue(created, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
+        return true;
+    }
+
+    private void Enqueue(ActiveCharacterEvent created, int day)
+    {
+        Dictionary<string, string> ids = created.Participants.ToDictionary(pair => pair.Key, pair => pair.Value.CharacterId);
+        if (inbox.Count >= InboxCapacity)
+        {
+            pending.Add(new PendingEvent { eventId = created.Definition.id, dueDay = day, participantIds = ids });
+            return;
+        }
+        EventInboxEntry entry = new EventInboxEntry
+        {
+            entryId = $"event-{nextInboxSequence++}",
+            eventId = created.Definition.id,
+            createdDay = day,
+            expiresDay = created.Definition.isCritical ? -1 : day + Mathf.Max(1, created.Definition.expiresAfterDays),
+            participantIds = ids
+        };
+        inbox.Add(entry);
+        newEventTitles.Add(Format(created.Definition.title, created.Participants));
+    }
+
+    private void ProcessDueEvents(int day)
+    {
+        foreach (PendingEvent due in pending.Where(item => item.dueDay <= day).OrderBy(item => item.dueDay).ToList())
+        {
+            if (inbox.Count >= InboxCapacity) break;
+            pending.Remove(due);
+            if (TryCreateEvent(due.eventId, due.participantIds, out ActiveCharacterEvent created)) Enqueue(created, day);
+            else RecordCancelled(due.eventId, day, due.participantIds, "参与者死亡或事件条件已经失效");
+        }
+    }
+
+    private void ResolveExpired(int day)
+    {
+        string previouslyActive = activeEvent?.EntryId;
+        foreach (EventInboxEntry entry in inbox.Where(item => item.expiresDay >= 0 && item.expiresDay <= day).ToList())
+        {
+            if (!TryCreateEvent(entry.eventId, entry.participantIds, out ActiveCharacterEvent created))
+            { inbox.Remove(entry); RecordCancelled(entry.eventId, day, entry.participantIds, "事件到期时条件已经失效"); continue; }
+            created.EntryId = entry.entryId;
+            activeEvent = created;
+            string optionId = created.Definition.defaultOptionId;
+            if (string.IsNullOrEmpty(optionId) || !IsOptionAvailable(optionId, out _))
+                optionId = created.Definition.options.FirstOrDefault(option => ConditionsPass(option.conditions, created.Participants))?.id;
+            if (string.IsNullOrEmpty(optionId) || !ChooseOption(optionId))
+            { activeEvent = null; inbox.Remove(entry); RecordCancelled(entry.eventId, day, entry.participantIds, "事件没有可执行的安全默认选项"); }
+        }
+        if (activeEvent == null && !string.IsNullOrEmpty(previouslyActive) && inbox.Any(item => item.entryId == previouslyActive))
+            OpenInboxEntry(previouslyActive);
+    }
+
+    private void CancelInvalidInbox(int day)
+    {
+        foreach (EventInboxEntry entry in inbox.ToList())
+        {
+            if (TryCreateEvent(entry.eventId, entry.participantIds, out _)) continue;
+            inbox.Remove(entry);
+            if (activeEvent?.EntryId == entry.entryId) activeEvent = null;
+            RecordCancelled(entry.eventId, day, entry.participantIds, "事件参与者死亡或条件已经失效");
+        }
+    }
+
+    private void RecordCancelled(string eventId, int day, Dictionary<string, string> participants, string reason)
+    {
+        EventHistoryRecord record = new EventHistoryRecord { eventId = eventId, day = day, optionId = "cancelled", resultText = reason,
+            participantIds = participants ?? new Dictionary<string, string>() };
+        history.Add(record);
+        OnEventResolved?.Invoke(record);
+    }
+
+    private bool IsCritical(EventInboxEntry entry) =>
+        definitions.TryGetValue(entry.eventId, out EventDefinition definition) && definition.isCritical;
+
     private bool TryCreateEvent(string id, Dictionary<string, string> fixedIds, out ActiveCharacterEvent result)
     {
         result = null;
@@ -227,9 +395,10 @@ public class EventManager : MonoBehaviour
     private int EffectiveWeight(ActiveCharacterEvent candidate)
     {
         EventDefinition definition = candidate.Definition;
-        int recentCount = history.Count(item => item.eventId == definition.id && item.day >= (TimeManager.Instance.CurrentDay - 30));
+        int currentDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+        int recentCount = history.Count(item => item.eventId == definition.id && item.day >= (currentDay - 30));
         int weight = Mathf.Max(1, definition.baseWeight / (recentCount + 1));
-        if (definition.tags.Contains("Recruitment") && NPCManager.Instance.GetLivingNPC().Count <= 1) weight *= 10;
+        if (definition.tags.Contains("Recruitment") && NPCManager.Instance != null && NPCManager.Instance.GetLivingNPC().Count <= 1) weight *= 10;
         if (candidate.Participants.TryGetValue("actor", out NPCRuntime actor) && TraitDatabase.Instance != null)
         {
             float modifier = 1f;
@@ -268,6 +437,34 @@ public class EventManager : MonoBehaviour
         return random.Next(max);
     }
 
+    private void ResetDailyGeneration(int day)
+    {
+        if (generatedDay == day) return;
+        generatedDay = day;
+        generatedOrdinaryCount = 0;
+        newEventTitles.Clear();
+    }
+
+    private float SourceChance(EventSource source)
+    {
+        switch (source)
+        {
+            case EventSource.Training: return 0.15f;
+            case EventSource.MissionStart: return 0.10f;
+            case EventSource.MissionComplete: return 0.35f;
+            case EventSource.MissionFailed:
+            case EventSource.Injury: return 0.50f;
+            case EventSource.SecretRealm: return 0.40f;
+            case EventSource.Alchemy: return 0.25f;
+            case EventSource.FacilityUpgrade: return 0.30f;
+            case EventSource.SectDaily: return 0.08f;
+            case EventSource.Recruitment:
+                return NPCManager.Instance != null && NPCManager.Instance.GetLivingNPC().Count <= 2 ? 0.50f : 0.05f;
+            case EventSource.FollowUp: return 1f;
+            default: return 0.25f;
+        }
+    }
+
     private static Dictionary<string, NPCRuntime> Merge(Dictionary<string, NPCRuntime> source, string key, NPCRuntime value)
     {
         Dictionary<string, NPCRuntime> copy = new Dictionary<string, NPCRuntime>(source);
@@ -283,6 +480,67 @@ public class EventManager : MonoBehaviour
         return result;
     }
 
+    private static string FormatEffectSummary(IEnumerable<EventEffect> effects, Dictionary<string, NPCRuntime> participants)
+    {
+        List<string> parts = new List<string>();
+        foreach (EventEffect effect in effects ?? Enumerable.Empty<EventEffect>())
+        {
+            participants.TryGetValue(effect.participant ?? "actor", out NPCRuntime actor);
+            string name = actor == null ? "角色" : actor.Character.displayName;
+            switch (effect.type)
+            {
+                case EventEffectType.AddGold:
+                    parts.Add($"灵材 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.AddReputation:
+                    parts.Add($"声望 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.AddCultivation:
+                    parts.Add($"{name}修为 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.AddExperience:
+                    parts.Add($"{name}经验 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.AddTrait:
+                    parts.Add($"{name}获得特质：{TraitName(effect.value)}");
+                    break;
+                case EventEffectType.RemoveTrait:
+                    parts.Add($"{name}失去特质：{TraitName(effect.value)}");
+                    break;
+                case EventEffectType.Injure:
+                    parts.Add($"{name}受伤 {effect.amount}");
+                    break;
+                case EventEffectType.PermanentTrauma:
+                    parts.Add($"{name}获得永久创伤：{TraitName(effect.value)}");
+                    break;
+                case EventEffectType.Kill:
+                    parts.Add($"{name}死亡：{effect.value}");
+                    break;
+                case EventEffectType.AddItem:
+                    parts.Add($"获得物品 {effect.value} x{effect.amount}");
+                    break;
+                case EventEffectType.RemoveItem:
+                    parts.Add($"消耗物品 {effect.value} x{effect.amount}");
+                    break;
+                case EventEffectType.ScheduleEvent:
+                    parts.Add($"后续事件：{effect.value}（{Mathf.Max(1, effect.delayDays)}天后）");
+                    break;
+                case EventEffectType.Recruit:
+                    parts.Add($"招募：{effect.value}");
+                    break;
+            }
+        }
+        return string.Join("，", parts);
+    }
+
+    private static string Signed(int value) => value >= 0 ? "+" + value : value.ToString();
+
+    private static string TraitName(string traitId)
+    {
+        TraitDefinition definition = TraitDatabase.Instance == null ? null : TraitDatabase.Instance.Get(traitId);
+        return string.IsNullOrEmpty(definition?.displayName) ? traitId : definition.displayName;
+    }
+
     private static bool Validate(EventDefinition definition, out string error)
     {
         if (definition == null || string.IsNullOrWhiteSpace(definition.id)) { error = "缺少事件 ID"; return false; }
@@ -291,6 +549,44 @@ public class EventManager : MonoBehaviour
         { error = "选项缺少 ID 或结果"; return false; }
         error = null;
         return true;
+    }
+
+    private static void NormalizeDefinition(EventDefinition definition)
+    {
+        if (definition == null) return;
+        definition.tags = definition.tags ?? new List<string>();
+        definition.sources = definition.sources ?? new List<EventSource>();
+        if (definition.sources.Count == 0)
+        {
+            if (definition.tags.Contains("FollowUp")) definition.sources.Add(EventSource.FollowUp);
+            else if (definition.tags.Contains("Recruitment")) definition.sources.Add(EventSource.Recruitment);
+            else
+            {
+                if (definition.tags.Contains("Cultivation")) { definition.sources.Add(EventSource.Training); definition.sources.Add(EventSource.FacilityUpgrade); }
+                if (definition.tags.Contains("Health")) { definition.sources.Add(EventSource.Injury); definition.sources.Add(EventSource.Recovery); }
+                if (definition.tags.Contains("Adventure")) { definition.sources.Add(EventSource.MissionStart); definition.sources.Add(EventSource.MissionNode); definition.sources.Add(EventSource.MissionComplete); definition.sources.Add(EventSource.SecretRealm); }
+                if (definition.tags.Contains("Relationship")) definition.sources.Add(EventSource.SectDaily);
+                if (definition.tags.Contains("Danger")) { definition.sources.Add(EventSource.MissionFailed); definition.sources.Add(EventSource.Alchemy); }
+            }
+        }
+        if (definition.tags.Contains("Death")) definition.isCritical = true;
+        if (definition.expiresAfterDays <= 0) definition.expiresAfterDays = 3;
+        if (definition.options != null && definition.options.Count > 0)
+        {
+            EventOptionDefinition configured = definition.options.FirstOrDefault(option => option.id == definition.defaultOptionId);
+            if (configured == null || !IsSafeDefault(configured))
+                definition.defaultOptionId = (definition.options.FirstOrDefault(IsSafeDefault) ?? definition.options[0]).id;
+        }
+    }
+
+    private static bool IsSafeDefault(EventOptionDefinition option)
+    {
+        return option != null && option.outcomes != null && option.outcomes.All(outcome =>
+            outcome.effects == null || outcome.effects.All(effect =>
+                effect.type != EventEffectType.Kill && effect.type != EventEffectType.Injure &&
+                effect.type != EventEffectType.PermanentTrauma && effect.type != EventEffectType.RemoveItem &&
+                !(effect.type == EventEffectType.AddGold && effect.amount < 0) &&
+                !(effect.type == EventEffectType.AddItem && effect.amount < 0)));
     }
 
     public ActiveCharacterEvent GetActiveEvent() => activeEvent;
@@ -304,15 +600,35 @@ public class EventManager : MonoBehaviour
     }
     public IReadOnlyList<EventHistoryRecord> GetHistory() => history.AsReadOnly();
     public IReadOnlyList<PendingEvent> GetPendingEvents() => pending.AsReadOnly();
+    public IReadOnlyList<EventInboxEntry> GetInbox() => inbox.AsReadOnly();
+    public string ActiveEventEntryId => activeEvent?.EntryId;
+    public int NextInboxSequence => nextInboxSequence;
+    public IReadOnlyCollection<EventDefinition> GetDefinitions() => definitions.Values;
+    public List<string> ConsumeNewEventTitles()
+    {
+        List<string> result = new List<string>(newEventTitles);
+        newEventTitles.Clear();
+        return result;
+    }
 
-    public void RestoreState(IEnumerable<EventHistoryRecord> records, IEnumerable<PendingEvent> queued, int seed, int rolls)
+    public void RestoreState(IEnumerable<EventHistoryRecord> records, IEnumerable<PendingEvent> queued, int seed, int rolls,
+        IEnumerable<EventInboxEntry> savedInbox = null, string activeEntryId = null, int savedNextSequence = 0,
+        int savedGeneratedDay = -1, int savedGeneratedOrdinaryCount = 0)
     {
         history.Clear(); if (records != null) history.AddRange(records);
         pending.Clear(); if (queued != null) pending.AddRange(queued);
+        inbox.Clear(); if (savedInbox != null) inbox.AddRange(savedInbox);
         randomSeed = seed;
         randomRollCount = rolls;
+        nextInboxSequence = savedNextSequence;
+        generatedDay = savedGeneratedDay;
+        generatedOrdinaryCount = Mathf.Max(0, savedGeneratedOrdinaryCount);
+        activeEvent = null;
+        if (!string.IsNullOrEmpty(activeEntryId)) OpenInboxEntry(activeEntryId);
     }
 
     public int RandomSeed => randomSeed;
     public int RandomRollCount => randomRollCount;
+    public int GeneratedDay => generatedDay;
+    public int GeneratedOrdinaryCount => generatedOrdinaryCount;
 }

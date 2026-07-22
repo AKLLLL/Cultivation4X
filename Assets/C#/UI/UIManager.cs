@@ -24,7 +24,7 @@ public class UIManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+            DontDestroyUtility.MarkPersistent(gameObject);
         }
         else
         {

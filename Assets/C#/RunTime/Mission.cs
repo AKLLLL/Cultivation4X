@@ -24,11 +24,13 @@ public class Mission
     // 当前任务最终奖励。
     // 任务运行过程中可以不断修改。
     private Reward reward;
+    private readonly int facilityLevel;
 
    
-    public Mission(MissionData data)
+    public Mission(MissionData data, int facilityLevel = 1)
     {
         Data = data;
+        this.facilityLevel = facilityLevel;
         // 创建奖励
         reward = CreateReward(data);
         State = MissionState.NotStarted;
@@ -69,6 +71,8 @@ public class Mission
                     });
             }
         }
+        if (data.isFacilityAction && reward.Items.Count == 1)
+            reward.Items[0].count = FacilityRules.ActionOutput(data.requiredFacility, facilityLevel);
         
         return reward;
     }
@@ -82,7 +86,9 @@ public class Mission
         AssignedNPC = npc;
         State = MissionState.Active;
         // 从配置读取耗时
-        RemainingDays = Data.needDays;
+        RemainingDays = Data.isFacilityAction
+            ? FacilityRules.ActionDays(Data.requiredFacility, facilityLevel)
+            : Data.needDays;
         // NPC进入任务状态
         NPCManager.Instance.StartMission(npc, this);
         Debug.Log($"NPC {npc.Data.npcName} 已经进入忙碌状态！");
@@ -141,7 +147,7 @@ public class Mission
     private void TriggerNode(MissionNodeData node){
         CurrentNode = node;
 
-        Debug.Log($"任务事件：{node.title}" );
+        Debug.Log($"任务节点：{Data.name} / {node.title} / 执行弟子：{AssignedNPC?.Data.npcName ?? "未知"}");
         Debug.Log(node.description);
 
         //暂停任务流程
@@ -151,6 +157,7 @@ public class Mission
         State = MissionState.WaitingNode;
         //通知任务管理器
         MissionManager.Instance.OnMissionNodeTriggered(this);
+        EventManager.Instance?.TryTriggerSource(EventSource.MissionNode, AssignedNPC);
 
 
     }
@@ -245,7 +252,7 @@ public class Mission
                     Reward.Gold += effect.value;
 
                     Debug.Log(
-                    $"获得金币:{effect.value}"
+                    $"获得灵材:{effect.value}"
                     );
 
                     break;
@@ -256,7 +263,7 @@ public class Mission
                     Reward.Exp += effect.value;
 
                     Debug.Log(
-                    $"获得经验:{effect.value}"
+                    $"获得修为:{effect.value}"
                     );
 
                     break;
@@ -352,7 +359,8 @@ public class Mission
     {
         if (
         State != MissionState.Active &&
-        State != MissionState.WaitingNode
+        State != MissionState.WaitingNode &&
+        State != MissionState.AwaitingReward
     )
             return;
         
@@ -372,7 +380,7 @@ public class Mission
         CurrentNode = null;
     }
     //任务失败
-    public void FailMission()
+    public void FailMission(bool applyInjury = true)
     {
         if (
          State != MissionState.Active &&
@@ -382,7 +390,7 @@ public class Mission
 
         State = MissionState.Failed;
 
-        if (AssignedNPC != null)
+        if (AssignedNPC != null && applyInjury)
         {
             NPCManager.Instance.Injured(
                 AssignedNPC,
@@ -395,12 +403,21 @@ public class Mission
         }
 
         Debug.Log($"任务失败：{Data.name}");
-        MissionManager.Instance.RemoveMission(this);
+        MissionManager.Instance?.NotifyMissionFailed(this);
+        MissionManager.Instance?.RemoveMission(this);
+    }
+
+    public void WaitForReward()
+    {
+        if (State != MissionState.Active && State != MissionState.WaitingNode) return;
+        State = MissionState.AwaitingReward;
+        CurrentNode = null;
     }
 
     public Mission(MissionData data, MissionSaveData saved, NPCRuntime npc)
     {
         Data = data;
+        facilityLevel = 1;
         reward = saved.reward ?? CreateReward(data);
         State = saved.state;
         RemainingDays = saved.remainingDays;

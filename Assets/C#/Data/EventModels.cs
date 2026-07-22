@@ -31,6 +31,23 @@ public enum EventEffectType
     Recruit
 }
 
+public enum EventSource
+{
+    MissionStart,
+    MissionNode,
+    MissionComplete,
+    MissionFailed,
+    Training,
+    Injury,
+    Recovery,
+    FacilityUpgrade,
+    SecretRealm,
+    Alchemy,
+    SectDaily,
+    Recruitment,
+    FollowUp
+}
+
 [Serializable]
 public class EventCondition
 {
@@ -90,6 +107,11 @@ public class EventDefinition
     public int baseWeight = 10;
     public int cooldownDays = 10;
     public int maxOccurrences;
+    public List<EventSource> sources = new List<EventSource>();
+    public float triggerChance = 1f;
+    public int expiresAfterDays = 3;
+    public string defaultOptionId;
+    public bool isCritical;
     public List<EventCondition> conditions = new List<EventCondition>();
     public List<EventParticipantRule> participants = new List<EventParticipantRule>();
     public List<EventOptionDefinition> options = new List<EventOptionDefinition>();
@@ -100,6 +122,16 @@ public class PendingEvent
 {
     public string eventId;
     public int dueDay;
+    public Dictionary<string, string> participantIds = new Dictionary<string, string>();
+}
+
+[Serializable]
+public class EventInboxEntry
+{
+    public string entryId;
+    public string eventId;
+    public int createdDay;
+    public int expiresDay = -1;
     public Dictionary<string, string> participantIds = new Dictionary<string, string>();
 }
 
@@ -115,6 +147,7 @@ public class EventHistoryRecord
 
 public class ActiveCharacterEvent
 {
+    public string EntryId { get; set; }
     public EventDefinition Definition { get; set; }
     public Dictionary<string, NPCRuntime> Participants { get; set; }
 }

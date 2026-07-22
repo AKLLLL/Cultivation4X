@@ -30,7 +30,7 @@ public class NPCManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+            DontDestroyUtility.MarkPersistent(gameObject);
             InitNPC();
         }
         else
@@ -115,7 +115,23 @@ public class NPCManager : MonoBehaviour
         if (npc == null || !npc.Character.IsAlive) return;
         npc.Character.health = days >= 5 ? HealthState.SeriousInjury : HealthState.LightInjury;
         npc.Character.AddLifeRecord(CurrentDay, "Injury", $"受伤，需要休养 {days} 天");
+        EventManager.Instance?.TryTriggerSource(EventSource.Injury, npc);
+        bool missionCanContinue = npc.CurrentMission != null &&
+            (npc.CurrentMission.State == MissionState.Active || npc.CurrentMission.State == MissionState.WaitingNode);
+        if (days < 5 && missionCanContinue) return;
+        Mission mission = npc.CurrentMission;
         SetState(npc, NPCState.Injured, days);
+        if (missionCanContinue) mission.FailMission(false);
+        if (mission != null) npc.CurrentMission = null;
+    }
+
+    public void ApplyPermanentTrauma(NPCRuntime npc, string traitId)
+    {
+        if (npc == null || !npc.Character.IsAlive) return;
+        npc.Character.health = HealthState.PermanentTrauma;
+        npc.Character.AddTrait(traitId);
+        Mission mission = npc.CurrentMission;
+        if (mission != null) mission.FailMission(false);
     }
 
     //恢复空闲状态
@@ -125,12 +141,13 @@ public class NPCManager : MonoBehaviour
         if (runtime == null)
             return;
 
-
+        bool recoveredFromInjury = runtime.Character.health != HealthState.Healthy || runtime.State == NPCState.Injured;
         runtime.SetState(NPCState.Idle, 0);
         if (runtime.Character.health != HealthState.PermanentTrauma)
             runtime.Character.health = HealthState.Healthy;
 
         runtime.CurrentMission = null;
+        if (recoveredFromInjury) EventManager.Instance?.TryTriggerSource(EventSource.Recovery, npc);
     }
     /// <summary>
     /// 获取NPC运行数据
@@ -170,9 +187,11 @@ public class NPCManager : MonoBehaviour
     public bool Kill(NPCRuntime npc, string cause)
     {
         if (npc == null || !npc.Character.IsAlive) return false;
+        Mission currentMission = npc.CurrentMission;
         // 防止全员死亡坏档：最后一名弟子转为永久创伤。
         if (GetLivingNPC().Count <= 1)
         {
+            if (currentMission != null) currentMission.FailMission(false);
             npc.Character.health = HealthState.PermanentTrauma;
             npc.Character.AddTrait("near_death_survivor");
             npc.Character.AddLifeRecord(CurrentDay, "NearDeath", $"死里逃生：{cause}");
@@ -181,12 +200,11 @@ public class NPCManager : MonoBehaviour
         }
 
         npc.Character.health = HealthState.Dead;
+        if (currentMission != null) currentMission.FailMission(false);
         npc.Character.activityState = NPCState.Idle;
         npc.State = NPCState.Idle;
-        Mission mission = npc.CurrentMission;
         npc.CurrentMission = null;
         npc.Character.AddLifeRecord(CurrentDay, "Death", cause);
-        if (mission != null) MissionManager.Instance?.RemoveMission(mission);
         return true;
     }
 
@@ -223,13 +241,17 @@ public class NPCManager : MonoBehaviour
     {
         foreach (var npc in runtimes)
         {
+            bool wasInjured = npc.State == NPCState.Injured;
             npc.OnDayPassed();
+            if (wasInjured && npc.State == NPCState.Idle) Recover(npc);
             if (npc.Character.IsAlive && npc.State == NPCState.Idle)
             {
-                int amount = Mathf.Max(1, PlayerManager.Instance.playerData.trainingRoomLevel);
+                int level = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.TrainingRoom);
+                int amount = FacilityRules.TrainingGain(level);
                 if (npc.Character.HasTrait("diligent")) amount += 1;
                 if (npc.Character.HasTrait("lazy")) amount = Mathf.Max(1, amount - 1);
                 npc.AddCultivation(amount);
+                EventManager.Instance?.TryTriggerSource(EventSource.Training, npc);
             }
         }
     }

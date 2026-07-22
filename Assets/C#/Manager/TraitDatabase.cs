@@ -18,7 +18,7 @@ public class TraitDatabase : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+        DontDestroyUtility.MarkPersistent(gameObject);
         foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/Traits"))
         {
             try

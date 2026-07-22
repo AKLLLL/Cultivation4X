@@ -13,6 +13,13 @@ public class MissionData
     public string description;
     // 目标类型
     public MissionType missionType;
+    public int missionRank = 1;
+    public int requiredMissionHallLevel = 1;
+    public FacilityType requiredFacility;
+    public int requiredFacilityLevel;
+    public int goldCost;
+    public List<ItemReward> itemCosts = new List<ItemReward>();
+    public bool isFacilityAction;
 
     // 完成所需天数
     public int needDays;

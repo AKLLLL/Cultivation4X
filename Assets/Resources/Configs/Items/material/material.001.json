@@ -1,9 +1,9 @@
 {
 "itemId":"material_001",
 
-"itemName":"玄铁",
+"itemName":"基础材料",
 
-"description":"炼制法器的材料。",
+"description":"建设宗门的基础材料",
 
 "itemType":"Material",
 
@@ -13,9 +13,9 @@
 
     "price":500,
 
-    "stackable":false,
+    "stackable":true,
 
-    "maxStack":1,
+    "maxStack":999,
 
     "icon":"Items/lingshouEgg_001"
 }

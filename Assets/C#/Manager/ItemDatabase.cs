@@ -22,7 +22,7 @@ public class ItemDatabase : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+            DontDestroyUtility.MarkPersistent(gameObject);
         }
         else
         {

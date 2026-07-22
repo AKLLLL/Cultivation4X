@@ -39,10 +39,10 @@ public class MissionNodePanel : MonoBehaviour
             mission.CurrentNode;
 
         titleText.text =
-            node.title;
+            $"{mission.Data.name}：{node.title}";
 
         descriptionText.text =
-            node.description;
+            $"执行弟子：{mission.AssignedNPC?.Data.npcName ?? "未知"}\n{node.description}";
         //先全部隐藏
 
         option1Button.gameObject.SetActive(false);

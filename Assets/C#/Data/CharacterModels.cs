@@ -5,6 +5,7 @@ public enum HealthState
 {
     Healthy,
     LightInjury,
+    HeavyInjury,
     SeriousInjury,
     PermanentTrauma,
     Dead

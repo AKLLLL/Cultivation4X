@@ -10,6 +10,9 @@ public class WarehouseData
     /// <summary>
     /// 仓库里面所有物品
     /// </summary>
-    public List<ItemStack> items = new List<ItemStack>();
+    public List<ItemStack> items = new List<ItemStack>
+    {
+        new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 10 }
+    };
 
 }

@@ -2,225 +2,278 @@
 
 ## 1. 项目概览
 
-Cultivation4X 是一个使用 Unity 开发的单机修仙宗门经营原型。当前核心循环围绕弟子调度、任务推进、人物成长和条件随机事件展开：
+Cultivation4X 是一个 Unity 单机修仙宗门经营原型。当前核心体验围绕宗门资源、弟子安排、任务推进、人物养成、来源化随机事件和设施升级展开。
 
 ```text
-建设与宗门资源
-    ↓
-安排弟子执行任务或修炼
-    ↓
-按天推进角色、任务与事件
-    ↓
-获得修为、特质、关系、伤势和物品
-    ↓
-形成个人履历并影响后续事件
+安排弟子
+  -> 消耗时间/资源
+  -> 来源合理的事件进入收件箱
+  -> 获得资源、修为、特质、关系和履历
+  -> 升级宗门设施
+  -> 解锁更高阶任务和更高效率的行动
 ```
 
 当前技术基线：
 
-- Unity：2022.3.62f3 LTS
-- UI：UGUI、TextMesh Pro
-- 配置解析：Newtonsoft.Json 3.2.2
-- 数据加载：Unity `Resources`
-- 存档：JSON 文件，写入 `Application.persistentDataPath`
-- 测试：Unity Test Framework EditMode 测试
+- Unity 2022.3 LTS
+- UGUI + TextMesh Pro
+- Newtonsoft.Json
+- JSON 配置放在 `Resources/Configs`
+- 存档为 JSON 文件，写入 `Application.persistentDataPath`
+- 自动化测试以 Unity Test Framework EditMode 测试为主
 
 ## 2. 目录结构
 
 ```text
 Assets/
-├─ C#/
-│  ├─ Data/       静态配置模型、存档模型和领域数据类型
-│  ├─ Manager/    游戏系统入口、配置加载、调度和持久化
-│  ├─ RunTime/    任务和 NPC 的运行时对象
-│  ├─ UI/         UGUI 面板与显示逻辑
-│  └─ Utility/    枚举、物品堆、成长规则等辅助类型
-├─ Resources/
-│  ├─ Configs/    物品、任务、人物事件和特质 JSON
-│  ├─ NPC/        NPC ScriptableObject 模板
-│  └─ Prefab/     UI Prefab
-├─ Scenes/        Unity 场景
-└─ Tests/Editor/  EditMode 自动化测试
+  C#/
+    Data/       静态配置模型、存档模型和领域数据类型
+    Manager/    系统入口、配置加载、调度和持久化
+    RunTime/    任务和 NPC 的运行时对象
+    UI/         UGUI 面板与运行时 UI
+    Utility/    枚举、物品栈、成长规则和辅助工具
+  Resources/
+    Configs/    物品、任务、人物事件和特质 JSON
+    NPC/        NPC ScriptableObject 模板
+    Prefab/     UI Prefab
+  Scenes/       Unity 场景
+  Tests/Editor/ EditMode 自动化测试
 ```
 
-项目当前没有自定义程序集定义，生产代码编译进 `Assembly-CSharp`，Editor 测试编译进 `Assembly-CSharp-Editor`。
+项目当前没有自定义程序集定义。生产代码编译进 `Assembly-CSharp`，Editor 测试编译进 Unity 生成的测试程序集。
 
-## 3. 架构分层
+## 3. 核心领域模型
 
-### 3.1 配置与静态数据
+### 3.1 人物
 
-- `NPCData`：ScriptableObject 人物模板，保存初始属性与性格特质。
-- `ItemData`：JSON 物品定义。
-- `MissionData`：JSON 任务定义，包括耗时、属性要求、节点和基础奖励。
-- `EventDefinition`：条件人物事件定义，包括参与者、条件、选项、结果和效果。
-- `TraitDefinition`：性格、经历和创伤特质定义。
-
-配置由 `Resources.LoadAll` 加载。`ConfigValidator` 在启动时检查基础物品和任务配置；事件跨引用由 EditMode 测试进一步验证。
-
-### 3.2 运行时领域模型
-
-- `CharacterState`：可序列化的人物状态，是存档中的角色事实来源。
-- `NPCRuntime`：将 `NPCData` 模板与 `CharacterState` 组合，并提供任务和 UI 使用的运行接口。
-- `Mission`：单个活动任务的状态机实例。
-- `ActiveCharacterEvent`：事件定义与本次参与角色绑定后的临时运行对象。
-- `GameState`：完整存档快照。
-
-静态模板和运行状态必须保持分离。存档使用稳定字符串 ID，不直接保存 Unity 对象引用。
-
-### 3.3 系统协调层
-
-| 系统 | 主要职责 |
-|---|---|
-| `TimeManager` | 推进游戏天数，规定每日系统执行顺序 |
-| `NPCManager` | 创建、查询和恢复角色；处理状态、关系、受伤、死亡与招募 |
-| `MissionManager` | 加载任务模板；创建、推进、结算和恢复活动任务 |
-| `EventManager` | 加载条件事件；筛选、绑定、加权抽取、结算和安排后续事件 |
-| `TraitDatabase` | 加载并查询特质定义 |
-| `ItemDatabase` | 加载并查询物品定义 |
-| `WarehouseManager` | 管理宗门库存及物品增减 |
-| `PlayerManager` | 管理宗门金币、声望和设施等级 |
-| `RewardManager` | 将任务奖励分发到宗门资源、人物成长和仓库 |
-| `SaveManager` | 捕获、保存和恢复完整 `GameState` |
-| `UIManager` | 管理 UI 面板显示与关闭栈 |
-
-多数 Manager 仍采用 Unity 单例。`EventManager`、`TraitDatabase`、`SaveManager` 和人物事件 UI 使用运行时启动方法自动创建，其余系统主要由场景对象提供。
-
-## 4. 核心数据流
-
-### 4.1 启动与配置加载
-
-```mermaid
-flowchart LR
-    Resources["Resources 配置"] --> ConfigValidator
-    Resources --> ItemDatabase
-    Resources --> MissionManager
-    Resources --> EventManager
-    Resources --> TraitDatabase
-    NPCAssets["NPC ScriptableObject"] --> NPCManager
-    NPCManager --> NPCRuntime
-```
-
-### 4.2 每日推进
-
-`TimeManager.EndDay()` 是每日结算入口，当前顺序为：
-
-1. 当前天数加一。
-2. `NPCManager` 推进伤势、状态和空闲修炼。
-3. 广播 `OnDayPassed`，由 `MissionManager` 推进活动任务。
-4. `EventManager` 处理到期后续事件或抽取新事件。
-5. `SaveManager` 自动保存。
-
-这个顺序属于高风险约束。更改顺序可能改变任务结算、事件条件和存档结果。
-
-### 4.3 任务流程
-
-```mermaid
-flowchart LR
-    MissionPanel --> MissionManager
-    MissionManager --> Mission
-    Mission --> NPCManager
-    TimeManager --> MissionManager
-    MissionManager --> RewardManager
-    RewardManager --> PlayerManager
-    RewardManager --> WarehouseManager
-    RewardManager --> NPCRuntime
-```
-
-任务状态使用 `MissionState`：`NotStarted → Active ↔ WaitingNode → Completed/Failed`。任务成功、失败、角色死亡和读档恢复都必须同步清理或恢复角色的 `CurrentMission`。
-
-### 4.4 人物事件流程
-
-1. `EventManager` 根据冷却、次数和全局条件收集候选事件。
-2. 根据参与者规则绑定存活角色。
-3. 特质可以改变事件权重或可用选项。
-4. 玩家通过 `CharacterEventPanel` 选择选项。
-5. 系统使用可复现随机状态选择结果。
-6. `EventEffect` 修改宗门、人物、关系、伤势、死亡或后续事件队列。
-7. 结果写入事件历史和人物履历，然后自动保存。
-
-后续事件通过 `PendingEvent` 保存到指定日期。事件配置不得直接持有 `NPCRuntime` 或 Unity 对象。
-
-## 5. 人物养成模型
+- `NPCData`：ScriptableObject 人物模板，保存初始属性和初始特质。
+- `CharacterState`：可序列化人物状态，是存档中的人物事实来源。
+- `NPCRuntime`：组合 `NPCData` 和 `CharacterState`，提供任务、事件、UI 使用的运行时接口。
 
 `CharacterState` 当前包含：
 
-- 稳定角色 ID 与模板 ID
-- 姓名、年龄、等级和经验
-- 修为与三个境界：炼气、筑基、金丹
-- 活动状态与剩余天数
-- 健康状态：健康、轻伤、重伤、永久创伤、死亡
-- 性格和经历特质 ID
-- 关系标签记录
+- 稳定角色 ID 和模板 ID
+- 显示名、年龄、等级、旧经验字段
+- 修为和境界
+- 健康状态
+- 性格与经历特质 ID
+- 关系记录
 - 个人履历
 
-关系当前是离散标签：师徒、好友、仇敌、救命恩人，没有连续好感度。
+死亡角色保留在存档、履历和关系引用中，但不能继续执行任务、修炼或被普通新事件选中。
 
-角色死亡后仍保留在存档和关系记录中，但不能再接受任务或被普通事件绑定。最后一名存活弟子受到坏档保护，致命结果会转化为永久创伤。
+### 3.2 宗门资源与设施
 
-## 6. 存档架构
+宗门顶部数值资源使用 `PlayerData.gold` 字段保存，但 UI 显示为“灵材”，用于和仓库物品“下品灵石”区分。`PlayerData.reputation` 保存声望。
 
-`SaveManager` 将以下状态写入版本化 `GameState`：
+基础材料使用仓库物品 `material_001`，不新增第二套材料账户。仓库由 `WarehouseData.items` 保存，`WarehouseManager.NormalizeItems()` 会合并同 ID 重复栈，避免同一种物品显示为多个格子。
+
+设施定义在 `FacilityRules`：
+
+- `MissionHall`：任务堂，影响每日任务候选数和普通任务并行数。
+- `Warehouse`：仓库，影响不同物品种类上限。
+- `TrainingRoom`：修炼室，影响空闲弟子每日基础修为。
+- `SecretRealm`：秘境，提供固定探索设施行动。
+- `AlchemyRoom`：炼丹房，提供固定炼丹设施行动。
+
+所有设施当前 1-3 级。升级入口在 `PlayerManager.TryUpgradeFacility()`，升级前先校验资源和等级，成功后一次性扣除灵材与基础材料。
+
+### 3.3 任务
+
+- `MissionData`：任务 JSON 数据，包含类型、阶级、设施需求、消耗、耗时、奖励和节点。
+- `Mission`：单个任务实例，保存执行弟子、剩余天数、当前节点、状态和待发奖励。
+- `MissionManager`：加载任务配置、刷新每日候选、校验派遣、推进任务、处理完成/失败/待领奖。
+
+普通任务受任务堂等级控制。秘境和炼丹复用 `Mission` 状态机，作为设施行动，不占每日候选位。
+
+`MissionState` 包含：
+
+- `NotStarted`
+- `Active`
+- `WaitingNode`
+- `Completed`
+- `Failed`
+- `AwaitingReward`
+
+`AwaitingReward` 用于仓库容量不足时保留奖励。进入该状态后，弟子恢复空闲，奖励等待玩家腾出仓库空间后领取。
+
+任务配置里的 `expReward` 当前仍保留旧字段名，但发放时作为人物“修为”处理，入口在 `RewardManager.GiveReward()`。
+
+### 3.4 事件
+
+新事件系统由 `EventManager` 负责，配置模型在 `EventModels.cs`。
+
+事件定义包含：
+
+- `EventDefinition`
+- `EventCondition`
+- `EventParticipantRule`
+- `EventOptionDefinition`
+- `EventOutcomeDefinition`
+- `EventEffect`
+- `PendingEvent`
+- `EventInboxEntry`
+- `EventHistoryRecord`
+
+事件来源使用 `EventSource` 控制，不再每天固定抽取全事件池。当前来源包括：
+
+- 任务开始、节点、完成、失败
+- 修炼
+- 受伤、恢复
+- 设施升级
+- 秘境
+- 炼丹
+- 宗门日常
+- 招募检查
+- 后续事件
+
+事件进入收件箱后由玩家处理。普通事件有过期天数，关键事件不会自动过期，并会阻止继续结束一天。事件结果会写入事件历史和人物履历，并在 Console 打印汇总，例如修为、灵材、声望、特质、伤势、死亡和后续事件。
+
+旧 `RandomEventManager` 仍保留作为兼容层和调试入口，正式随机事件流程以 `EventManager` 为准。
+
+### 3.5 存档
+
+`GameState` 是完整存档快照，当前版本为 `SaveDataVersion.Current = 2`。
+
+存档包含：
 
 - 当前天数
 - 确定性随机种子和抽取次数
-- 宗门资源与设施等级
+- 宗门资源、声望、设施等级
 - 仓库
-- 全部人物状态，包括死亡人物
-- 活动任务及其动态奖励
+- 全部人物状态
+- 活动任务
 - 事件历史
 - 待触发后续事件
+- 每日任务候选
+- 事件收件箱
+- 当前打开事件
+- 最近未读每日结算
 
-存档版本由 `SaveDataVersion.Current` 控制。新增字段应提供安全默认值；删除、重命名字段或改变字段语义前必须设计迁移策略。
+`SaveManager.MigrateState()` 对旧存档补齐新增字段默认值。读档恢复仓库后会调用 `WarehouseManager.NormalizeItems()`，合并旧存档中的重复物品栈。
 
-## 7. UI 架构
+## 4. Manager 职责
 
-UI 面板通过 Manager 查询数据和发送玩家命令：
+| Manager | 主要职责 |
+|---|---|
+| `TimeManager` | 结束一天、每日推进顺序、日结生成、未读日结状态 |
+| `NPCManager` | 创建、恢复、查询角色；处理派遣、恢复、受伤、死亡、关系和招募 |
+| `MissionManager` | 任务配置加载、候选刷新、派遣校验、活动任务推进、待领奖 |
+| `EventManager` | 事件配置加载、来源触发、参与者绑定、收件箱、过期、效果执行、历史 |
+| `PlayerManager` | 宗门灵材、声望、设施等级和设施升级 |
+| `WarehouseManager` | 仓库物品增加、扣除、容量检查、重复物品栈合并 |
+| `RewardManager` | 将任务奖励发放到宗门资源、弟子修为和仓库 |
+| `SaveManager` | 捕获、保存、读取和迁移 `GameState` |
+| `ItemDatabase` | 加载和查询物品 JSON |
+| `TraitDatabase` | 加载和查询特质 JSON |
+| `RandomEventManager` | 旧随机事件兼容与调试 |
+| `UIManager` | UI 面板打开、关闭和返回栈 |
 
-- `SectPanel`、`NPCSlotUI`、`NPCInfoPanel`：人物列表与详情。
-- `MissionPanel`、`NPCSelectPanel`：选择任务和执行者。
-- `MissionNodePanel`：处理任务节点选项。
-- `CharacterEventPanel`：显示人物事件和选项；当前由运行时自动创建基础界面。
-- `WarehousePanel`、`ItemSlotUI`、`ItemInfoPanel`：仓库与物品详情。
-- `UIManager`：统一打开、关闭和 Esc 返回。
+所有需要 `DontDestroyOnLoad` 的对象通过 `DontDestroyUtility.MarkPersistent()` 处理。该工具会先把对象移到场景根节点，再调用 Unity 的 `DontDestroyOnLoad`，避免非根对象产生 warning。
 
-当前 UI 仍直接依赖全局 Manager，尚未形成独立展示模型或统一数据绑定层。
+## 5. 每日推进顺序
+
+`TimeManager.EndDay()` 是每日推进入口。当前顺序：
+
+1. 检查每日结算面板是否未关闭。
+2. 让 `EventManager` 清理到期事件、检查关键事件和收件箱容量。
+3. 捕获当天开始快照。
+4. 天数 +1。
+5. `NPCManager.OnDayPassed()` 推进恢复和空闲修炼。
+6. 广播 `OnDayPassed`，由 `MissionManager` 推进活动任务、秘境和炼丹。
+7. `EventManager.ProcessDay()` 处理后续事件、宗门日常和招募检查。
+8. 生成 `DaySettlementSummary`。
+9. 自动保存。
+10. 通知 `DaySettlementPanel` 显示每日结算。
+
+结束日前发生的资源变化，例如派任务消耗、设施升级、手动处理事件、领取待领奖奖励，会通过 `TimeManager.RecordPreAdvanceResourceChange()` 进入下一份每日结算，避免只显示结束日推进过程中的增量。
+
+## 6. UI 架构
+
+主要 UI：
+
+- `SectPanel`：弟子列表。
+- `NPCInfoPanel`：人物详情。当前默认只显示性格；经历已拆为可选 `experienceText`，未绑定时不显示。
+- `MissionPanel`：每日候选任务、设施行动、待领奖入口。
+- `MissionNodePanel`：任务节点选择，显示任务名、节点名和执行弟子。
+- `CharacterEventPanel`：事件收件箱、事件正文和选项。
+- `SectDevelopmentPanel`：设施等级和升级入口。
+- `DaySettlementPanel`：每日结算。
+- `WarehousePanel`：仓库格子和物品详情。
+
+部分新增 UI 通过运行时创建：
+
+- `CharacterEventPanel`
+- `DaySettlementPanel`
+- `SectDevelopmentPanel`
+
+这些运行时 UI 使用 `RuntimeUIFactory` 创建基础 UGUI 控件。当前 UI 仍直接依赖全局 Manager，尚未形成独立展示模型。
+
+## 7. 配置和内容
+
+配置位于：
+
+- `Assets/Resources/Configs/Items`
+- `Assets/Resources/Configs/Missions`
+- `Assets/Resources/Configs/CharacterEvents`
+- `Assets/Resources/Configs/Traits`
+
+配置加载仍使用 `Resources.LoadAll`。新增配置字段以可选字段为主，旧 JSON 缺失字段时走默认值。
+
+当前重要约定：
+
+- `material_001` 是基础材料。
+- 宗门数值资源显示为“灵材”，不等同于仓库里的 `LingShi_001` 物品。
+- 设施行动复用任务配置，不创建第二套行动系统。
+- 事件不使用运行时大模型生成内容，所有结果来自 JSON 模板和受控枚举效果。
 
 ## 8. 测试与验证
 
-`Assets/Tests/Editor/CharacterStateTests.cs` 当前覆盖：
+当前测试文件包括：
 
-- 特质去重
-- 死亡状态判定
-- 履历来源记录
-- `GameState` JSON 往返及随机状态保存
-- 人物事件 ID 与后续事件、特质、物品、NPC 模板的跨配置引用
+- `CharacterStateTests.cs`
+- `FacilityLoopTests.cs`
+- `EventInboxTests.cs`
 
-合入功能前至少应执行：
+覆盖重点：
 
-1. Unity 脚本编译。
-2. EditMode 测试。
-3. `git diff --check`。
-4. 手动验证“推进日期 → 处理事件 → 保存 → 重新读取”。
+- 人物状态、特质、履历和存档往返。
+- 设施规则、升级、任务候选、仓库容量和设施行动。
+- 事件收件箱、过期、关键事件、确定性和配置交叉引用。
 
-## 9. 已知边界与技术风险
+合并功能前至少需要：
 
-- `RandomEventManager` 是旧任务式随机事件系统，`EventManager` 是新人物条件事件系统；两套系统仍然并存。
-- 单例初始化依赖 Unity 生命周期，新增 Manager 可能导致顺序风险。
-- `Resources` 适合当前原型，但内容规模扩大后需要评估加载和校验工具。
-- 事件和特质效果仍依赖字符串 ID，必须通过配置验证防止静默错误。
-- 当前自动化主要覆盖数据层，场景引用、Prefab 和完整 PlayMode 流程仍依赖人工验证。
-- `SampleScene` 是目前唯一主场景，场景与 Prefab GUID 变更属于高风险操作。
-- 项目根目录的 `.vs` 已被旧提交纳入 Git；它是机器生成状态，不应继续进入功能提交，后续应单独清理并加入 `.gitignore`。
+1. Unity Editor 编译通过。
+2. EditMode 测试通过。
+3. Resources JSON 可解析且引用有效。
+4. 手动验证新档、派任务、设施升级、事件收件箱、日结、保存读档。
+5. `git diff` 中没有 `.vs`、无关资源或未解释的场景改动。
 
-## 10. 扩展规则
+`dotnet build` 当前不能可靠验证 Unity 项目，因为解决方案文件里存在 Unity 生成的同名 `Assembly-CSharp` 项目问题，应以 Unity Editor 编译和 Unity Test Runner 为准。
 
-新增功能时优先遵循以下方向：
+## 9. 高风险区域
 
-- 新角色状态进入 `CharacterState`，并同步考虑存档兼容。
-- 新内容优先使用现有事件条件和效果；只有无法表达明确玩法时才扩展枚举。
-- 新任务状态必须补充成功、失败、取消、死亡和读档路径。
-- 新事件引用必须进入配置测试。
-- UI 不直接修改公开集合，应通过 Manager 提供的命令接口改变状态。
-- 不为单个功能新增全局 Manager；优先扩展现有领域边界。
+以下区域修改时需要额外谨慎：
 
-具体协作、风险审批和变更预算以项目根目录的 `AGENTS.md` 为准。
+- `GameState`、存档版本和迁移。
+- 角色稳定 ID。
+- `TimeManager.EndDay()` 每日顺序。
+- `MissionState`、任务清理和奖励待领。
+- `EventManager` 收件箱、过期、关键事件和效果预检。
+- NPC 死亡、受伤、任务引用清理和关系引用。
+- `Resources` JSON 字段和 ID。
+- Unity 场景、Prefab、TMP 字体资产和 ScriptableObject GUID。
+- Manager 初始化顺序和 `DontDestroyOnLoad`。
+
+本项目优先保证可玩闭环和稳定运行。不要为了未来可能需求提前引入复杂系统、全局 Manager 或大规模抽象。
+
+## 10. 后续扩展规则
+
+- 新玩法优先复用 `Mission`、`EventManager`、`CharacterState` 和现有设施规则。
+- 新事件效果优先扩展受控枚举，并补配置校验和测试。
+- 新存档字段必须提供默认值和迁移策略。
+- 新任务状态必须覆盖成功、失败、取消、死亡、读档和 UI 路径。
+- UI 不直接修改 Manager 内部集合，应通过 Manager 命令接口改变状态。
+- 不要把“灵材”和仓库物品“下品灵石”混为同一个资源账户，除非单独设计资源架构迁移。
+
+具体协作规则、风险审批和变更预算以根目录 `AGENTS.md` 为准。

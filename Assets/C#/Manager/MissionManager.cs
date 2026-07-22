@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
+using System;
+using System.Linq;
 
 /// <summary>
 /// 任务管理器
@@ -57,6 +59,9 @@ public class MissionManager : MonoBehaviour
     /// </summary>
     private List<Mission> activeMissions =
         new List<Mission>();
+    private readonly List<string> dailyMissionCandidateIds = new List<string>();
+    private int missionCandidateDay = -1;
+    private readonly List<MissionDayResult> dailyResults = new List<MissionDayResult>();
 
 
     public MissionNodePanel missionNodePanel;
@@ -68,7 +73,7 @@ public class MissionManager : MonoBehaviour
         {
             Instance = this;
 
-            DontDestroyOnLoad(gameObject);
+            DontDestroyUtility.MarkPersistent(gameObject);
         }
         else
         {
@@ -82,10 +87,11 @@ public class MissionManager : MonoBehaviour
     private void Start()
     {
 
-        TimeManager.Instance.OnDayPassed += OnDayPassed;
+        if (TimeManager.Instance != null) TimeManager.Instance.OnDayPassed += OnDayPassed;
 
 
         LoadMissionsFromJson();
+        RefreshDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
 
     }
 
@@ -100,10 +106,10 @@ public class MissionManager : MonoBehaviour
 
         missionTemplates.Clear();
 
-        TextAsset[] jsonFiles =
-            Resources.LoadAll<TextAsset>(
-                "Configs/Missions"
-            );
+        TextAsset[] legacyEventFiles = Resources.LoadAll<TextAsset>("Configs/Events");
+        TextAsset[] jsonFiles = Resources.LoadAll<TextAsset>("Configs/Missions")
+            .Concat(legacyEventFiles)
+            .ToArray();
 
         if (jsonFiles.Length == 0)
         {
@@ -130,6 +136,8 @@ public class MissionManager : MonoBehaviour
 
                 continue;
             }
+
+            if (legacyEventFiles.Contains(json)) data.missionType = MissionType.WorldEvent;
 
             if (missionTemplates.ContainsKey(data.id))
             {
@@ -171,10 +179,10 @@ public class MissionManager : MonoBehaviour
             return null;
         }
 
-        Mission mission =
-            new Mission(
-                missionTemplates[missionId]
-            );
+        MissionData data = missionTemplates[missionId];
+        int facilityLevel = data.isFacilityAction && PlayerManager.Instance != null
+            ? PlayerManager.Instance.GetFacilityLevel(data.requiredFacility) : 1;
+        Mission mission = new Mission(data, facilityLevel);
 
 
         return mission;
@@ -238,6 +246,11 @@ public class MissionManager : MonoBehaviour
         string missionId,
         NPCRuntime npc)
     {
+        if (!CanTriggerMission(missionId, npc, out string reason))
+        {
+            Debug.LogWarning(reason);
+            return;
+        }
         if (!npc.CanDispatch())
         {
             Debug.Log(
@@ -250,7 +263,15 @@ public class MissionManager : MonoBehaviour
             CreateMission(missionId);
         if (mission == null)
             return;
+        if (!TrySpendMissionCosts(mission.Data, out reason))
+        {
+            Debug.LogWarning(reason);
+            return;
+        }
         mission.StartMission(npc);
+        EventManager.Instance?.TryTriggerSource(mission.Data.isFacilityAction
+            ? (mission.Data.requiredFacility == FacilityType.SecretRealm ? EventSource.SecretRealm : EventSource.Alchemy)
+            : EventSource.MissionStart, npc);
 
         activeMissions.Add(mission); 
         Debug.Log(
@@ -295,6 +316,15 @@ public class MissionManager : MonoBehaviour
         if (attackPass && intelligencePass)
         {
 
+            if (!RewardManager.Instance.CanGiveReward(mission.Reward))
+            {
+                mission.WaitForReward();
+                NPCManager.Instance.Recover(npc);
+                RecordResult(mission, MissionState.AwaitingReward);
+                Debug.LogWarning($"仓库容量不足，任务奖励等待领取: {data.name}");
+                return;
+            }
+
             Debug.Log(
                 $"【{npc.Data.npcName}】成功完成任务：【{data.name}】"
             );
@@ -307,6 +337,10 @@ public class MissionManager : MonoBehaviour
                 npc,
                 mission.Reward
             );
+            RecordResult(mission, MissionState.Completed);
+            EventManager.Instance?.TryTriggerSource(data.isFacilityAction
+                ? (data.requiredFacility == FacilityType.SecretRealm ? EventSource.SecretRealm : EventSource.Alchemy)
+                : EventSource.MissionComplete, npc);
             RemoveMission(mission);
 
         }
@@ -353,25 +387,139 @@ public class MissionManager : MonoBehaviour
 
     }
 
+    public bool CanTriggerMission(string missionId, NPCRuntime npc, out string reason)
+    {
+        MissionData data = GetMissionData(missionId);
+        if (data == null) { reason = "任务不存在"; return false; }
+        if (npc == null || !npc.CanDispatch()) { reason = "弟子当前无法执行任务"; return false; }
+        if (PlayerManager.Instance == null || WarehouseManager.Instance == null) { reason = "资源系统尚未初始化"; return false; }
+        int hallLevel = PlayerManager.Instance.GetFacilityLevel(FacilityType.MissionHall);
+        if (data.missionRank > hallLevel || data.requiredMissionHallLevel > hallLevel) { reason = "任务堂等级不足"; return false; }
+        if (data.requiredFacilityLevel > PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) { reason = "设施等级不足"; return false; }
+        if (!data.isFacilityAction && !dailyMissionCandidateIds.Contains(missionId)) { reason = "该任务不在今日候选中"; return false; }
+
+        Func<Mission, bool> running = item => item.State == MissionState.Active || item.State == MissionState.WaitingNode;
+        if (data.isFacilityAction)
+        {
+            if (activeMissions.Any(item => running(item) && item.Data.isFacilityAction && item.Data.requiredFacility == data.requiredFacility))
+            { reason = "该设施正在使用"; return false; }
+        }
+        else if (activeMissions.Count(item => running(item) && !item.Data.isFacilityAction && missionTemplates.ContainsKey(item.Data.id)) >= FacilityRules.MissionConcurrency(hallLevel))
+        { reason = "任务堂并行槽已满"; return false; }
+
+        if (!TryGetMissionCosts(data, out Dictionary<string, int> costs, out reason)) return false;
+        if (PlayerManager.Instance.playerData.gold < data.goldCost) { reason = "灵材不足"; return false; }
+        foreach (var cost in costs)
+            if (WarehouseManager.Instance.GetItemCount(cost.Key) < cost.Value) { reason = "材料不足"; return false; }
+        reason = null;
+        return true;
+    }
+
+    private bool TryGetMissionCosts(MissionData data, out Dictionary<string, int> costs, out string reason)
+    {
+        costs = new Dictionary<string, int>();
+        if (data.goldCost < 0) { reason = "任务灵材成本无效"; return false; }
+        foreach (ItemReward cost in data.itemCosts ?? new List<ItemReward>())
+        {
+            if (cost == null || string.IsNullOrWhiteSpace(cost.itemId) || cost.count < 0 || !IsKnownItem(cost.itemId))
+            { reason = "任务物品成本无效"; return false; }
+            if (cost.count == 0) continue;
+            long total = (costs.TryGetValue(cost.itemId, out int current) ? current : 0) + (long)cost.count;
+            if (total > int.MaxValue) { reason = "任务物品成本过大"; return false; }
+            costs[cost.itemId] = (int)total;
+        }
+        reason = null;
+        return true;
+    }
+
+    private bool TrySpendMissionCosts(MissionData data, out string reason)
+    {
+        if (!TryGetMissionCosts(data, out Dictionary<string, int> costs, out reason)) return false;
+        if (!PlayerManager.Instance.SpendGold(data.goldCost)) { reason = "灵材不足"; return false; }
+        List<KeyValuePair<string, int>> removed = new List<KeyValuePair<string, int>>();
+        foreach (var cost in costs)
+        {
+            if (WarehouseManager.Instance.RemoveItem(cost.Key, cost.Value)) { removed.Add(cost); continue; }
+            PlayerManager.Instance.AddGold(data.goldCost);
+            foreach (var rollback in removed) WarehouseManager.Instance.AddItem(rollback.Key, rollback.Value);
+            reason = "材料扣除失败";
+            return false;
+        }
+        int basicMaterialCost = costs.TryGetValue(FacilityRules.BasicMaterialId, out int material) ? material : 0;
+        TimeManager.Instance?.RecordPreAdvanceResourceChange(-data.goldCost, -basicMaterialCost);
+        reason = null;
+        return true;
+    }
+
+    private static bool IsKnownItem(string itemId)
+    {
+        if (ItemDatabase.Instance != null) return ItemDatabase.Instance.GetItem(itemId) != null;
+        foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/Items"))
+        {
+            try
+            {
+                if (JsonConvert.DeserializeObject<ItemData>(file.text)?.itemId == itemId) return true;
+            }
+            catch (JsonException) { }
+        }
+        return false;
+    }
+
     public IReadOnlyList<Mission> GetActiveMissions()
     {
         return activeMissions.AsReadOnly();
     }
 
+    public bool TryClaimReward(Mission mission, out string reason)
+    {
+        if (mission == null || mission.State != MissionState.AwaitingReward) { reason = "任务没有待领取奖励"; return false; }
+        if (!RewardManager.Instance.CanGiveReward(mission.Reward)) { reason = "仓库容量不足"; return false; }
+        RewardManager.Instance.GiveReward(mission.AssignedNPC, mission.Reward);
+        mission.CompleteMission();
+        RecordResult(mission, MissionState.Completed);
+        reason = null;
+        return true;
+    }
+
+    private void RecordResult(Mission mission, MissionState state)
+    {
+        dailyResults.Add(new MissionDayResult { missionId = mission.Data.id, missionName = mission.Data.name, state = state });
+    }
+
+    public void NotifyMissionFailed(Mission mission)
+    {
+        RecordResult(mission, MissionState.Failed);
+        EventManager.Instance?.TryTriggerSource(EventSource.MissionFailed, mission.AssignedNPC);
+    }
+
+    public List<MissionDayResult> ConsumeDailyResults()
+    {
+        List<MissionDayResult> result = new List<MissionDayResult>(dailyResults);
+        dailyResults.Clear();
+        return result;
+    }
+
     public void RestoreMissions(IEnumerable<MissionSaveData> savedMissions)
     {
         activeMissions.Clear();
-        if (savedMissions == null) return;
-        foreach (MissionSaveData saved in savedMissions)
+        foreach (MissionSaveData saved in savedMissions ?? Enumerable.Empty<MissionSaveData>())
         {
             MissionData data = GetMissionData(saved.missionId);
-            NPCRuntime npc = NPCManager.Instance.GetRuntime(saved.assignedCharacterId);
+            NPCRuntime npc = NPCManager.Instance?.GetRuntime(saved.assignedCharacterId);
             if (data == null || npc == null || !npc.Character.IsAlive)
             {
                 Debug.LogWarning($"跳过无法恢复的任务: {saved.missionId}");
+                if (npc != null && npc.State == NPCState.Busy && npc.CurrentMission == null) npc.SetState(NPCState.Idle);
                 continue;
             }
             activeMissions.Add(new Mission(data, saved, npc));
+        }
+        if (NPCManager.Instance == null) return;
+        foreach (NPCRuntime npc in NPCManager.Instance.GetLivingNPC()
+            .Where(item => item.State == NPCState.Busy && item.CurrentMission == null))
+        {
+            Debug.LogWarning($"清理没有可恢复任务的忙碌弟子: {npc.CharacterId}");
+            npc.SetState(NPCState.Idle);
         }
     }
 
@@ -392,12 +540,49 @@ public class MissionManager : MonoBehaviour
 
         foreach (Mission mission in missions)
         {
-
+            if (mission.Data.isFacilityAction && mission.State == MissionState.Active)
+                EventManager.Instance?.TryTriggerSource(mission.Data.requiredFacility == FacilityType.SecretRealm
+                    ? EventSource.SecretRealm : EventSource.Alchemy, mission.AssignedNPC);
             mission.PassOneDay();
 
         }
 
+        RefreshDailyCandidates(currentDay);
+
     }
+
+    public IReadOnlyList<string> GetDailyMissionCandidateIds() => dailyMissionCandidateIds.AsReadOnly();
+
+    public void RefreshDailyCandidates(int day, bool force = false)
+    {
+        if (!force && missionCandidateDay == day && dailyMissionCandidateIds.Count > 0) return;
+        int hallLevel = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.MissionHall);
+        List<MissionData> pool = missionTemplates.Values
+            .Where(data => !data.isFacilityAction && data.missionType != MissionType.WorldEvent &&
+                           data.missionRank <= hallLevel && data.requiredMissionHallLevel <= hallLevel &&
+                           data.requiredFacilityLevel <= (PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)))
+            .OrderBy(data => data.id).ToList();
+        int seed = (EventManager.Instance == null ? 48621 : EventManager.Instance.RandomSeed) ^ day;
+        System.Random random = new System.Random(seed);
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int swap = random.Next(i + 1);
+            MissionData value = pool[i]; pool[i] = pool[swap]; pool[swap] = value;
+        }
+        dailyMissionCandidateIds.Clear();
+        dailyMissionCandidateIds.AddRange(pool.Take(FacilityRules.MissionCandidateCount(hallLevel)).Select(data => data.id));
+        missionCandidateDay = day;
+    }
+
+    public void RestoreDailyCandidates(int day, IEnumerable<string> ids)
+    {
+        missionCandidateDay = day;
+        dailyMissionCandidateIds.Clear();
+        dailyMissionCandidateIds.AddRange((ids ?? Enumerable.Empty<string>()).Where(id => missionTemplates.ContainsKey(id)));
+        if (dailyMissionCandidateIds.Count == 0) RefreshDailyCandidates(day, true);
+    }
+
+    public int MissionCandidateDay => missionCandidateDay;
 
 
     /// <summary>

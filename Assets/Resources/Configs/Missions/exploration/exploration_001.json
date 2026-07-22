@@ -6,21 +6,25 @@
     "探索遗迹洞府。",
 
     "missionType":"Exploration",
+    "missionRank": 1,
+    "requiredFacility": "SecretRealm",
+    "requiredFacilityLevel": 1,
+    "isFacilityAction": true,
     "needDays": 5,
 
-    "goldReward": 100,
+    "goldReward": 0,
     "expReward": 50,
 
     "itemRewards":
     [
     {
-     "itemId":"treasure_001",
-     "count":1
+     "itemId":"material_001",
+     "count":3
     }
     ],
 
-     "requiredAttack": 15,
-    "requiredIntelligence": 8,
+     "requiredAttack": 0,
+    "requiredIntelligence": 0,
     
     "nodes":
     [
@@ -41,7 +45,7 @@
             [
                 {
                     "type":"Delay",
-                    "value":100
+                    "value":0
                 }
             ]
                 },

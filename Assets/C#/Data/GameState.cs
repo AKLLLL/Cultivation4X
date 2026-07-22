@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public static class SaveDataVersion
 {
-    public const int Current = 1;
+    public const int Current = 2;
 }
 
 [Serializable]
@@ -19,6 +19,14 @@ public class GameState
     public List<MissionSaveData> activeMissions = new List<MissionSaveData>();
     public List<EventHistoryRecord> eventHistory = new List<EventHistoryRecord>();
     public List<PendingEvent> pendingEvents = new List<PendingEvent>();
+    public int missionCandidateDay = -1;
+    public List<string> dailyMissionCandidateIds = new List<string>();
+    public List<EventInboxEntry> eventInbox = new List<EventInboxEntry>();
+    public string activeEventEntryId;
+    public int nextInboxSequence;
+    public int eventGeneratedDay = -1;
+    public int eventGeneratedOrdinaryCount;
+    public DaySettlementSummary unreadDaySettlement;
 }
 
 [Serializable]

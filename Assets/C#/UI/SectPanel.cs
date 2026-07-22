@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -36,8 +37,14 @@ public class SectPanel : MonoBehaviour
     private void OnEnable()
     {
 
-        Refresh();
+        StartCoroutine(RefreshWhenReady());
 
+    }
+
+    private IEnumerator RefreshWhenReady()
+    {
+        yield return null;
+        Refresh();
     }
 
 
@@ -50,6 +57,18 @@ public class SectPanel : MonoBehaviour
     {
 
         //清理旧格子
+
+        if (NPCManager.Instance == null)
+        {
+            Debug.LogWarning("SectPanel：NPCManager 尚未初始化，跳过本次刷新。");
+            return;
+        }
+
+        if (npcSlotPrefab == null || content == null)
+        {
+            Debug.LogWarning("SectPanel：NPC列表引用未绑定，无法刷新。");
+            return;
+        }
 
         foreach (var slot in slots)
         {

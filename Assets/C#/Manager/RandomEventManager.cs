@@ -25,7 +25,7 @@ public class RandomEventManager : MonoBehaviour
         {
             Instance = this;
 
-            DontDestroyOnLoad(gameObject);
+            DontDestroyUtility.MarkPersistent(gameObject);
         }
         else
         {

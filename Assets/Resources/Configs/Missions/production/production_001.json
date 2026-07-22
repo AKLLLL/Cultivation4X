@@ -7,6 +7,12 @@
     "使用灵草炼制基础疗伤丹药。",
 
     "missionType":"Production",
+    "missionRank":1,
+    "requiredFacility":"AlchemyRoom",
+    "requiredFacilityLevel":1,
+    "goldCost":20,
+    "itemCosts":[{"itemId":"material_001","count":3}],
+    "isFacilityAction":true,
 
     "needDays":2,
 
@@ -20,12 +26,12 @@
     [
         {
             "itemId":"pill_001",
-            "count":3
+            "count":1
         }
     ],
 
 
-    "requiredIntelligence":30,
+    "requiredIntelligence":0,
 
 
     "nodes":
