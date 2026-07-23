@@ -135,7 +135,8 @@ public class MissionPanel : MonoBehaviour
         statusText.text = $"今日任务　任务堂 Lv.{hall}　并行 {running}/{FacilityRules.MissionConcurrency(hall)}";
         foreach (string id in MissionManager.Instance.GetDailyMissionCandidateIds()) AddMissionButton(MissionManager.Instance.GetMissionData(id));
         RuntimeUIFactory.Text(dynamicList, "设施行动", 20, 34);
-        foreach (MissionData data in MissionManager.Instance.GetMissionPool().Where(item => item.isFacilityAction)) AddMissionButton(data);
+        foreach (MissionData data in MissionManager.Instance.GetMissionPool().Where(item => item.isFacilityAction &&
+            item.explorationKind == ExplorationMissionKind.None)) AddMissionButton(data);
         foreach (Mission mission in MissionManager.Instance.GetActiveMissions().Where(item => item.State == MissionState.AwaitingReward).ToList())
         {
             Button claim = RuntimeUIFactory.Button(dynamicList, $"领取：{mission.Data.name}");
@@ -147,7 +148,7 @@ public class MissionPanel : MonoBehaviour
     {
         if (data == null) return;
         string reason = GeneralLockReason(data);
-        int days = data.isFacilityAction && PlayerManager.Instance != null
+        int days = data.isFacilityAction && FacilityRules.UsesLevelScaledAction(data.requiredFacility) && PlayerManager.Instance != null
             ? FacilityRules.ActionDays(data.requiredFacility, PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) : data.needDays;
         Button button = RuntimeUIFactory.Button(dynamicList, string.IsNullOrEmpty(reason)
             ? $"{data.name}　{days}天　消耗 {data.goldCost}灵材" : $"{data.name}（{reason}）", 48);

@@ -124,6 +124,14 @@ public class SaveManager : MonoBehaviour
         state.sect.warehouseLevel = Mathf.Clamp(state.sect.warehouseLevel, 1, FacilityRules.MaxLevel);
         state.sect.secretRealmLevel = Mathf.Clamp(state.sect.secretRealmLevel, 1, FacilityRules.MaxLevel);
         state.sect.alchemyRoomLevel = Mathf.Clamp(state.sect.alchemyRoomLevel, 1, FacilityRules.MaxLevel);
+        state.sect.explorationRegions = (state.sect.explorationRegions ?? new System.Collections.Generic.List<ExplorationRegionState>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.regionId))
+            .GroupBy(item => item.regionId)
+            .Select(group => new ExplorationRegionState
+            {
+                regionId = group.Key,
+                stage = Mathf.Clamp(group.Max(item => item.stage), 0, ExplorationRules.MaxStage)
+            }).ToList();
         state.dailyMissionCandidateIds = state.dailyMissionCandidateIds ?? new System.Collections.Generic.List<string>();
         state.eventInbox = state.eventInbox ?? new System.Collections.Generic.List<EventInboxEntry>();
         state.version = SaveDataVersion.Current;

@@ -117,6 +117,20 @@ public class EventManager : MonoBehaviour
         return true;
     }
 
+    public bool TryEnqueueEventById(string eventId, NPCRuntime actor)
+    {
+        if (string.IsNullOrWhiteSpace(eventId)) return false;
+        if (history.Any(item => item.eventId == eventId) || inbox.Any(item => item.eventId == eventId) || pending.Any(item => item.eventId == eventId))
+            return true;
+        if (inbox.Count >= InboxCapacity) return false;
+        Dictionary<string, string> fixedIds = actor == null
+            ? null
+            : new Dictionary<string, string> { { "actor", actor.CharacterId } };
+        if (!TryCreateEvent(eventId, fixedIds, out ActiveCharacterEvent created)) return false;
+        Enqueue(created, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
+        return true;
+    }
+
     public bool ChooseOption(string optionId)
     {
         if (activeEvent == null) return false;
@@ -461,6 +475,7 @@ public class EventManager : MonoBehaviour
             case EventSource.Recruitment:
                 return NPCManager.Instance != null && NPCManager.Instance.GetLivingNPC().Count <= 2 ? 0.50f : 0.05f;
             case EventSource.FollowUp: return 1f;
+            case EventSource.Exploration: return 1f;
             default: return 0.25f;
         }
     }

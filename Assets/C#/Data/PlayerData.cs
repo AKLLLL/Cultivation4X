@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -18,4 +19,5 @@ public class PlayerData
     public int warehouseLevel = 1;
     public int secretRealmLevel = 1;
     public int alchemyRoomLevel = 1;
+    public List<ExplorationRegionState> explorationRegions = new List<ExplorationRegionState>();
 }

@@ -29,6 +29,7 @@ public class SectDevelopmentPanel : MonoBehaviour
         resources = RuntimeUIFactory.Text(panel, string.Empty, 20, 44);
         foreach (FacilityType facility in System.Enum.GetValues(typeof(FacilityType)))
         {
+            if (facility == FacilityType.ExplorationHall) continue;
             FacilityType captured = facility;
             Button button = RuntimeUIFactory.Button(panel, string.Empty, 58);
             button.onClick.AddListener(() => Upgrade(captured));
@@ -66,7 +67,8 @@ public class SectDevelopmentPanel : MonoBehaviour
     private static string Name(FacilityType type)
     {
         switch (type) { case FacilityType.MissionHall: return "任务堂"; case FacilityType.Warehouse: return "仓库";
-            case FacilityType.TrainingRoom: return "修炼室"; case FacilityType.SecretRealm: return "秘境"; default: return "炼丹房"; }
+            case FacilityType.TrainingRoom: return "修炼室"; case FacilityType.SecretRealm: return "秘境";
+            case FacilityType.ExplorationHall: return "探索堂"; default: return "炼丹房"; }
     }
 
     private static string Effect(FacilityType type, int level)
@@ -75,6 +77,7 @@ public class SectDevelopmentPanel : MonoBehaviour
             case FacilityType.Warehouse: return $"物品种类上限 {FacilityRules.WarehouseSlots(level)}";
             case FacilityType.TrainingRoom: return $"每日基础修为 +{FacilityRules.TrainingGain(level)}";
             case FacilityType.SecretRealm: return $"探索 {FacilityRules.SecretRealmDays(level)} 天 / 材料 {FacilityRules.SecretRealmMaterialReward(level)}";
+            case FacilityType.ExplorationHall: return "开启宗门外部探索";
             default: return $"炼丹 {FacilityRules.AlchemyDays(level)} 天 / 丹药 {FacilityRules.AlchemyPillReward(level)}"; }
     }
 }

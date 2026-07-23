@@ -1,12 +1,13 @@
 using System;
-//ÉèÊ©Ã¶¾Ù¡¢Éı¼¶¹æÔò¡¢¸÷ÉèÊ©µÈ¼¶Ğ§¹û²éÑ¯¡£
+//è®¾æ–½æšä¸¾ã€å‡çº§è§„åˆ™ã€å„è®¾æ–½ç­‰çº§æ•ˆæœæŸ¥è¯¢ã€‚
 public enum FacilityType
 {
     MissionHall,
     Warehouse,
     TrainingRoom,
     SecretRealm,
-    AlchemyRoom
+    AlchemyRoom,
+    ExplorationHall
 }
 
 [Serializable]
@@ -43,6 +44,11 @@ public static class FacilityRules
     {
         return facility == FacilityType.SecretRealm ? SecretRealmMaterialReward(level) :
                facility == FacilityType.AlchemyRoom ? AlchemyPillReward(level) : 0;
+    }
+
+    public static bool UsesLevelScaledAction(FacilityType facility)
+    {
+        return facility == FacilityType.SecretRealm || facility == FacilityType.AlchemyRoom;
     }
 
     private static int LevelValue(int level, int one, int two, int three)

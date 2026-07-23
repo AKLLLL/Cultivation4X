@@ -131,9 +131,23 @@ Assets/
 
 旧 `RandomEventManager` 仍保留作为兼容层和调试入口，正式随机事件流程以 `EventManager` 为准。
 
-### 3.5 存档
+### 3.5 探索与发现
 
-`GameState` 是完整存档快照，当前版本为 `SaveDataVersion.Current = 2`。
+探索系统是宗门外部世界的入口，不引入世界地图、坐标、地块或势力系统。当前垂直切片只支持三个预设区域，区域配置位于 `Assets/Resources/Configs/ExplorationRegions`，区域状态保存在 `PlayerData.explorationRegions`。
+
+探索行为复用现有任务系统：
+
+- `ExplorationMissionKind.Survey`：勘察未知区域，同一时间最多一个。
+- `ExplorationMissionKind.Progress`：探索已发现区域，每个区域同一时间最多一个，不同区域可以并行。
+- `ExplorationMissionKind.Ongoing`：区域最终发现后的持续驻守行动，每个区域同一时间最多一个。
+
+探索结算由 `MissionManager` 处理。发现进度通过 `ExplorationRules` 推进，区域发现事件通过 `EventManager` 进入事件收件箱。探索奖励和持续驻守奖励仍走 `RewardManager`、`WarehouseManager` 和现有任务奖励路径。
+
+`ExplorationPanel` 是当前运行时验证 UI，会在场景加载后自动创建探索入口。它不是最终世界地图方案；未来若制作世界地图，应保留任务、事件和存档数据路径，替换表现层。
+
+### 3.6 存档
+
+`GameState` 是完整存档快照，当前版本为 `SaveDataVersion.Current = 3`。
 
 存档包含：
 
@@ -149,6 +163,7 @@ Assets/
 - 事件收件箱
 - 当前打开事件
 - 最近未读每日结算
+- 探索区域状态
 
 `SaveManager.MigrateState()` 对旧存档补齐新增字段默认值。读档恢复仓库后会调用 `WarehouseManager.NormalizeItems()`，合并旧存档中的重复物品栈。
 
@@ -198,6 +213,8 @@ Assets/
 - `MissionNodePanel`：任务节点选择，显示任务名、节点名和执行弟子。
 - `CharacterEventPanel`：事件收件箱、事件正文和选项。
 - `SectDevelopmentPanel`：设施等级和升级入口。
+- `ExplorationPanel`：探索堂入口、区域列表、区域详情、探索派遣和持续驻守。
+- `AlchemyPanel`：炼丹房入口，直接显示炼丹设施行动并派遣弟子。
 - `DaySettlementPanel`：每日结算。
 - `WarehousePanel`：仓库格子和物品详情。
 
@@ -206,6 +223,8 @@ Assets/
 - `CharacterEventPanel`
 - `DaySettlementPanel`
 - `SectDevelopmentPanel`
+- `ExplorationPanel`
+- `AlchemyPanel`
 
 这些运行时 UI 使用 `RuntimeUIFactory` 创建基础 UGUI 控件。当前 UI 仍直接依赖全局 Manager，尚未形成独立展示模型。
 
@@ -216,6 +235,7 @@ Assets/
 - `Assets/Resources/Configs/Items`
 - `Assets/Resources/Configs/Missions`
 - `Assets/Resources/Configs/CharacterEvents`
+- `Assets/Resources/Configs/ExplorationRegions`
 - `Assets/Resources/Configs/Traits`
 
 配置加载仍使用 `Resources.LoadAll`。新增配置字段以可选字段为主，旧 JSON 缺失字段时走默认值。
@@ -225,6 +245,7 @@ Assets/
 - `material_001` 是基础材料。
 - 宗门数值资源显示为“灵材”，不等同于仓库里的 `LingShi_001` 物品。
 - 设施行动复用任务配置，不创建第二套行动系统。
+- 探索区域只作为数据对象存在，不包含地图、坐标、移动或地块。
 - 事件不使用运行时大模型生成内容，所有结果来自 JSON 模板和受控枚举效果。
 
 ## 8. 测试与验证
@@ -234,12 +255,14 @@ Assets/
 - `CharacterStateTests.cs`
 - `FacilityLoopTests.cs`
 - `EventInboxTests.cs`
+- `ExplorationSystemTests.cs`
 
 覆盖重点：
 
 - 人物状态、特质、履历和存档往返。
 - 设施规则、升级、任务候选、仓库容量和设施行动。
 - 事件收件箱、过期、关键事件、确定性和配置交叉引用。
+- 探索区域配置、存档迁移、探索并发、区域发现、事件入箱和持续驻守。
 
 合并功能前至少需要：
 
