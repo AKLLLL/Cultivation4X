@@ -48,12 +48,14 @@ public class PlayerManager : MonoBehaviour
             case FacilityType.TrainingRoom: return playerData.trainingRoomLevel;
             case FacilityType.SecretRealm: return playerData.secretRealmLevel;
             case FacilityType.AlchemyRoom: return playerData.alchemyRoomLevel;
+            case FacilityType.ExplorationHall: return 1;
             default: return 1;
         }
     }
 
     public bool CanUpgradeFacility(FacilityType facility, out string reason)
     {
+        if (facility == FacilityType.ExplorationHall) { reason = "探索堂已建成且不可升级"; return false; }
         int level = GetFacilityLevel(facility);
         if (level >= FacilityRules.MaxLevel) { reason = "设施已达到最高等级"; return false; }
         if (playerData.gold < FacilityRules.UpgradeGoldCost(level)) { reason = "灵材不足"; return false; }

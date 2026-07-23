@@ -74,7 +74,7 @@ public class ItemDatabase : MonoBehaviour
 
             items.Add(data.itemId, data);
 
-            Debug.Log($"加载物品：{data.itemName}");
+           // Debug.Log($"加载物品：{data.itemName}");
         }
 
         Debug.Log($"共加载 {items.Count} 个物品");

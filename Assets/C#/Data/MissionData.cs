@@ -20,6 +20,8 @@ public class MissionData
     public int goldCost;
     public List<ItemReward> itemCosts = new List<ItemReward>();
     public bool isFacilityAction;
+    public ExplorationMissionKind explorationKind;
+    public string explorationRegionId;
 
     // 完成所需天数
     public int needDays;

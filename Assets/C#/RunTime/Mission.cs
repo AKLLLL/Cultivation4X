@@ -71,7 +71,7 @@ public class Mission
                     });
             }
         }
-        if (data.isFacilityAction && reward.Items.Count == 1)
+        if (data.isFacilityAction && FacilityRules.UsesLevelScaledAction(data.requiredFacility) && reward.Items.Count == 1)
             reward.Items[0].count = FacilityRules.ActionOutput(data.requiredFacility, facilityLevel);
         
         return reward;
@@ -86,7 +86,7 @@ public class Mission
         AssignedNPC = npc;
         State = MissionState.Active;
         // 从配置读取耗时
-        RemainingDays = Data.isFacilityAction
+        RemainingDays = Data.isFacilityAction && FacilityRules.UsesLevelScaledAction(Data.requiredFacility)
             ? FacilityRules.ActionDays(Data.requiredFacility, facilityLevel)
             : Data.needDays;
         // NPC进入任务状态
@@ -102,6 +102,11 @@ public class Mission
         
         if (State != MissionState.Active)
             return;
+        if (Data.explorationKind == ExplorationMissionKind.Ongoing && RemainingDays <= 0)
+        {
+            MissionManager.Instance.EvaluateMission(this);
+            return;
+        }
         //经过一天
 
         ElapsedDays++;
@@ -412,6 +417,13 @@ public class Mission
         if (State != MissionState.Active && State != MissionState.WaitingNode) return;
         State = MissionState.AwaitingReward;
         CurrentNode = null;
+    }
+
+    public void RestartCycle()
+    {
+        if (State != MissionState.Active || Data.explorationKind != ExplorationMissionKind.Ongoing) return;
+        RemainingDays = Mathf.Max(1, Data.needDays);
+        ElapsedDays = 0;
     }
 
     public Mission(MissionData data, MissionSaveData saved, NPCRuntime npc)

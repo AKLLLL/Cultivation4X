@@ -45,7 +45,8 @@ public enum EventSource
     Alchemy,
     SectDaily,
     Recruitment,
-    FollowUp
+    FollowUp,
+    Exploration
 }
 
 [Serializable]
