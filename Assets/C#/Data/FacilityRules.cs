@@ -7,7 +7,11 @@ public enum FacilityType
     TrainingRoom,
     SecretRealm,
     AlchemyRoom,
-    ExplorationHall
+    ExplorationHall,
+    ProtectionArray,
+    InheritanceChamber,
+    ForgeRoom,
+    FormationPlatform
 }
 
 [Serializable]
@@ -53,6 +57,7 @@ public static class FacilityRules
 
     private static int LevelValue(int level, int one, int two, int three)
     {
+        if (level <= 0) return 0;
         if (level <= 1) return one;
         return level == 2 ? two : three;
     }

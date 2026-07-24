@@ -6,7 +6,16 @@ using UnityEngine.UI;
 
 public class AlchemyPanel : MonoBehaviour
 {
-    private const string AlchemyMissionId = "production_001";
+    private string AlchemyMissionId
+    {
+        get
+        {
+            FoundingState founding = PlayerManager.Instance?.playerData?.founding;
+            return founding != null && founding.selectedTechniqueId == "qingmu"
+                ? "founding_route_alchemy"
+                : "production_001";
+        }
+    }
     private RectTransform panel;
     private string pendingMissionId;
 
@@ -58,6 +67,12 @@ public class AlchemyPanel : MonoBehaviour
             AddCloseButton();
             return;
         }
+        if (PlayerManager.Instance.GetFacilityLevel(FacilityType.AlchemyRoom) <= 0)
+        {
+            RuntimeUIFactory.Text(panel, "丹房尚未建成。青木长生诀理解达到100%并获得青石村支持后，可在“洞府立宗”中建设。", 18, 72);
+            AddCloseButton();
+            return;
+        }
 
         MissionData data = MissionManager.Instance.GetMissionData(AlchemyMissionId);
         if (data == null)
@@ -78,7 +93,7 @@ public class AlchemyPanel : MonoBehaviour
         else
         {
             int level = PlayerManager.Instance.GetFacilityLevel(FacilityType.AlchemyRoom);
-            int days = FacilityRules.AlchemyDays(level);
+            int days = data.usesFacilityLevelScaling ? FacilityRules.AlchemyDays(level) : data.needDays;
             int pills = FacilityRules.AlchemyPillReward(level);
             RuntimeUIFactory.Text(panel,
                 $"{data.name}\n耗时 {days} 天｜消耗 {data.goldCost} 灵材、{FormatCosts(data.itemCosts)}｜产出 丹药 x{pills}",

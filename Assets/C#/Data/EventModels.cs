@@ -28,7 +28,9 @@ public enum EventEffectType
     AddItem,
     RemoveItem,
     ScheduleEvent,
-    Recruit
+    Recruit,
+    AddTechniqueUnderstanding,
+    AddVillageRelation
 }
 
 public enum EventSource

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System;
 using UnityEngine;
 
 public class NPCManager : MonoBehaviour
@@ -14,6 +15,7 @@ public class NPCManager : MonoBehaviour
     private readonly Dictionary<string, NPCRuntime> npcById =
         new Dictionary<string, NPCRuntime>();
     private readonly List<NPCRuntime> runtimes = new List<NPCRuntime>();
+    public event Action OnRosterChanged;
 
     public List<NPCRuntime> GetAllNPC()
     {
@@ -63,6 +65,49 @@ public class NPCManager : MonoBehaviour
 
 
         Debug.Log("NPC运行时初始化完成");
+        OnRosterChanged?.Invoke();
+    }
+
+    public void ClearCharacters()
+    {
+        npcMap.Clear();
+        npcById.Clear();
+        runtimes.Clear();
+        OnRosterChanged?.Invoke();
+    }
+
+    public bool CreateFounders(IEnumerable<FounderCandidateData> candidates)
+    {
+        List<FounderCandidateData> selected = (candidates ?? Enumerable.Empty<FounderCandidateData>()).Where(item => item != null).ToList();
+        if (selected.Count != 3 || selected.Select(item => item.candidateId).Distinct().Count() != 3) return false;
+
+        ClearCharacters();
+        foreach (FounderCandidateData candidate in selected)
+        {
+            CharacterState state = new CharacterState
+            {
+                characterId = candidate.candidateId,
+                templateId = string.Empty,
+                displayName = candidate.displayName,
+                age = candidate.age,
+                level = 1,
+                realm = CultivationRealm.QiRefining,
+                hasGeneratedProfile = true,
+                baseAttack = candidate.attack,
+                baseIntelligence = candidate.intelligence,
+                baseAgility = candidate.agility,
+                baseComprehension = candidate.comprehension,
+                basePhysique = candidate.physique,
+                aptitudeRank = Mathf.Clamp(candidate.aptitudeRank, 1, 5),
+                initialFeatureId = candidate.initialFeatureId,
+                traitIds = string.IsNullOrWhiteSpace(candidate.personalityTraitId)
+                    ? new List<string>()
+                    : new List<string> { candidate.personalityTraitId }
+            };
+            AddGeneratedRuntime(state);
+        }
+        OnRosterChanged?.Invoke();
+        return true;
     }
 
     /// <summary>
@@ -247,10 +292,13 @@ public class NPCManager : MonoBehaviour
             if (npc.Character.IsAlive && npc.State == NPCState.Idle)
             {
                 int level = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.TrainingRoom);
-                int amount = FacilityRules.TrainingGain(level);
+                int amount = npc.Character.hasGeneratedProfile
+                    ? Mathf.Max(1, npc.AptitudeRank) + Mathf.Max(0, level)
+                    : FacilityRules.TrainingGain(level);
                 if (npc.Character.HasTrait("diligent")) amount += 1;
                 if (npc.Character.HasTrait("lazy")) amount = Mathf.Max(1, amount - 1);
                 npc.AddCultivation(amount);
+                PlayerManager.Instance?.ProcessIdleFounderDay(npc);
                 EventManager.Instance?.TryTriggerSource(EventSource.Training, npc);
             }
         }
@@ -270,6 +318,12 @@ public class NPCManager : MonoBehaviour
 
         foreach (CharacterState state in states ?? Enumerable.Empty<CharacterState>())
         {
+            if (state == null) continue;
+            if (state.hasGeneratedProfile)
+            {
+                AddGeneratedRuntime(state);
+                continue;
+            }
             if (!templates.TryGetValue(state.templateId, out NPCData template))
             {
                 Debug.LogWarning($"存档角色缺少模板: {state.templateId}");
@@ -280,6 +334,28 @@ public class NPCManager : MonoBehaviour
             npcById[state.characterId] = runtime;
             runtimes.Add(runtime);
         }
+        OnRosterChanged?.Invoke();
+    }
+
+    private void AddGeneratedRuntime(CharacterState state)
+    {
+        NPCData data = ScriptableObject.CreateInstance<NPCData>();
+        data.hideFlags = HideFlags.DontSave;
+        data.npcID = state.characterId;
+        data.npcName = state.displayName;
+        data.age = state.age;
+        data.level = state.level;
+        data.exp = state.exp;
+        data.attack = state.baseAttack;
+        data.intelligence = state.baseIntelligence;
+        data.agility = state.baseAgility;
+        data.comprehension = state.baseComprehension;
+        data.physique = state.basePhysique;
+        data.initialTraits = new List<string>(state.traitIds ?? new List<string>());
+        NPCRuntime runtime = new NPCRuntime(data, state);
+        npcMap[data] = runtime;
+        npcById[state.characterId] = runtime;
+        runtimes.Add(runtime);
     }
 
 

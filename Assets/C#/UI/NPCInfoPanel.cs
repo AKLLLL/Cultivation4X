@@ -33,12 +33,23 @@ public class NPCInfoPanel : MonoBehaviour
         if (npc == null) return;
 
         if (nameText != null) nameText.text = npc.Data.npcName;
-        if (stateText != null) stateText.text = "状态：" + FormatNpcState(npc.State);
+        if (stateText != null)
+        {
+            stateText.text = "状态：" + FormatNpcState(npc.State);
+            if (npc.Character.hasGeneratedProfile)
+                stateText.text += $"\n攻{npc.Attack} 智{npc.Intelligence} 敏{npc.Agility} 悟{npc.Comprehension} 体{npc.Physique}　资质：{FoundingRules.AptitudeName(npc.AptitudeRank)}";
+        }
         if (realmText != null) realmText.text = "境界：" + FormatRealm(npc.Realm);
         if (cultivationText != null) cultivationText.text = "修为：" + npc.Cultivation;
         if (healthText != null) healthText.text = "健康：" + FormatHealth(npc.Health);
         SplitTraitNames(npc.Character.traitIds, out string personality, out string experience);
-        if (traitsText != null) traitsText.text = "性格：" + personality;
+        if (traitsText != null)
+        {
+            traitsText.text = "性格：" + personality;
+            FoundingFeatureDefinition feature = FoundingRules.GetFeature(npc.Character.initialFeatureId);
+            if (npc.Character.hasGeneratedProfile)
+                traitsText.text += $"\n初始特点：{feature?.name ?? npc.Character.initialFeatureId}　{feature?.description}";
+        }
         if (experienceText != null) experienceText.text = "经历：" + experience;
         if (relationshipsText != null) relationshipsText.text = "关系：" + FormatRelationships(npc.Character.relationships);
         if (historyText != null) historyText.text = "履历：\n" + FormatLifeRecords(npc.Character.lifeRecords);
@@ -167,6 +178,7 @@ public class NPCInfoPanel : MonoBehaviour
     {
         switch (realm)
         {
+            case CultivationRealm.Mortal: return "凡人";
             case CultivationRealm.QiRefining: return "炼气";
             case CultivationRealm.Foundation: return "筑基";
             case CultivationRealm.GoldenCore: return "金丹";

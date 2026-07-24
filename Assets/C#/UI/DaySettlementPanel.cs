@@ -83,6 +83,7 @@ public class DaySettlementPanel : MonoBehaviour
     {
         switch (realm)
         {
+            case CultivationRealm.Mortal: return "凡人";
             case CultivationRealm.QiRefining: return "炼气";
             case CultivationRealm.Foundation: return "筑基";
             case CultivationRealm.GoldenCore: return "金丹";

@@ -11,6 +11,7 @@ public static class ConfigValidator
         ValidateItems();
         ValidateMissions();
         ValidateExploration();
+        ValidateFounding();
     }
 
     private static void ValidateItems()
@@ -111,5 +112,45 @@ public static class ConfigValidator
         if (mission.explorationKind != kind || mission.requiredFacility != FacilityType.ExplorationHall ||
             (regionId != null && mission.explorationRegionId != regionId))
             Debug.LogError($"探索任务配置不匹配: {missionId}");
+    }
+
+    private static void ValidateFounding()
+    {
+        TextAsset catalogFile = Resources.Load<TextAsset>(FoundingRules.CatalogResourcePath);
+        if (catalogFile == null) { Debug.LogError("立宗目录配置不存在"); return; }
+        try
+        {
+            FoundingCatalogData catalog = JsonConvert.DeserializeObject<FoundingCatalogData>(catalogFile.text);
+            if (catalog == null || catalog.techniques == null || catalog.techniques.Count != 3)
+            { Debug.LogError("立宗配置必须包含三种传承"); return; }
+            if (catalog.surnames == null || catalog.givenNames == null || catalog.surnames.Count * catalog.givenNames.Count < 10)
+                Debug.LogError("立宗候选姓名组合不足10个");
+
+            HashSet<string> missionIds = new HashSet<string>();
+            foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/Missions"))
+            {
+                MissionData mission = JsonConvert.DeserializeObject<MissionData>(file.text);
+                if (!string.IsNullOrWhiteSpace(mission?.id)) missionIds.Add(mission.id);
+            }
+            HashSet<string> eventIds = new HashSet<string>();
+            foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/CharacterEvents"))
+            {
+                List<EventDefinition> definitions = file.text.TrimStart().StartsWith("[")
+                    ? JsonConvert.DeserializeObject<List<EventDefinition>>(file.text)
+                    : new List<EventDefinition> { JsonConvert.DeserializeObject<EventDefinition>(file.text) };
+                foreach (EventDefinition definition in definitions ?? new List<EventDefinition>())
+                    if (!string.IsNullOrWhiteSpace(definition?.id)) eventIds.Add(definition.id);
+            }
+            foreach (FoundingTechniqueDefinition technique in catalog.techniques)
+            {
+                if (!missionIds.Contains(technique.buildMissionId)) Debug.LogError($"路线建设任务不存在: {technique.buildMissionId}");
+                if (!missionIds.Contains(technique.actionMissionId)) Debug.LogError($"路线行动不存在: {technique.actionMissionId}");
+                if (!eventIds.Contains(technique.milestoneEventId)) Debug.LogError($"传承事件不存在: {technique.milestoneEventId}");
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError($"立宗配置解析失败: {exception.Message}");
+        }
     }
 }

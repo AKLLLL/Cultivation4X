@@ -19,5 +19,11 @@ public class PlayerData
     public int warehouseLevel = 1;
     public int secretRealmLevel = 1;
     public int alchemyRoomLevel = 1;
+    public int explorationHallLevel = 1;
+    public int protectionArrayLevel = 1;
+    public int inheritanceChamberLevel = 1;
+    public int forgeRoomLevel = 1;
+    public int formationPlatformLevel = 1;
+    public FoundingState founding = new FoundingState { initialized = true, completed = true, stage = FoundingStage.Completed };
     public List<ExplorationRegionState> explorationRegions = new List<ExplorationRegionState>();
 }

@@ -71,7 +71,8 @@ public class Mission
                     });
             }
         }
-        if (data.isFacilityAction && FacilityRules.UsesLevelScaledAction(data.requiredFacility) && reward.Items.Count == 1)
+        if (data.isFacilityAction && data.usesFacilityLevelScaling &&
+            FacilityRules.UsesLevelScaledAction(data.requiredFacility) && reward.Items.Count == 1)
             reward.Items[0].count = FacilityRules.ActionOutput(data.requiredFacility, facilityLevel);
         
         return reward;
@@ -86,7 +87,8 @@ public class Mission
         AssignedNPC = npc;
         State = MissionState.Active;
         // 从配置读取耗时
-        RemainingDays = Data.isFacilityAction && FacilityRules.UsesLevelScaledAction(Data.requiredFacility)
+        RemainingDays = Data.isFacilityAction && Data.usesFacilityLevelScaling &&
+            FacilityRules.UsesLevelScaledAction(Data.requiredFacility)
             ? FacilityRules.ActionDays(Data.requiredFacility, facilityLevel)
             : Data.needDays;
         // NPC进入任务状态
@@ -97,6 +99,16 @@ public class Mission
     /// <summary>
     /// 推进一天
     /// </summary>
+    public void StartLaborMission()
+    {
+        if (State != MissionState.NotStarted)
+            return;
+        AssignedNPC = null;
+        State = MissionState.Active;
+        RemainingDays = Data.needDays;
+        Debug.Log($"Labor mission started: {Data.name}, days {RemainingDays}");
+    }
+
     public void PassOneDay()
     {
         

@@ -30,21 +30,35 @@ public class SectPanel : MonoBehaviour
 
     private List<NPCSlotUI> slots =
         new List<NPCSlotUI>();
+    private bool rosterSubscribed;
 
 
 
 
     private void OnEnable()
     {
-
+        SubscribeRoster();
         StartCoroutine(RefreshWhenReady());
+    }
 
+    private void OnDisable()
+    {
+        if (rosterSubscribed && NPCManager.Instance != null) NPCManager.Instance.OnRosterChanged -= Refresh;
+        rosterSubscribed = false;
     }
 
     private IEnumerator RefreshWhenReady()
     {
         yield return null;
+        SubscribeRoster();
         Refresh();
+    }
+
+    private void SubscribeRoster()
+    {
+        if (rosterSubscribed || NPCManager.Instance == null) return;
+        NPCManager.Instance.OnRosterChanged += Refresh;
+        rosterSubscribed = true;
     }
 
 

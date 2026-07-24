@@ -38,8 +38,14 @@ public class EventManager : MonoBehaviour
         LoadDefinitions();
     }
 
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     public void LoadDefinitions()
     {
+        if (Instance == null) Instance = this;
         definitions.Clear();
         foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/CharacterEvents"))
         {
@@ -230,6 +236,12 @@ public class EventManager : MonoBehaviour
                 });
                 break;
             case EventEffectType.Recruit: NPCManager.Instance?.RecruitFromTemplate(effect.value); break;
+            case EventEffectType.AddTechniqueUnderstanding:
+                PlayerManager.Instance?.AddTechniqueUnderstanding(effect.amount, actor);
+                break;
+            case EventEffectType.AddVillageRelation:
+                PlayerManager.Instance?.AddVillageRelation(effect.amount, actor);
+                break;
         }
     }
 
@@ -542,6 +554,12 @@ public class EventManager : MonoBehaviour
                     break;
                 case EventEffectType.Recruit:
                     parts.Add($"招募：{effect.value}");
+                    break;
+                case EventEffectType.AddTechniqueUnderstanding:
+                    parts.Add($"功法理解 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.AddVillageRelation:
+                    parts.Add($"青石村关系 {Signed(effect.amount)}");
                     break;
             }
         }

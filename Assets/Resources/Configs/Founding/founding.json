@@ -1,0 +1,15 @@
+{
+  "surnames":["沈","陆","顾","林","苏","楚","江","白","叶","宁","许","周"],
+  "givenNames":["清","川","遥","安","砚","岚","舟","宁","昭","禾","星","野"],
+  "features":[
+    {"id":"mountain_child","name":"山野长大","description":"熟悉山林道路，对陌生环境少有畏惧。"},
+    {"id":"village_reader","name":"识文断字","description":"曾跟随村中先生读过几年书。"},
+    {"id":"steady_hands","name":"手脚稳健","description":"做事细致，很少因急躁出错。"},
+    {"id":"keen_spirit","name":"灵觉敏锐","description":"偶尔能察觉常人忽略的灵气变化。"}
+  ],
+  "techniques":[
+    {"id":"qingmu","name":"青木长生诀","description":"偏向灵植、丹药与恢复。","unlockFacility":"AlchemyRoom","milestoneEventId":"founding_qingmu_milestone","buildMissionId":"founding_build_alchemy","actionMissionId":"founding_route_alchemy"},
+    {"id":"chiyang","name":"赤阳炼体诀","description":"偏向炼体、防御与炼器。","unlockFacility":"ForgeRoom","milestoneEventId":"founding_chiyang_milestone","buildMissionId":"founding_build_forge","actionMissionId":"founding_route_forge"},
+    {"id":"taixu","name":"太虚观想法","description":"偏向神魂、探索与阵法。","unlockFacility":"FormationPlatform","milestoneEventId":"founding_taixu_milestone","buildMissionId":"founding_build_formation","actionMissionId":"founding_route_formation"}
+  ]
+}

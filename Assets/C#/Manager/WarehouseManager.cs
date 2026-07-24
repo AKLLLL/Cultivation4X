@@ -70,7 +70,7 @@ public class WarehouseManager : MonoBehaviour
     {
         NormalizeItems();
         int level = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse);
-        int freeSlots = FacilityRules.WarehouseSlots(level) - warehouseData.items.Count;
+        int freeSlots = Mathf.Max(0, FacilityRules.WarehouseSlots(level) - warehouseData.items.Count);
         var newIds = new System.Collections.Generic.HashSet<string>();
         foreach (ItemReward reward in rewards ?? new ItemReward[0])
         {

@@ -8,6 +8,10 @@ using UnityEngine;
 public class SaveManager : MonoBehaviour
 {
     public static SaveManager Instance { get; private set; }
+    public bool IsInitializationComplete { get; private set; }
+    public bool LoadedExistingSave { get; private set; }
+    public bool InitializationFailed { get; private set; }
+    public event Action<bool> OnInitializationCompleted;
     private const string SaveFileName = "cultivation4x-save.json";
     private string SavePath => Path.Combine(Application.persistentDataPath, SaveFileName);
 
@@ -27,7 +31,24 @@ public class SaveManager : MonoBehaviour
     private IEnumerator Start()
     {
         yield return null;
-        Load();
+        if (File.Exists(SavePath))
+        {
+            LoadedExistingSave = Load();
+            InitializationFailed = !LoadedExistingSave;
+        }
+        else
+        {
+            int seed = unchecked(Environment.TickCount ^ DateTime.UtcNow.Millisecond);
+            PlayerManager.Instance?.InitializeNewFoundingGame(seed);
+            NPCManager.Instance?.ClearCharacters();
+            if (WarehouseManager.Instance != null) WarehouseManager.Instance.warehouseData = new WarehouseData();
+            MissionManager.Instance?.RestoreDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                new System.Collections.Generic.List<string>());
+            LoadedExistingSave = false;
+            Save();
+        }
+        IsInitializationComplete = true;
+        OnInitializationCompleted?.Invoke(LoadedExistingSave);
     }
 
     public GameState CaptureState()
@@ -88,6 +109,11 @@ public class SaveManager : MonoBehaviour
             GameState state = JsonConvert.DeserializeObject<GameState>(File.ReadAllText(SavePath));
             if (state == null || state.version > SaveDataVersion.Current)
                 throw new InvalidDataException("存档版本不受支持");
+            if (state.version < SaveDataVersion.Current)
+            {
+                string backupPath = SavePath + ".pre-v4";
+                if (!File.Exists(backupPath)) File.Copy(SavePath, backupPath);
+            }
 
             MigrateState(state);
             TimeManager.Instance?.RestoreDay(state.currentDay);
@@ -99,6 +125,7 @@ public class SaveManager : MonoBehaviour
             }
             NPCManager.Instance?.RestoreCharacters(state.characters);
             MissionManager.Instance?.RestoreMissions(state.activeMissions);
+            PlayerManager.Instance?.ReconcileReservedLabor(MissionManager.Instance?.GetActiveMissions());
             int candidateDay = state.missionCandidateDay < 0 ? state.currentDay : state.missionCandidateDay;
             MissionManager.Instance?.RestoreDailyCandidates(candidateDay, state.dailyMissionCandidateIds);
             EventManager.Instance?.RestoreState(state.eventHistory, state.pendingEvents, state.randomSeed, state.randomRollCount,
@@ -118,12 +145,42 @@ public class SaveManager : MonoBehaviour
 
     public static void MigrateState(GameState state)
     {
+        int sourceVersion = state.version;
         state.sect = state.sect ?? new PlayerData();
-        state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, 1, FacilityRules.MaxLevel);
-        state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, 1, FacilityRules.MaxLevel);
-        state.sect.warehouseLevel = Mathf.Clamp(state.sect.warehouseLevel, 1, FacilityRules.MaxLevel);
-        state.sect.secretRealmLevel = Mathf.Clamp(state.sect.secretRealmLevel, 1, FacilityRules.MaxLevel);
-        state.sect.alchemyRoomLevel = Mathf.Clamp(state.sect.alchemyRoomLevel, 1, FacilityRules.MaxLevel);
+        int minimumFacilityLevel = sourceVersion < 4 ? 1 : 0;
+        state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.warehouseLevel = Mathf.Clamp(state.sect.warehouseLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.secretRealmLevel = Mathf.Clamp(state.sect.secretRealmLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.alchemyRoomLevel = Mathf.Clamp(state.sect.alchemyRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.explorationHallLevel = Mathf.Clamp(state.sect.explorationHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.protectionArrayLevel = Mathf.Clamp(state.sect.protectionArrayLevel, 0, FacilityRules.MaxLevel);
+        state.sect.inheritanceChamberLevel = Mathf.Clamp(state.sect.inheritanceChamberLevel, 0, FacilityRules.MaxLevel);
+        state.sect.forgeRoomLevel = Mathf.Clamp(state.sect.forgeRoomLevel, 0, FacilityRules.MaxLevel);
+        state.sect.formationPlatformLevel = Mathf.Clamp(state.sect.formationPlatformLevel, 0, FacilityRules.MaxLevel);
+        if (sourceVersion < 4)
+        {
+            state.sect.founding = new FoundingState
+            {
+                initialized = true,
+                completed = true,
+                stage = FoundingStage.Completed,
+                candidates = new System.Collections.Generic.List<FounderCandidateData>(),
+                selectedFounderIds = new System.Collections.Generic.List<string>(),
+                village = new VillageState()
+            };
+        }
+        else
+        {
+            state.sect.founding = state.sect.founding ?? new FoundingState();
+            state.sect.founding.candidates = state.sect.founding.candidates ?? new System.Collections.Generic.List<FounderCandidateData>();
+            state.sect.founding.selectedFounderIds = state.sect.founding.selectedFounderIds ?? new System.Collections.Generic.List<string>();
+            state.sect.founding.village = state.sect.founding.village ?? new VillageState();
+            state.sect.founding.techniqueUnderstanding = Mathf.Clamp(state.sect.founding.techniqueUnderstanding, 0, FoundingRules.MaxUnderstanding);
+            state.sect.founding.village.relation = Mathf.Clamp(state.sect.founding.village.relation, 0, 100);
+            state.sect.founding.village.reservedLabor = Mathf.Clamp(state.sect.founding.village.reservedLabor, 0,
+                Mathf.Max(0, state.sect.founding.village.totalLabor));
+        }
         state.sect.explorationRegions = (state.sect.explorationRegions ?? new System.Collections.Generic.List<ExplorationRegionState>())
             .Where(item => item != null && !string.IsNullOrWhiteSpace(item.regionId))
             .GroupBy(item => item.regionId)
@@ -134,6 +191,13 @@ public class SaveManager : MonoBehaviour
             }).ToList();
         state.dailyMissionCandidateIds = state.dailyMissionCandidateIds ?? new System.Collections.Generic.List<string>();
         state.eventInbox = state.eventInbox ?? new System.Collections.Generic.List<EventInboxEntry>();
+        state.characters = state.characters ?? new System.Collections.Generic.List<CharacterState>();
+        foreach (CharacterState character in state.characters.Where(item => item != null))
+        {
+            character.traitIds = character.traitIds ?? new System.Collections.Generic.List<string>();
+            character.relationships = character.relationships ?? new System.Collections.Generic.List<RelationshipRecord>();
+            character.lifeRecords = character.lifeRecords ?? new System.Collections.Generic.List<LifeRecord>();
+        }
         state.version = SaveDataVersion.Current;
     }
 }

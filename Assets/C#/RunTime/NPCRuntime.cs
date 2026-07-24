@@ -83,6 +83,10 @@ public class NPCRuntime
             return Data.intelligence + modifier;
         }
     }
+    public int Agility => Data.agility;
+    public int Comprehension => Data.comprehension;
+    public int Physique => Data.physique;
+    public int AptitudeRank => Character.aptitudeRank;
     /// <summary>
     /// 设置状态
     /// </summary>
@@ -134,7 +138,7 @@ public class NPCRuntime
 
     public bool TryBreakthrough(float bonusChance = 0f)
     {
-        int need = Character.realm == CultivationRealm.QiRefining ? 100 : 300;
+        int need = Character.realm == CultivationRealm.Mortal || Character.realm == CultivationRealm.QiRefining ? 100 : 300;
         if (!Character.IsAlive || Character.realm == CultivationRealm.GoldenCore || Character.cultivation < need)
             return false;
 

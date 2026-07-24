@@ -27,9 +27,16 @@ public class SectDevelopmentPanel : MonoBehaviour
         panel = RuntimeUIFactory.Panel(transform, "Development", new Vector2(0.12f, 0.1f), new Vector2(0.88f, 0.9f));
         RuntimeUIFactory.Text(panel, "宗门建设", 30, 48);
         resources = RuntimeUIFactory.Text(panel, string.Empty, 20, 44);
-        foreach (FacilityType facility in System.Enum.GetValues(typeof(FacilityType)))
+        FacilityType[] upgradeFacilities =
         {
-            if (facility == FacilityType.ExplorationHall) continue;
+            FacilityType.MissionHall,
+            FacilityType.Warehouse,
+            FacilityType.TrainingRoom,
+            FacilityType.SecretRealm,
+            FacilityType.AlchemyRoom
+        };
+        foreach (FacilityType facility in upgradeFacilities)
+        {
             FacilityType captured = facility;
             Button button = RuntimeUIFactory.Button(panel, string.Empty, 58);
             button.onClick.AddListener(() => Upgrade(captured));
@@ -56,6 +63,12 @@ public class SectDevelopmentPanel : MonoBehaviour
         foreach (var pair in buttons)
         {
             int level = PlayerManager.Instance.GetFacilityLevel(pair.Key);
+            if (level <= 0)
+            {
+                pair.Value.GetComponentInChildren<TMP_Text>().text = $"{Name(pair.Key)}｜损坏或未建\n请通过立宗剧情修复或建设";
+                pair.Value.interactable = false;
+                continue;
+            }
             int gold = FacilityRules.UpgradeGoldCost(level), material = FacilityRules.UpgradeMaterialCost(level);
             pair.Value.GetComponentInChildren<TMP_Text>().text = level >= FacilityRules.MaxLevel
                 ? $"{Name(pair.Key)} Lv.{level}（已满级）"

@@ -20,6 +20,11 @@ public class MissionData
     public int goldCost;
     public List<ItemReward> itemCosts = new List<ItemReward>();
     public bool isFacilityAction;
+    public bool usesFacilityLevelScaling = true;
+    public bool isStoryAction;
+    public FoundingActionKind foundingAction;
+    public string foundingTargetId;
+    public int laborCost;
     public ExplorationMissionKind explorationKind;
     public string explorationRegionId;
 
