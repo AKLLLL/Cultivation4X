@@ -12,7 +12,7 @@ public class WarehouseData
     /// </summary>
     public List<ItemStack> items = new List<ItemStack>
     {
-        new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 10 }
+        new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 5 }
     };
 
 }

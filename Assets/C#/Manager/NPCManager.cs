@@ -97,6 +97,7 @@ public class NPCManager : MonoBehaviour
                 baseIntelligence = candidate.intelligence,
                 baseAgility = candidate.agility,
                 baseComprehension = candidate.comprehension,
+                baseCombatComprehension = candidate.combatComprehension,
                 basePhysique = candidate.physique,
                 aptitudeRank = Mathf.Clamp(candidate.aptitudeRank, 1, 5),
                 initialFeatureId = candidate.initialFeatureId,
@@ -297,6 +298,7 @@ public class NPCManager : MonoBehaviour
                     : FacilityRules.TrainingGain(level);
                 if (npc.Character.HasTrait("diligent")) amount += 1;
                 if (npc.Character.HasTrait("lazy")) amount = Mathf.Max(1, amount - 1);
+                amount += FoundingRules.GetActiveEffectTotal(TechniqueEffectType.CultivationGainFlat);
                 npc.AddCultivation(amount);
                 PlayerManager.Instance?.ProcessIdleFounderDay(npc);
                 EventManager.Instance?.TryTriggerSource(EventSource.Training, npc);
@@ -350,6 +352,9 @@ public class NPCManager : MonoBehaviour
         data.intelligence = state.baseIntelligence;
         data.agility = state.baseAgility;
         data.comprehension = state.baseComprehension;
+        data.combatComprehension = state.baseCombatComprehension > 0
+            ? state.baseCombatComprehension
+            : state.baseComprehension;
         data.physique = state.basePhysique;
         data.initialTraits = new List<string>(state.traitIds ?? new List<string>());
         NPCRuntime runtime = new NPCRuntime(data, state);

@@ -111,7 +111,7 @@ public class SaveManager : MonoBehaviour
                 throw new InvalidDataException("存档版本不受支持");
             if (state.version < SaveDataVersion.Current)
             {
-                string backupPath = SavePath + ".pre-v4";
+                string backupPath = SavePath + ".pre-v5";
                 if (!File.Exists(backupPath)) File.Copy(SavePath, backupPath);
             }
 
@@ -180,6 +180,9 @@ public class SaveManager : MonoBehaviour
             state.sect.founding.village.relation = Mathf.Clamp(state.sect.founding.village.relation, 0, 100);
             state.sect.founding.village.reservedLabor = Mathf.Clamp(state.sect.founding.village.reservedLabor, 0,
                 Mathf.Max(0, state.sect.founding.village.totalLabor));
+            foreach (FounderCandidateData candidate in state.sect.founding.candidates.Where(item => item != null))
+                if (candidate.combatComprehension <= 0)
+                    candidate.combatComprehension = Mathf.Max(0, candidate.comprehension);
         }
         state.sect.explorationRegions = (state.sect.explorationRegions ?? new System.Collections.Generic.List<ExplorationRegionState>())
             .Where(item => item != null && !string.IsNullOrWhiteSpace(item.regionId))
@@ -197,6 +200,9 @@ public class SaveManager : MonoBehaviour
             character.traitIds = character.traitIds ?? new System.Collections.Generic.List<string>();
             character.relationships = character.relationships ?? new System.Collections.Generic.List<RelationshipRecord>();
             character.lifeRecords = character.lifeRecords ?? new System.Collections.Generic.List<LifeRecord>();
+            character.combatExperience = Mathf.Max(0, character.combatExperience);
+            if (character.hasGeneratedProfile && character.baseCombatComprehension <= 0)
+                character.baseCombatComprehension = Mathf.Max(0, character.baseComprehension);
         }
         state.version = SaveDataVersion.Current;
     }

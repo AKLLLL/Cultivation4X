@@ -50,8 +50,8 @@ public class CharacterEventPanel : MonoBehaviour
 
     private void Show(ActiveCharacterEvent active)
     {
-        inboxPanel.gameObject.SetActive(false);
-        panel.gameObject.SetActive(true);
+        CloseManaged(inboxPanel.gameObject);
+        OpenManaged(panel.gameObject);
         titleText.text = EventManager.Format(active.Definition.title, active.Participants);
         bodyText.text = EventManager.Format(active.Definition.body, active.Participants);
         foreach (Button button in optionButtons) Destroy(button.gameObject);
@@ -66,7 +66,7 @@ public class CharacterEventPanel : MonoBehaviour
                 button.GetComponentInChildren<TMP_Text>().text = $"{option.text}（{reason}）";
             button.onClick.AddListener(() =>
             {
-                if (EventManager.Instance.ChooseOption(captured.id)) { panel.gameObject.SetActive(false); RefreshInboxButton(); }
+                if (EventManager.Instance.ChooseOption(captured.id)) { CloseManaged(panel.gameObject); RefreshInboxButton(); }
             });
             optionButtons.Add(button);
         }
@@ -113,7 +113,7 @@ public class CharacterEventPanel : MonoBehaviour
     private void ShowInbox()
     {
         if (EventManager.Instance == null) return;
-        panel.gameObject.SetActive(false);
+        CloseManaged(panel.gameObject);
         for (int i = inboxPanel.childCount - 1; i >= 0; i--) Destroy(inboxPanel.GetChild(i).gameObject);
         RuntimeUIFactory.Text(inboxPanel, "事件收件箱", 30, 48);
         foreach (EventInboxEntry entry in EventManager.Instance.GetInbox())
@@ -124,9 +124,22 @@ public class CharacterEventPanel : MonoBehaviour
             Button button = RuntimeUIFactory.Button(inboxPanel, $"{definition?.title ?? entry.eventId}　{expiry}", 48);
             button.onClick.AddListener(() => EventManager.Instance.OpenInboxEntry(captured.entryId));
         }
-        Button close = RuntimeUIFactory.Button(inboxPanel, "关闭"); close.onClick.AddListener(() => inboxPanel.gameObject.SetActive(false));
-        inboxPanel.gameObject.SetActive(true);
+        Button close = RuntimeUIFactory.Button(inboxPanel, "关闭"); close.onClick.AddListener(() => CloseManaged(inboxPanel.gameObject));
+        OpenManaged(inboxPanel.gameObject);
         RefreshInboxButton();
+    }
+
+    private static void OpenManaged(GameObject target)
+    {
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(target);
+        else target.SetActive(true);
+    }
+
+    private static void CloseManaged(GameObject target)
+    {
+        if (target == null || !target.activeSelf) return;
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(target);
+        else target.SetActive(false);
     }
 
     private static TMP_Text CreateText(Transform parent, int size, FontStyles style)

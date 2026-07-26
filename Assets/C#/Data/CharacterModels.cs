@@ -76,7 +76,9 @@ public class CharacterState
     public int baseIntelligence;
     public int baseAgility;
     public int baseComprehension;
+    public int baseCombatComprehension;
     public int basePhysique;
+    public int combatExperience;
     public int aptitudeRank;
     public string initialFeatureId;
     public List<string> traitIds = new List<string>();

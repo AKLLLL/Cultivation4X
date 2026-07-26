@@ -27,6 +27,14 @@ public enum FoundingActionKind
     RouteFormation
 }
 
+public enum TechniqueEffectType
+{
+    CultivationGainFlat,
+    CombatPowerFlat,
+    TechniqueUnderstandingGainFlat,
+    MatchedMissionScoreFlat
+}
+
 [Serializable]
 public class FounderCandidateData
 {
@@ -37,6 +45,7 @@ public class FounderCandidateData
     public int intelligence;
     public int agility;
     public int comprehension;
+    public int combatComprehension;
     public int physique;
     public int aptitudeRank;
     public string personalityTraitId;
@@ -77,10 +86,20 @@ public class FoundingTechniqueDefinition
     public string id;
     public string name;
     public string description;
+    public List<string> tags = new List<string>();
+    public List<TechniqueEffectDefinition> effects = new List<TechniqueEffectDefinition>();
     public FacilityType unlockFacility;
     public string milestoneEventId;
     public string buildMissionId;
     public string actionMissionId;
+}
+
+[Serializable]
+public class TechniqueEffectDefinition
+{
+    public TechniqueEffectType type;
+    public int amount;
+    public int requiredUnderstanding;
 }
 
 [Serializable]
@@ -160,6 +179,7 @@ public static class FoundingRules
                 intelligence = random.Next(5, 21),
                 agility = random.Next(5, 21),
                 comprehension = random.Next(5, 21),
+                combatComprehension = random.Next(5, 21),
                 physique = random.Next(5, 21),
                 aptitudeRank = aptitude,
                 personalityTraitId = personalities[random.Next(personalities.Length)],
@@ -170,7 +190,66 @@ public static class FoundingRules
     }
 
     public static int UnderstandingGain(FounderCandidateData candidate, bool hasInheritanceChamber) =>
-        candidate == null ? 0 : 1 + Mathf.Max(0, candidate.comprehension) / 10 + (hasInheritanceChamber ? 1 : 0);
+        candidate == null ? 0 : 1 + Mathf.Max(0, candidate.comprehension) / 10 + (hasInheritanceChamber ? 1 : 0) +
+            GetActiveEffectTotal(TechniqueEffectType.TechniqueUnderstandingGainFlat);
+
+    public static int GetActiveEffectTotal(TechniqueEffectType type)
+    {
+        FoundingState state = PlayerManager.Instance?.playerData?.founding;
+        return GetEffectTotal(state?.selectedTechniqueId, state?.techniqueUnderstanding ?? 0, type);
+    }
+
+    public static int GetEffectTotal(string techniqueId, int understanding, TechniqueEffectType type)
+    {
+        FoundingTechniqueDefinition technique = GetTechnique(techniqueId);
+        return technique?.effects?
+            .Where(effect => effect != null && effect.type == type && understanding >= effect.requiredUnderstanding)
+            .Sum(effect => effect.amount) ?? 0;
+    }
+
+    public static bool HasAnyTag(string techniqueId, IEnumerable<string> tags)
+    {
+        FoundingTechniqueDefinition technique = GetTechnique(techniqueId);
+        if (technique?.tags == null || tags == null) return false;
+        HashSet<string> requested = new HashSet<string>(tags.Where(tag => !string.IsNullOrWhiteSpace(tag)),
+            StringComparer.OrdinalIgnoreCase);
+        return technique.tags.Any(requested.Contains);
+    }
+
+    public static string TechniqueTagName(string tag)
+    {
+        switch (tag?.ToLowerInvariant())
+        {
+            case "wood": return "木";
+            case "herb": return "灵植";
+            case "alchemy": return "丹道";
+            case "recovery": return "恢复";
+            case "fire": return "火";
+            case "body": return "体修";
+            case "combat": return "战斗";
+            case "forge": return "炼器";
+            case "soul": return "神魂";
+            case "formation": return "阵法";
+            case "exploration": return "探索";
+            case "research": return "研究";
+            default: return tag ?? string.Empty;
+        }
+    }
+
+    public static string TechniqueEffectDescription(TechniqueEffectDefinition effect)
+    {
+        if (effect == null) return string.Empty;
+        string name;
+        switch (effect.type)
+        {
+            case TechniqueEffectType.CultivationGainFlat: name = "每日修为"; break;
+            case TechniqueEffectType.CombatPowerFlat: name = "战力"; break;
+            case TechniqueEffectType.TechniqueUnderstandingGainFlat: name = "理解增长"; break;
+            case TechniqueEffectType.MatchedMissionScoreFlat: name = "匹配任务评分"; break;
+            default: name = effect.type.ToString(); break;
+        }
+        return $"{name}+{effect.amount}";
+    }
 
     public static string AptitudeName(int rank)
     {

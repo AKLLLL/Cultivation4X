@@ -19,6 +19,9 @@
 
      "requiredAttack": 15,
      "requiredIntelligence": 8,
+     "requiredCombatPower":70,
+     "preferredTechniqueTags":["combat","body"],
+     "preferredTraitIds":["reckless","loyal"],
     
     "nodes":
     [

@@ -25,6 +25,9 @@ public class Mission
     // 任务运行过程中可以不断修改。
     private Reward reward;
     private readonly int facilityLevel;
+    public int CapabilityScore { get; private set; } = 100;
+    public MissionResultTier ResultTier { get; private set; } = MissionResultTier.Qualified;
+    private bool hasCapabilitySnapshot;
 
    
     public Mission(MissionData data, int facilityLevel = 1)
@@ -85,6 +88,7 @@ public class Mission
         if (State != MissionState.NotStarted)
             return;
         AssignedNPC = npc;
+        CaptureCapabilitySnapshot();
         State = MissionState.Active;
         // 从配置读取耗时
         RemainingDays = Data.isFacilityAction && Data.usesFacilityLevelScaling &&
@@ -411,7 +415,8 @@ public class Mission
         {
             NPCManager.Instance.Injured(
                 AssignedNPC,
-                3
+                FacilityRules.FailureInjuryDays(PlayerManager.Instance == null ? 0 :
+                    PlayerManager.Instance.GetFacilityLevel(FacilityType.ProtectionArray))
             );
 
             Debug.Log(
@@ -448,6 +453,10 @@ public class Mission
         ElapsedDays = saved.elapsedDays;
         CurrentNodeIndex = saved.currentNodeIndex;
         AssignedNPC = npc;
+        hasCapabilitySnapshot = saved.hasCapabilitySnapshot;
+        CapabilityScore = saved.capabilityScore;
+        ResultTier = saved.resultTier;
+        if (!hasCapabilitySnapshot && npc != null) CaptureCapabilitySnapshot();
         if (Data.nodes != null && CurrentNodeIndex < Data.nodes.Count && State == MissionState.WaitingNode)
             CurrentNode = Data.nodes[CurrentNodeIndex];
         if (npc != null && (State == MissionState.Active || State == MissionState.WaitingNode))
@@ -467,7 +476,26 @@ public class Mission
             remainingDays = RemainingDays,
             elapsedDays = ElapsedDays,
             currentNodeIndex = CurrentNodeIndex,
-            reward = reward
+            reward = reward,
+            hasCapabilitySnapshot = hasCapabilitySnapshot,
+            capabilityScore = CapabilityScore,
+            resultTier = ResultTier
         };
+    }
+
+    public void CaptureCapabilitySnapshot()
+    {
+        if (hasCapabilitySnapshot || AssignedNPC == null) return;
+        MissionCapabilityEvaluation evaluation = CharacterCapabilityRules.EvaluateMission(Data, AssignedNPC);
+        CapabilityScore = evaluation.score;
+        ResultTier = evaluation.tier;
+        hasCapabilitySnapshot = true;
+    }
+
+    public void ApplyExcellentRewardBonus()
+    {
+        if (ResultTier != MissionResultTier.Excellent) return;
+        reward.Gold += Mathf.FloorToInt(reward.Gold * 0.5f);
+        reward.Exp += Mathf.FloorToInt(reward.Exp * 0.5f);
     }
 }

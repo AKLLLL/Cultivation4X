@@ -15,8 +15,10 @@ public class NPCSelectPanel : MonoBehaviour
     private MissionPanel missionPanel;
     [SerializeField]
     private GameObject npcSelectPanel;
+
     private void OnEnable()
     {
+        transform.SetAsLastSibling();
         RefreshList();
     }
 
@@ -40,7 +42,7 @@ public class NPCSelectPanel : MonoBehaviour
 
             TMP_Text text = obj.GetComponentInChildren<TMP_Text>();
 
-            text.text = npc.Data.name;
+            text.text = npc.Character?.displayName ?? npc.Data?.npcName ?? "未知弟子";
 
             Button button = obj.GetComponent<Button>();
             // 忙碌时不可点击
@@ -48,7 +50,7 @@ public class NPCSelectPanel : MonoBehaviour
             NPCRuntime runtime = npc;
             if (runtime == null)
             {
-                Debug.LogError("找不到NPC运行数据：" + npc.Data.name);
+                Debug.LogError("找不到NPC运行数据：" + (npc.Character?.displayName ?? npc.Data?.npcName));
                 continue;
             }
 

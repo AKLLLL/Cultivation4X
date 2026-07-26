@@ -53,11 +53,18 @@ public class DaySettlementPanel : MonoBehaviour
         if (summary.facilityUpgrades.Count > 0)
             text.AppendLine("设施升级：" + string.Join("、", summary.facilityUpgrades.Select(item => $"{FacilityName(item.facility)} Lv.{item.newLevel}")));
         content.text = text.ToString();
-        panel.gameObject.SetActive(true);
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject, CloseInternal);
+        else panel.gameObject.SetActive(true);
         TimeManager.Instance?.SetSettlementOpen(true);
     }
 
     private void Close()
+    {
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(panel.gameObject);
+        else CloseInternal();
+    }
+
+    private void CloseInternal()
     {
         panel.gameObject.SetActive(false);
         TimeManager.Instance?.SetSettlementOpen(false);

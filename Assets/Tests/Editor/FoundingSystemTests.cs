@@ -43,6 +43,7 @@ public class FoundingSystemTests
         Assert.IsTrue(first.Any(item => item.aptitudeRank >= 4));
         Assert.IsTrue(first.All(item => item.age >= 15 && item.age <= 18));
         Assert.IsTrue(first.All(item => item.attack >= 5 && item.attack <= 20));
+        Assert.IsTrue(first.All(item => item.combatComprehension >= 5 && item.combatComprehension <= 20));
     }
 
     [Test]
@@ -51,7 +52,7 @@ public class FoundingSystemTests
         GameState state = JsonConvert.DeserializeObject<GameState>(
             "{\"version\":3,\"sect\":{\"missionHallLevel\":2,\"trainingRoomLevel\":1,\"warehouseLevel\":1,\"secretRealmLevel\":1,\"alchemyRoomLevel\":1},\"characters\":[]}");
         SaveManager.MigrateState(state);
-        Assert.AreEqual(4, state.version);
+        Assert.AreEqual(SaveDataVersion.Current, state.version);
         Assert.IsTrue(state.sect.founding.completed);
         Assert.AreEqual(FoundingStage.Completed, state.sect.founding.stage);
         Assert.AreEqual(2, state.sect.missionHallLevel);
@@ -89,6 +90,7 @@ public class FoundingSystemTests
         Assert.AreEqual(3, restored.GetAllNPC().Count);
         Assert.AreEqual(selected[0].attack, restored.GetRuntime(selected[0].candidateId).Attack);
         Assert.AreEqual(selected[0].comprehension, restored.GetRuntime(selected[0].candidateId).Comprehension);
+        Assert.AreEqual(selected[0].combatComprehension, restored.GetRuntime(selected[0].candidateId).CombatComprehension);
         Assert.AreEqual(selected[0].aptitudeRank, restored.GetRuntime(selected[0].candidateId).AptitudeRank);
     }
 
@@ -150,13 +152,31 @@ public class FoundingSystemTests
         Assert.IsTrue(missions.CanTriggerMission("founding_repair_spirit_array", actor, out string reason), reason);
         missions.TriggerMission("founding_repair_spirit_array", actor);
         Assert.AreEqual(1, missions.GetActiveMissions().Count);
-        Assert.AreEqual(8, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
+        Assert.AreEqual(3, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
         Mission repair = missions.GetActiveMissions().Single();
         repair.PassOneDay();
         repair.PassOneDay();
         repair.PassOneDay();
         Assert.AreEqual(1, player.GetFacilityLevel(FacilityType.TrainingRoom));
         Assert.IsTrue(actor.CanDispatch());
+    }
+
+    [Test]
+    public void FoundingRepairCosts_AndLaborGatherReward_MatchEarlyTradeoffPlan()
+    {
+        MissionManager missions = Add<MissionManager>("Missions");
+        MissionManager.Instance = missions;
+        missions.LoadMissionsFromJson();
+
+        AssertMissionMaterialCost(missions, "founding_repair_spirit_array", 2);
+        AssertMissionMaterialCost(missions, "founding_repair_protection_array", 2);
+        AssertMissionMaterialCost(missions, "founding_repair_inheritance_chamber", 3);
+        AssertMissionMaterialCost(missions, "founding_repair_storage_chamber", 2);
+
+        MissionData gather = missions.GetMissionData("founding_labor_gather");
+        Assert.NotNull(gather);
+        Assert.AreEqual(10, gather.laborCost);
+        Assert.AreEqual(2, gather.itemRewards.Single(item => item.itemId == FacilityRules.BasicMaterialId).count);
     }
 
     [Test]
@@ -176,6 +196,15 @@ public class FoundingSystemTests
         player.SetFacilityLevelForStory(FacilityType.InheritanceChamber, 1);
         player.ProcessIdleFounderDay(actor);
         Assert.AreEqual((1 + selected[0].comprehension / 10) * 2 + 1, player.playerData.founding.techniqueUnderstanding);
+    }
+
+    private static void AssertMissionMaterialCost(MissionManager missions, string missionId, int expected)
+    {
+        MissionData data = missions.GetMissionData(missionId);
+        Assert.NotNull(data, missionId);
+        Assert.AreEqual(expected,
+            data.itemCosts.Where(item => item.itemId == FacilityRules.BasicMaterialId).Sum(item => item.count),
+            missionId);
     }
 
     [Test]
@@ -283,7 +312,7 @@ public class FoundingSystemTests
         mission.PassOneDay();
 
         Assert.AreEqual(0, player.playerData.founding.village.reservedLabor);
-        Assert.AreEqual(12, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
+        Assert.AreEqual(7, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
         Assert.AreEqual(0, missions.GetActiveMissions().Count);
     }
 

@@ -85,7 +85,10 @@ public class NPCRuntime
     }
     public int Agility => Data.agility;
     public int Comprehension => Data.comprehension;
+    public int CombatComprehension => Data.combatComprehension > 0 ? Data.combatComprehension : Data.comprehension;
     public int Physique => Data.physique;
+    public int CombatExperience => Character.combatExperience;
+    public int CombatPower => CharacterCapabilityRules.CalculateCombatPower(this);
     public int AptitudeRank => Character.aptitudeRank;
     /// <summary>
     /// 设置状态
@@ -134,6 +137,12 @@ public class NPCRuntime
     {
         if (!Character.IsAlive || amount <= 0) return;
         Character.cultivation += amount;
+    }
+
+    public void AddCombatExperience(int amount)
+    {
+        if (!Character.IsAlive || amount <= 0) return;
+        Character.combatExperience = Mathf.Max(0, Character.combatExperience + amount);
     }
 
     public bool TryBreakthrough(float bonusChance = 0f)

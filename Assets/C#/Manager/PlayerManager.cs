@@ -121,6 +121,11 @@ public class PlayerManager : MonoBehaviour
 
     public bool CanUpgradeFacility(FacilityType facility, out string reason)
     {
+        if (facility == FacilityType.MissionHall)
+        {
+            reason = "宗门事务是界面入口，不作为设施升级";
+            return false;
+        }
         int level = GetFacilityLevel(facility);
         if (level <= 0) { reason = "设施尚未修复或建成"; return false; }
         if (facility == FacilityType.ExplorationHall || facility == FacilityType.ProtectionArray ||

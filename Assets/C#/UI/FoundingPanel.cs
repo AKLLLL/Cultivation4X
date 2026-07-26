@@ -13,7 +13,6 @@ public class FoundingPanel : MonoBehaviour
     private GameObject blocker;
     private readonly HashSet<string> selectedCandidateIds = new HashSet<string>();
     private int candidatePage;
-    private string pendingMissionId;
 
     private static readonly string[] RepairMissionIds =
     {
@@ -21,13 +20,6 @@ public class FoundingPanel : MonoBehaviour
         "founding_repair_protection_array",
         "founding_repair_inheritance_chamber",
         "founding_repair_storage_chamber"
-    };
-
-    private static readonly string[] LaborMissionIds =
-    {
-        "founding_labor_gather",
-        "founding_labor_build",
-        "founding_labor_cultivate"
     };
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -88,7 +80,7 @@ public class FoundingPanel : MonoBehaviour
         {
             blocker.SetActive(true);
             launcher.gameObject.SetActive(false);
-            panel.gameObject.SetActive(true);
+            OpenManagedPanel();
             Refresh();
             return;
         }
@@ -99,15 +91,14 @@ public class FoundingPanel : MonoBehaviour
         launcher.gameObject.SetActive(state != null && !mandatory);
         if (mandatory)
         {
-            panel.gameObject.SetActive(true);
+            OpenManagedPanel();
             Refresh();
         }
     }
 
     private void Open()
     {
-        pendingMissionId = null;
-        panel.gameObject.SetActive(true);
+        OpenManagedPanel();
         Refresh();
     }
 
@@ -146,7 +137,8 @@ public class FoundingPanel : MonoBehaviour
             string marker = selectedCandidateIds.Contains(candidate.candidateId) ? "【已选】" : string.Empty;
             Button button = RuntimeUIFactory.Button(content,
                 $"{marker}{candidate.displayName}　{candidate.age}岁　资质：{FoundingRules.AptitudeName(candidate.aptitudeRank)}\n" +
-                $"攻{candidate.attack} 智{candidate.intelligence} 敏{candidate.agility} 悟{candidate.comprehension} 体{candidate.physique}　性格：{personality}　特点：{feature?.name ?? candidate.initialFeatureId}",
+                $"战力 {CharacterCapabilityRules.CalculateCandidateCombatPower(candidate)}　力量{candidate.attack} 智{candidate.intelligence} 敏{candidate.agility} 体{candidate.physique}\n" +
+                $"悟{candidate.comprehension}　战斗悟性{candidate.combatComprehension}　性格：{personality}　特点：{feature?.name ?? candidate.initialFeatureId}",
                 68);
             button.onClick.AddListener(() =>
             {
@@ -174,7 +166,8 @@ public class FoundingPanel : MonoBehaviour
         RuntimeUIFactory.Text(content, "洞府石壁中留下三道完整传承。此选择决定宗门最初的发展方向，确认后不可更改。", 19, 62);
         foreach (FoundingTechniqueDefinition technique in FoundingRules.Catalog.techniques)
         {
-            Button button = RuntimeUIFactory.Button(content, $"{technique.name}\n{technique.description}", 70);
+            string tags = string.Join("、", (technique.tags ?? new List<string>()).Select(FoundingRules.TechniqueTagName));
+            Button button = RuntimeUIFactory.Button(content, $"{technique.name}\n{technique.description}\n标签：{tags}", 86);
             button.onClick.AddListener(() =>
             {
                 if (!PlayerManager.Instance.SelectFoundingTechnique(technique.id, out string reason))
@@ -188,134 +181,71 @@ public class FoundingPanel : MonoBehaviour
     {
         FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
         RuntimeUIFactory.Text(content, state.completed ? "宗门初立" : "破败洞府", 32, 50);
+        string tags = technique == null ? "无" : string.Join("、", (technique.tags ?? new List<string>()).Select(FoundingRules.TechniqueTagName));
+        string effects = technique == null
+            ? "无"
+            : string.Join("、", (technique.effects ?? new List<TechniqueEffectDefinition>())
+                .Where(effect => effect != null && state.techniqueUnderstanding >= effect.requiredUnderstanding)
+                .Select(FoundingRules.TechniqueEffectDescription));
+        if (string.IsNullOrEmpty(effects)) effects = "尚未解锁";
         RuntimeUIFactory.Text(content,
-            state.completed
-                ? $"三名弟子已立下宗门根基。传承：{technique?.name ?? "旧档传承"}。"
-                : $"传承：{technique?.name}　理解度 {state.techniqueUnderstanding}%\n洞府修复、参悟传承和接触青石村可以同时推进。",
-            19, 66);
+            $"传承：{technique?.name ?? "旧档传承"}　理解度 {state.techniqueUnderstanding}%\n标签：{tags}\n已解锁：{effects}\n所有行动请前往“宗门事务”。",
+            19, 102);
 
-        if (!state.completed)
+        RuntimeUIFactory.Text(content, "核心弟子", 24, 38);
+        foreach (NPCRuntime npc in NPCManager.Instance?.GetAllNPC() ?? new List<NPCRuntime>())
+            RuntimeUIFactory.Text(content, $"{npc.Character.displayName}　战力 {npc.CombatPower}　{npc.State}", 18, 34);
+
+        RuntimeUIFactory.Text(content, "洞府设施", 24, 38);
+        foreach (string missionId in RepairMissionIds)
         {
-            RuntimeUIFactory.Text(content, "洞府遗迹", 24, 38);
-            foreach (string missionId in RepairMissionIds) AddMissionRow(missionId);
-
-            VillageState village = state.village ?? new VillageState();
-            RuntimeUIFactory.Text(content, "青石村", 24, 38);
-            RuntimeUIFactory.Text(content,
-                $"人口 {village.population}　关系 {village.relation}/100（{VillageRelationName(village.relation)}）　" +
-                $"劳动力 {village.totalLabor - village.reservedLabor}/{village.totalLabor}",
-                18, 42);
-            AddMissionRow("founding_village_preach");
-            AddMissionRow("founding_village_help");
-
-            RuntimeUIFactory.Text(content, "宗门路线", 24, 38);
-            if (technique != null)
-            {
-                if (state.techniqueUnderstanding < FoundingRules.MaxUnderstanding)
-                    RuntimeUIFactory.Text(content, $"理解达到100%后可建设路线设施；当前 {state.techniqueUnderstanding}%。", 18, 38);
-                else
-                    AddMissionRow(technique.buildMissionId);
-            }
-            RuntimeUIFactory.Text(content, "宗门建设", 24, 38);
-            if ((state.village?.totalLabor ?? 0) <= 0)
-                RuntimeUIFactory.Text(content, "需要青石村信赖后才能调配凡人劳动力。", 18, 38);
-            foreach (string missionId in LaborMissionIds) AddLaborMissionRow(missionId);
+            MissionData repair = MissionManager.Instance?.GetMissionData(missionId);
+            if (repair == null || !System.Enum.TryParse(repair.foundingTargetId, out FacilityType facility)) continue;
+            bool repairing = MissionManager.Instance.GetActiveMissions().Any(item => item.Data.id == missionId &&
+                (item.State == MissionState.Active || item.State == MissionState.WaitingNode));
+            string status = PlayerManager.Instance.GetFacilityLevel(facility) > 0 ? "已修复" : repairing ? "修复中" : "损坏";
+            RuntimeUIFactory.Text(content, $"{repair.name}：{status}", 18, 34);
         }
 
-        if (technique != null && PlayerManager.Instance.GetFacilityLevel(technique.unlockFacility) > 0)
-        {
-            RuntimeUIFactory.Text(content, "路线行动", 24, 38);
-            AddMissionRow(technique.actionMissionId);
-        }
-
-        if (!string.IsNullOrEmpty(pendingMissionId)) AddNpcChoices(pendingMissionId);
+        VillageState village = state.village ?? new VillageState();
+        RuntimeUIFactory.Text(content, "青石村", 24, 38);
+        RuntimeUIFactory.Text(content,
+            $"人口 {village.population}　关系 {village.relation}/100（{VillageRelationName(village.relation)}）　劳动力 {village.totalLabor - village.reservedLabor}/{village.totalLabor}",
+            18, 42);
+        RuntimeUIFactory.Text(content, state.completed ? "立宗完成：常规任务已由宗门事务按声望开放。" :
+            "完成修复、功法理解与路线建设后，即可建立宗门。", 18, 42);
         Button close = RuntimeUIFactory.Button(content, "收起", 42);
-        close.onClick.AddListener(() => panel.gameObject.SetActive(false));
+        close.onClick.AddListener(CloseManagedPanel);
     }
 
-    private void AddMissionRow(string missionId)
+    private void OpenManagedPanel()
     {
-        MissionData data = MissionManager.Instance?.GetMissionData(missionId);
-        if (data == null)
-        {
-            RuntimeUIFactory.Text(content, $"任务配置缺失：{missionId}", 17, 34);
-            return;
-        }
-
-        Mission running = MissionManager.Instance.GetActiveMissions().FirstOrDefault(item =>
-            item.Data.id == missionId && (item.State == MissionState.Active || item.State == MissionState.WaitingNode));
-        if (running != null)
-        {
-            RuntimeUIFactory.Text(content,
-                $"{data.name}｜{running.AssignedNPC?.Character.displayName}｜剩余 {running.RemainingDays} 天",
-                18, 38);
-            return;
-        }
-
-        if (data.foundingAction == FoundingActionKind.RepairFacility &&
-            System.Enum.TryParse(data.foundingTargetId, out FacilityType facility) &&
-            PlayerManager.Instance.GetFacilityLevel(facility) > 0)
-        {
-            RuntimeUIFactory.Text(content, $"{data.name}｜已完成", 18, 36);
-            return;
-        }
-
-        Button button = RuntimeUIFactory.Button(content, $"{data.name}（{data.needDays}天）", 40);
-        button.onClick.AddListener(() => { pendingMissionId = missionId; Refresh(); });
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject, CloseInternal);
+        else panel.gameObject.SetActive(true);
     }
 
-    private void AddLaborMissionRow(string missionId)
+    private void CloseManagedPanel()
     {
-        MissionData data = MissionManager.Instance?.GetMissionData(missionId);
-        if (data == null)
-        {
-            RuntimeUIFactory.Text(content, $"任务配置缺失：{missionId}", 17, 34);
-            return;
-        }
-
-        Mission running = MissionManager.Instance.GetActiveMissions().FirstOrDefault(item =>
-            item.Data.id == missionId && (item.State == MissionState.Active || item.State == MissionState.WaitingNode));
-        if (running != null)
-        {
-            RuntimeUIFactory.Text(content, $"{data.name} - 剩余 {running.RemainingDays} 天", 18, 38);
-            return;
-        }
-
-        bool canStart = MissionManager.Instance.CanTriggerLaborMission(missionId, out string reason);
-        Button button = RuntimeUIFactory.Button(content,
-            canStart ? $"{data.name}（{data.needDays}天）" : $"{data.name}（{reason}）",
-            40);
-        button.interactable = canStart;
-        button.onClick.AddListener(() =>
-        {
-            MissionManager.Instance.TriggerLaborMission(missionId);
-            Refresh();
-        });
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(panel.gameObject);
+        else CloseInternal();
     }
 
-    private void AddNpcChoices(string missionId)
+    private void CloseInternal()
     {
-        MissionData data = MissionManager.Instance.GetMissionData(missionId);
-        RuntimeUIFactory.Text(content, $"为“{data?.name ?? missionId}”选择弟子：", 19, 38);
-        bool added = false;
-        foreach (NPCRuntime npc in NPCManager.Instance.GetLivingNPC())
+        if (SaveManager.Instance != null && SaveManager.Instance.InitializationFailed)
         {
-            if (!npc.CanDispatch()) continue;
-            added = true;
-            bool canStart = MissionManager.Instance.CanTriggerMission(missionId, npc, out string reason);
-            Button button = RuntimeUIFactory.Button(content,
-                canStart ? npc.Character.displayName : $"{npc.Character.displayName}（{reason}）", 38);
-            button.interactable = canStart;
-            button.onClick.AddListener(() =>
-            {
-                MissionManager.Instance.TriggerMission(missionId, npc);
-                pendingMissionId = null;
-                Refresh();
-            });
+            blocker.SetActive(true);
+            launcher.gameObject.SetActive(false);
+            if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject, CloseInternal);
+            else panel.gameObject.SetActive(true);
+            return;
         }
-        if (!added) RuntimeUIFactory.Text(content, "暂无空闲弟子。", 18, 36);
-        Button cancel = RuntimeUIFactory.Button(content, "取消选择", 36);
-        cancel.onClick.AddListener(() => { pendingMissionId = null; Refresh(); });
+        panel.gameObject.SetActive(false);
+        if (PlayerManager.Instance?.playerData?.founding != null)
+        {
+            blocker.SetActive(false);
+            launcher.gameObject.SetActive(true);
+        }
     }
 
     private static string VillageRelationName(int relation)

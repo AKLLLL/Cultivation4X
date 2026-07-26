@@ -40,6 +40,10 @@ public class MissionData
     public int requiredAttack;
     // 所需智力
     public int requiredIntelligence;
+    public int requiredCombatPower;
+    public List<string> preferredTechniqueTags = new List<string>();
+    public List<string> preferredTraitIds = new List<string>();
+    public int excellentScore = 130;
     // 事件节点
     // </summary>
     public List<MissionNodeData> nodes;

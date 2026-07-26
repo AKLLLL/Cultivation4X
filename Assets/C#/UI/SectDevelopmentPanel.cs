@@ -29,7 +29,6 @@ public class SectDevelopmentPanel : MonoBehaviour
         resources = RuntimeUIFactory.Text(panel, string.Empty, 20, 44);
         FacilityType[] upgradeFacilities =
         {
-            FacilityType.MissionHall,
             FacilityType.Warehouse,
             FacilityType.TrainingRoom,
             FacilityType.SecretRealm,
@@ -46,8 +45,20 @@ public class SectDevelopmentPanel : MonoBehaviour
         panel.gameObject.SetActive(false);
     }
 
-    private void Open() { Refresh(); panel.gameObject.SetActive(true); }
-    private void Close() { panel.gameObject.SetActive(false); }
+    private void Open()
+    {
+        Refresh();
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject, CloseInternal);
+        else panel.gameObject.SetActive(true);
+    }
+
+    private void Close()
+    {
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(panel.gameObject);
+        else CloseInternal();
+    }
+
+    private void CloseInternal() => panel.gameObject.SetActive(false);
 
     private void Upgrade(FacilityType facility)
     {

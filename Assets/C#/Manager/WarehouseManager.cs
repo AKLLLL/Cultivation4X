@@ -31,7 +31,7 @@ public class WarehouseManager : MonoBehaviour
 
             if (warehouseData == null) warehouseData = new WarehouseData();
             if (warehouseData.items.Count == 0)
-                warehouseData.items.Add(new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 10 });
+                warehouseData.items.Add(new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 5 });
             NormalizeItems();
 
             DontDestroyUtility.MarkPersistent(gameObject);

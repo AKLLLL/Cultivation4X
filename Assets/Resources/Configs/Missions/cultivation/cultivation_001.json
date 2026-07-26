@@ -24,6 +24,8 @@
     "requiredAttack":0,
 
     "requiredIntelligence":20,
+    "preferredTechniqueTags":["soul","research"],
+    "preferredTraitIds":["diligent","ambitious"],
 
 
     "nodes":

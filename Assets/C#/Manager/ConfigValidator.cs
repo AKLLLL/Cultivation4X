@@ -47,6 +47,8 @@ public static class ConfigValidator
                     Debug.LogError($"任务 ID 重复: {mission.id}");
                 else if (mission.needDays <= 0)
                     Debug.LogError($"任务天数无效: {mission.id}");
+                else if (mission.requiredCombatPower < 0 || mission.excellentScore < 0)
+                    Debug.LogError($"任务能力阈值无效: {mission.id}");
             }
             catch (Exception exception) { Debug.LogError($"任务配置解析失败 {file.name}: {exception.Message}"); }
         }
@@ -143,9 +145,15 @@ public static class ConfigValidator
             }
             foreach (FoundingTechniqueDefinition technique in catalog.techniques)
             {
+                if (technique == null || string.IsNullOrWhiteSpace(technique.id) || technique.tags == null || technique.tags.Count == 0)
+                { Debug.LogError("传承标签配置无效"); continue; }
                 if (!missionIds.Contains(technique.buildMissionId)) Debug.LogError($"路线建设任务不存在: {technique.buildMissionId}");
                 if (!missionIds.Contains(technique.actionMissionId)) Debug.LogError($"路线行动不存在: {technique.actionMissionId}");
                 if (!eventIds.Contains(technique.milestoneEventId)) Debug.LogError($"传承事件不存在: {technique.milestoneEventId}");
+                foreach (TechniqueEffectDefinition effect in technique.effects ?? new List<TechniqueEffectDefinition>())
+                    if (effect == null || effect.amount < 0 || effect.requiredUnderstanding < 0 ||
+                        effect.requiredUnderstanding > FoundingRules.MaxUnderstanding)
+                        Debug.LogError($"传承效果配置无效: {technique.id}");
             }
         }
         catch (Exception exception)
