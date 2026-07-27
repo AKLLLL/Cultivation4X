@@ -115,6 +115,7 @@ public class EventDefinition
     public int expiresAfterDays = 3;
     public string defaultOptionId;
     public bool isCritical;
+    public bool directOnly;
     public List<EventCondition> conditions = new List<EventCondition>();
     public List<EventParticipantRule> participants = new List<EventParticipantRule>();
     public List<EventOptionDefinition> options = new List<EventOptionDefinition>();

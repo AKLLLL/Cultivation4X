@@ -213,13 +213,42 @@ public class PlayerManager : MonoBehaviour
     {
         VillageState village = playerData.founding?.village;
         if (village == null || amount == 0) return;
+        int previousRelation = village.relation;
         village.relation = Mathf.Clamp(village.relation + amount, 0, 100);
-        if (village.relation >= FoundingRules.VillageSupportRelation) village.totalLabor = FoundingRules.VillageLabor;
+        if (previousRelation < FoundingRules.VillageSupportRelation &&
+            village.relation >= FoundingRules.VillageSupportRelation && !village.supportLaborGranted)
+        {
+            village.totalLabor = Mathf.Max(village.totalLabor, FoundingRules.VillageLabor);
+            village.supportLaborGranted = true;
+        }
         if (village.relation >= FoundingRules.VillageFamiliarRelation && !village.milestoneEventQueued && EventManager.Instance != null &&
             EventManager.Instance.TryEnqueueEventById("founding_village_milestone", actor))
             village.milestoneEventQueued = true;
+        ExternalThreatRules.TryScheduleFromRelation(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
         OnFoundingChanged?.Invoke();
     }
+
+    public int ChangeVillagePopulation(int amount)
+    {
+        VillageState village = playerData.founding?.village;
+        if (village == null || amount == 0) return 0;
+        int before = village.population;
+        village.population = Mathf.Max(0, village.population + amount);
+        OnFoundingChanged?.Invoke();
+        return village.population - before;
+    }
+
+    public int ChangeVillageLabor(int amount, int maximum = int.MaxValue)
+    {
+        VillageState village = playerData.founding?.village;
+        if (village == null || amount == 0) return 0;
+        int before = village.totalLabor;
+        village.totalLabor = Mathf.Clamp(village.totalLabor + amount, 0, Mathf.Max(0, maximum));
+        OnFoundingChanged?.Invoke();
+        return village.totalLabor - before;
+    }
+
+    public void NotifyFoundingChanged() => OnFoundingChanged?.Invoke();
 
     public bool TryReserveLabor(int amount, out string reason)
     {
@@ -245,7 +274,7 @@ public class PlayerManager : MonoBehaviour
         VillageState village = playerData.founding?.village;
         if (village == null) return;
         village.reservedLabor = (activeMissions ?? Enumerable.Empty<Mission>())
-            .Where(item => item != null && item.Data != null && item.Data.foundingAction == FoundingActionKind.BuildRouteFacility &&
+            .Where(item => item != null && item.Data != null && item.Data.laborCost > 0 &&
                            (item.State == MissionState.Active || item.State == MissionState.WaitingNode))
             .Sum(item => Mathf.Max(0, item.Data.laborCost));
     }

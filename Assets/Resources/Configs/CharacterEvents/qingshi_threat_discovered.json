@@ -1,0 +1,38 @@
+{
+  "id": "qingshi_threat_discovered",
+  "title": "青石村外发现异常兽踪",
+  "body": "村民在山道旁发现成片折断的树枝和带有微弱灵气的兽毛。某种兽群正在逼近青石村。",
+  "tags": ["ExternalThreat", "QingshiVillage"],
+  "sources": ["FollowUp"],
+  "baseWeight": 1,
+  "cooldownDays": 9999,
+  "maxOccurrences": 1,
+  "triggerChance": 1.0,
+  "expiresAfterDays": 3,
+  "defaultOptionId": "later",
+  "isCritical": false,
+  "directOnly": true,
+  "participants": [],
+  "options": [
+    {
+      "id": "inspect",
+      "text": "立即查看威胁",
+      "outcomes": [
+        {
+          "text": "宗门开始整理村民带来的线索。后续可在外部威胁面板派遣调查或正式应对。",
+          "effects": []
+        }
+      ]
+    },
+    {
+      "id": "later",
+      "text": "稍后处理",
+      "outcomes": [
+        {
+          "text": "消息被记录下来，但兽群仍会继续逼近。",
+          "effects": []
+        }
+      ]
+    }
+  ]
+}

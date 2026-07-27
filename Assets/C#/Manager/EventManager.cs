@@ -81,8 +81,9 @@ public class EventManager : MonoBehaviour
     {
         ResetDailyGeneration(day);
         ProcessDueEvents(day);
-        TryTriggerSource(EventSource.SectDaily);
-        if (day % 7 == 0) TryTriggerSource(EventSource.Recruitment);
+        FoundingState founding = PlayerManager.Instance?.playerData?.founding;
+        if (founding != null && founding.completed && day > 0 && day % 10 == 0)
+            TryEnqueueOrdinaryCadenceEvent(day);
     }
 
     public bool PrepareForDayAdvance(int day, out string reason)
@@ -99,15 +100,19 @@ public class EventManager : MonoBehaviour
     {
         int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
         ResetDailyGeneration(day);
-        float chance = SourceChance(source);
-        if (Next(10000) >= Mathf.RoundToInt(chance * 10000f)) return false;
+        bool explicitSource = source == EventSource.FollowUp || source == EventSource.Exploration;
+        if (!explicitSource)
+        {
+            float chance = SourceChance(source);
+            if (Next(10000) >= Mathf.RoundToInt(chance * 10000f)) return false;
+        }
 
         Dictionary<string, string> fixedIds = actor == null ? null : new Dictionary<string, string> { { "actor", actor.CharacterId } };
         List<ActiveCharacterEvent> candidates = definitions.Values.OrderBy(item => item.id)
-            .Where(item => item.sources.Contains(source) && !IsOnCooldown(item, day) && !HasReachedLimit(item))
+            .Where(item => !item.directOnly && item.sources.Contains(source) && (explicitSource || item.isCritical) &&
+                !IsOnCooldown(item, day) && !HasReachedLimit(item))
             .Select(item => TryCreateEvent(item.id, fixedIds, out ActiveCharacterEvent candidate) ? candidate : null)
             .Where(item => item != null &&
-                (source == EventSource.FollowUp || generatedOrdinaryCount < 2 || item.Definition.isCritical) &&
                 Next(10000) < Mathf.RoundToInt(Mathf.Clamp01(item.Definition.triggerChance) * 10000f))
             .ToList();
         if (candidates.Count == 0) return false;
@@ -119,7 +124,30 @@ public class EventManager : MonoBehaviour
             if (roll < 0) { selected = candidate; break; }
         }
         Enqueue(selected, day);
-        if (!selected.Definition.isCritical) generatedOrdinaryCount++;
+        if (!selected.Definition.isCritical) generatedOrdinaryCount = 1;
+        return true;
+    }
+
+    private bool TryEnqueueOrdinaryCadenceEvent(int day)
+    {
+        if (inbox.Count >= InboxCapacity || generatedOrdinaryCount > 0) return false;
+        List<ActiveCharacterEvent> candidates = definitions.Values.OrderBy(item => item.id)
+            .Where(item => !item.isCritical && !item.directOnly && item.sources.Any(source =>
+                source != EventSource.FollowUp && source != EventSource.Exploration) &&
+                !IsOnCooldown(item, day) && !HasReachedLimit(item))
+            .Select(item => TryCreateEvent(item.id, null, out ActiveCharacterEvent candidate) ? candidate : null)
+            .Where(item => item != null)
+            .ToList();
+        if (candidates.Count == 0) return false;
+        int roll = Next(candidates.Sum(EffectiveWeight));
+        ActiveCharacterEvent selected = candidates[0];
+        foreach (ActiveCharacterEvent candidate in candidates)
+        {
+            roll -= EffectiveWeight(candidate);
+            if (roll < 0) { selected = candidate; break; }
+        }
+        Enqueue(selected, day);
+        generatedOrdinaryCount = 1;
         return true;
     }
 
@@ -249,10 +277,17 @@ public class EventManager : MonoBehaviour
         out Dictionary<string, NPCRuntime> result)
     {
         result = new Dictionary<string, NPCRuntime>();
+        if (fixedIds != null) fixedIds = CleanParticipantIds(fixedIds);
         if (NPCManager.Instance == null) return definition.participants == null || definition.participants.Count == 0;
         Dictionary<string, NPCRuntime> bindings = result;
         foreach (EventParticipantRule rule in definition.participants ?? Enumerable.Empty<EventParticipantRule>())
         {
+            if (rule == null) continue;
+            if (string.IsNullOrWhiteSpace(rule.slot))
+            {
+                if (rule.required) return false;
+                continue;
+            }
             IEnumerable<NPCRuntime> pool = rule.allowDead ? NPCManager.Instance.GetAllNPC() : NPCManager.Instance.GetLivingNPC();
             NPCRuntime chosen = null;
             if (fixedIds != null && fixedIds.TryGetValue(rule.slot, out string fixedId))
@@ -648,9 +683,33 @@ public class EventManager : MonoBehaviour
         IEnumerable<EventInboxEntry> savedInbox = null, string activeEntryId = null, int savedNextSequence = 0,
         int savedGeneratedDay = -1, int savedGeneratedOrdinaryCount = 0)
     {
-        history.Clear(); if (records != null) history.AddRange(records);
-        pending.Clear(); if (queued != null) pending.AddRange(queued);
-        inbox.Clear(); if (savedInbox != null) inbox.AddRange(savedInbox);
+        history.Clear();
+        if (records != null)
+        {
+            foreach (EventHistoryRecord record in records.Where(item => item != null))
+            {
+                record.participantIds = CleanParticipantIds(record.participantIds);
+                history.Add(record);
+            }
+        }
+        pending.Clear();
+        if (queued != null)
+        {
+            foreach (PendingEvent item in queued.Where(item => item != null))
+            {
+                item.participantIds = CleanParticipantIds(item.participantIds);
+                pending.Add(item);
+            }
+        }
+        inbox.Clear();
+        if (savedInbox != null)
+        {
+            foreach (EventInboxEntry item in savedInbox.Where(item => item != null))
+            {
+                item.participantIds = CleanParticipantIds(item.participantIds);
+                inbox.Add(item);
+            }
+        }
         randomSeed = seed;
         randomRollCount = rolls;
         nextInboxSequence = savedNextSequence;
@@ -664,4 +723,13 @@ public class EventManager : MonoBehaviour
     public int RandomRollCount => randomRollCount;
     public int GeneratedDay => generatedDay;
     public int GeneratedOrdinaryCount => generatedOrdinaryCount;
+
+    private static Dictionary<string, string> CleanParticipantIds(Dictionary<string, string> participantIds)
+    {
+        if (participantIds == null) return new Dictionary<string, string>();
+        return participantIds
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
+            .GroupBy(pair => pair.Key)
+            .ToDictionary(group => group.Key, group => group.First().Value);
+    }
 }

@@ -111,6 +111,34 @@ public class EventInboxTests
     }
 
     [Test]
+    public void RestoreState_DropsBlankParticipantIdsBeforeOpeningActiveEntry()
+    {
+        NPCManager npcs = Add<NPCManager>("NPCs");
+        NPCManager.Instance = npcs;
+        NPCRuntime actor = CreateRuntime(npcs, "restore-actor");
+        EventManager manager = Add<EventManager>("Events");
+        manager.LoadDefinitions();
+        manager.RestoreState(null, null, 1, 0, new[]
+        {
+            new EventInboxEntry
+            {
+                entryId = "active",
+                eventId = "old_enemy",
+                createdDay = 1,
+                expiresDay = -1,
+                participantIds = new Dictionary<string, string>
+                {
+                    { string.Empty, actor.CharacterId },
+                    { "actor", actor.CharacterId }
+                }
+            }
+        }, "active", 1);
+
+        Assert.IsNotNull(manager.GetActiveEvent());
+        Assert.IsFalse(manager.GetInbox().Single().participantIds.ContainsKey(string.Empty));
+    }
+
+    [Test]
     public void Injury_OnlySeriousInjuryTerminatesMission()
     {
         NPCManager npcs = Add<NPCManager>("NPCs");

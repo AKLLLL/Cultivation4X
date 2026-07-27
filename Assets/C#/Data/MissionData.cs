@@ -27,6 +27,7 @@ public class MissionData
     public int laborCost;
     public ExplorationMissionKind explorationKind;
     public string explorationRegionId;
+    public ThreatMissionKind threatMissionKind;
 
     // 完成所需天数
     public int needDays;

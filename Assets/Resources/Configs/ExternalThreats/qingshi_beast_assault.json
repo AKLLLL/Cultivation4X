@@ -1,0 +1,18 @@
+{
+  "id": "qingshi_beast_assault",
+  "name": "沾染灵气的野兽冲击青石村",
+  "description": "山野兽群受洞府逸散灵气吸引，开始沿山道逼近青石村。",
+  "enemyType": "沾染灵气的野兽",
+  "targetVillageId": "qingshi_village",
+  "triggerRelation": 20,
+  "activationDelayDays": 5,
+  "threatPower": 150,
+  "raidIntervalDays": 5,
+  "raidLaborLoss": 10,
+  "investigationMissionId": "qingshi_threat_investigation",
+  "discoveredEventId": "qingshi_threat_discovered",
+  "defenseMaterialCost": 3,
+  "firstExchangeTemplate": "{participants}与兽群第一次接触，{initiative}。",
+  "battleTemplate": "宗门采取{plan}，经过交锋取得{result}。",
+  "retreatTemplate": "局势不利，弟子尝试撤离，最终撤退{retreatResult}。"
+}

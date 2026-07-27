@@ -111,7 +111,7 @@ public class SaveManager : MonoBehaviour
                 throw new InvalidDataException("存档版本不受支持");
             if (state.version < SaveDataVersion.Current)
             {
-                string backupPath = SavePath + ".pre-v5";
+                string backupPath = SavePath + ".pre-v" + SaveDataVersion.Current;
                 if (!File.Exists(backupPath)) File.Copy(SavePath, backupPath);
             }
 
@@ -135,7 +135,7 @@ public class SaveManager : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogError($"读取存档失败: {exception.Message}");
+            Debug.LogError($"读取存档失败: {exception}");
             return false;
         }
     }
@@ -167,7 +167,8 @@ public class SaveManager : MonoBehaviour
                 stage = FoundingStage.Completed,
                 candidates = new System.Collections.Generic.List<FounderCandidateData>(),
                 selectedFounderIds = new System.Collections.Generic.List<string>(),
-                village = new VillageState()
+                village = new VillageState(),
+                externalThreat = new ActiveThreatState()
             };
         }
         else
@@ -176,6 +177,7 @@ public class SaveManager : MonoBehaviour
             state.sect.founding.candidates = state.sect.founding.candidates ?? new System.Collections.Generic.List<FounderCandidateData>();
             state.sect.founding.selectedFounderIds = state.sect.founding.selectedFounderIds ?? new System.Collections.Generic.List<string>();
             state.sect.founding.village = state.sect.founding.village ?? new VillageState();
+            state.sect.founding.externalThreat = NormalizeThreatState(state.sect.founding.externalThreat);
             state.sect.founding.techniqueUnderstanding = Mathf.Clamp(state.sect.founding.techniqueUnderstanding, 0, FoundingRules.MaxUnderstanding);
             state.sect.founding.village.relation = Mathf.Clamp(state.sect.founding.village.relation, 0, 100);
             state.sect.founding.village.reservedLabor = Mathf.Clamp(state.sect.founding.village.reservedLabor, 0,
@@ -184,6 +186,20 @@ public class SaveManager : MonoBehaviour
                 if (candidate.combatComprehension <= 0)
                     candidate.combatComprehension = Mathf.Max(0, candidate.comprehension);
         }
+        state.sect.founding.externalThreat = NormalizeThreatState(state.sect.founding.externalThreat);
+        state.activeMissions = (state.activeMissions ?? new System.Collections.Generic.List<MissionSaveData>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.missionId))
+            .ToList();
+        state.pendingEvents = (state.pendingEvents ?? new System.Collections.Generic.List<PendingEvent>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.eventId))
+            .ToList();
+        foreach (PendingEvent item in state.pendingEvents)
+            item.participantIds = CleanParticipantIds(item.participantIds);
+        state.eventHistory = (state.eventHistory ?? new System.Collections.Generic.List<EventHistoryRecord>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.eventId))
+            .ToList();
+        foreach (EventHistoryRecord item in state.eventHistory)
+            item.participantIds = CleanParticipantIds(item.participantIds);
         state.sect.explorationRegions = (state.sect.explorationRegions ?? new System.Collections.Generic.List<ExplorationRegionState>())
             .Where(item => item != null && !string.IsNullOrWhiteSpace(item.regionId))
             .GroupBy(item => item.regionId)
@@ -193,7 +209,11 @@ public class SaveManager : MonoBehaviour
                 stage = Mathf.Clamp(group.Max(item => item.stage), 0, ExplorationRules.MaxStage)
             }).ToList();
         state.dailyMissionCandidateIds = state.dailyMissionCandidateIds ?? new System.Collections.Generic.List<string>();
-        state.eventInbox = state.eventInbox ?? new System.Collections.Generic.List<EventInboxEntry>();
+        state.eventInbox = (state.eventInbox ?? new System.Collections.Generic.List<EventInboxEntry>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.entryId) && !string.IsNullOrWhiteSpace(item.eventId))
+            .ToList();
+        foreach (EventInboxEntry item in state.eventInbox)
+            item.participantIds = CleanParticipantIds(item.participantIds);
         state.characters = state.characters ?? new System.Collections.Generic.List<CharacterState>();
         foreach (CharacterState character in state.characters.Where(item => item != null))
         {
@@ -205,5 +225,42 @@ public class SaveManager : MonoBehaviour
                 character.baseCombatComprehension = Mathf.Max(0, character.baseComprehension);
         }
         state.version = SaveDataVersion.Current;
+    }
+
+    private static ActiveThreatState NormalizeThreatState(ActiveThreatState state)
+    {
+        if (state == null) state = new ActiveThreatState();
+        state.threatId = string.IsNullOrWhiteSpace(state.threatId) ? null : state.threatId;
+        if (state.status == ExternalThreatStatus.None)
+        {
+            state.scheduledDay = -1;
+            state.activatedDay = -1;
+            state.nextRaidDay = -1;
+            state.discoveryNotificationEnqueued = false;
+        }
+        state.intelligence = Mathf.Clamp(state.intelligence, 0, 100);
+        state.raidCount = Mathf.Max(0, state.raidCount);
+        state.selectedCharacterIds = (state.selectedCharacterIds ?? new System.Collections.Generic.List<string>())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct()
+            .ToList();
+        if (state.resolution != null)
+        {
+            state.resolution.participantIds = (state.resolution.participantIds ?? new System.Collections.Generic.List<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Distinct()
+                .ToList();
+        }
+        return state;
+    }
+
+    private static System.Collections.Generic.Dictionary<string, string> CleanParticipantIds(
+        System.Collections.Generic.Dictionary<string, string> participantIds)
+    {
+        if (participantIds == null) return new System.Collections.Generic.Dictionary<string, string>();
+        return participantIds
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
+            .GroupBy(pair => pair.Key)
+            .ToDictionary(group => group.Key, group => group.First().Value);
     }
 }

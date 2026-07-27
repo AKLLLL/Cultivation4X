@@ -211,6 +211,7 @@ public class NPCManager : MonoBehaviour
 
     public NPCRuntime GetRuntime(string characterId)
     {
+        if (string.IsNullOrWhiteSpace(characterId)) return null;
         npcById.TryGetValue(characterId, out NPCRuntime runtime);
         return runtime;
     }
@@ -321,6 +322,12 @@ public class NPCManager : MonoBehaviour
         foreach (CharacterState state in states ?? Enumerable.Empty<CharacterState>())
         {
             if (state == null) continue;
+            NormalizeRestoredCharacter(state);
+            if (string.IsNullOrWhiteSpace(state.characterId))
+            {
+                Debug.LogWarning($"跳过缺少角色ID的存档角色: {state.displayName ?? state.templateId ?? "未知"}");
+                continue;
+            }
             if (state.hasGeneratedProfile)
             {
                 AddGeneratedRuntime(state);
@@ -341,6 +348,8 @@ public class NPCManager : MonoBehaviour
 
     private void AddGeneratedRuntime(CharacterState state)
     {
+        NormalizeRestoredCharacter(state);
+        if (string.IsNullOrWhiteSpace(state.characterId)) return;
         NPCData data = ScriptableObject.CreateInstance<NPCData>();
         data.hideFlags = HideFlags.DontSave;
         data.npcID = state.characterId;
@@ -363,5 +372,19 @@ public class NPCManager : MonoBehaviour
         runtimes.Add(runtime);
     }
 
+    private static void NormalizeRestoredCharacter(CharacterState state)
+    {
+        if (state == null) return;
+        state.traitIds = (state.traitIds ?? new List<string>())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct()
+            .ToList();
+        state.relationships = (state.relationships ?? new List<RelationshipRecord>())
+            .Where(item => item != null &&
+                !string.IsNullOrWhiteSpace(item.sourceCharacterId) &&
+                !string.IsNullOrWhiteSpace(item.targetCharacterId))
+            .ToList();
+        state.lifeRecords = state.lifeRecords ?? new List<LifeRecord>();
+    }
 
 }

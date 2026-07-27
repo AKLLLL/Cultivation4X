@@ -24,24 +24,17 @@ public static class CharacterCapabilityRules
     public static int CalculateCombatPower(NPCRuntime npc, int equipmentBonus = 0)
     {
         if (npc == null) return 0;
-        int realmBonus;
-        switch (npc.Realm)
+        return CombatPowerCalculator.Calculate(new CombatPowerInput
         {
-            case CultivationRealm.QiRefining: realmBonus = 20; break;
-            case CultivationRealm.Foundation: realmBonus = 60; break;
-            case CultivationRealm.GoldenCore: realmBonus = 120; break;
-            default: realmBonus = 0; break;
-        }
-
-        return Mathf.Max(0,
-            npc.Attack * 2 +
-            npc.Agility +
-            npc.Physique * 2 +
-            npc.CombatComprehension +
-            Mathf.Min(Mathf.Max(0, npc.CombatExperience), 100) +
-            realmBonus +
-            FoundingRules.GetActiveEffectTotal(TechniqueEffectType.CombatPowerFlat) +
-            Mathf.Max(0, equipmentBonus));
+            attack = npc.Attack,
+            agility = npc.Agility,
+            physique = npc.Physique,
+            combatComprehension = npc.CombatComprehension,
+            combatExperience = npc.CombatExperience,
+            realm = npc.Realm,
+            techniqueBonus = FoundingRules.GetActiveEffectTotal(TechniqueEffectType.CombatPowerFlat),
+            artifactBonus = equipmentBonus
+        });
     }
 
     public static int CalculateCandidateCombatPower(FounderCandidateData candidate)

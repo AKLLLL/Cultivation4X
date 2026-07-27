@@ -429,6 +429,15 @@ public class Mission
         MissionManager.Instance?.RemoveMission(this);
     }
 
+    public void CancelForVillageThreat()
+    {
+        if (State != MissionState.Active && State != MissionState.WaitingNode) return;
+        State = MissionState.Failed;
+        CurrentNode = null;
+        MissionManager.Instance?.NotifyVillageThreatCancellation(this);
+        MissionManager.Instance?.RemoveMission(this);
+    }
+
     public void WaitForReward()
     {
         if (State != MissionState.Active && State != MissionState.WaitingNode) return;

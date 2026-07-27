@@ -62,6 +62,7 @@ public class VillageState
     public int totalLabor;
     public int reservedLabor;
     public bool milestoneEventQueued;
+    public bool supportLaborGranted;
 }
 
 [Serializable]
@@ -78,6 +79,7 @@ public class FoundingState
     public bool techniqueMilestoneQueued;
     public bool techniqueMilestoneResolved;
     public VillageState village = new VillageState();
+    public ActiveThreatState externalThreat = new ActiveThreatState();
 }
 
 [Serializable]

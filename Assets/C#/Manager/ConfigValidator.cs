@@ -12,6 +12,7 @@ public static class ConfigValidator
         ValidateMissions();
         ValidateExploration();
         ValidateFounding();
+        ValidateExternalThreats();
     }
 
     private static void ValidateItems()
@@ -160,5 +161,60 @@ public static class ConfigValidator
         {
             Debug.LogError($"立宗配置解析失败: {exception.Message}");
         }
+    }
+
+    private static void ValidateExternalThreats()
+    {
+        Dictionary<string, MissionData> missions = new Dictionary<string, MissionData>();
+        foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/Missions"))
+        {
+            try
+            {
+                MissionData mission = JsonConvert.DeserializeObject<MissionData>(file.text);
+                if (!string.IsNullOrWhiteSpace(mission?.id)) missions[mission.id] = mission;
+            }
+            catch (Exception) { }
+        }
+
+        HashSet<string> eventIds = new HashSet<string>();
+        foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/CharacterEvents"))
+        {
+            try
+            {
+                List<EventDefinition> loaded = file.text.TrimStart().StartsWith("[")
+                    ? JsonConvert.DeserializeObject<List<EventDefinition>>(file.text)
+                    : new List<EventDefinition> { JsonConvert.DeserializeObject<EventDefinition>(file.text) };
+                foreach (EventDefinition definition in loaded ?? new List<EventDefinition>())
+                    if (!string.IsNullOrWhiteSpace(definition?.id)) eventIds.Add(definition.id);
+            }
+            catch (Exception) { }
+        }
+
+        HashSet<string> threatIds = new HashSet<string>();
+        foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/ExternalThreats"))
+        {
+            try
+            {
+                ExternalThreatDefinition threat = JsonConvert.DeserializeObject<ExternalThreatDefinition>(file.text);
+                if (!ExternalThreatRules.ValidateDefinition(threat, out string reason))
+                { Debug.LogError($"外部威胁配置无效 {file.name}: {reason}"); continue; }
+                if (!threatIds.Add(threat.id)) Debug.LogError($"外部威胁 ID 重复: {threat.id}");
+                if (!missions.TryGetValue(threat.investigationMissionId, out MissionData mission) ||
+                    mission.threatMissionKind != ThreatMissionKind.Investigation || mission.needDays != 2)
+                    Debug.LogError($"外部威胁调查任务配置不匹配: {threat.id} / {threat.investigationMissionId}");
+                if (!eventIds.Contains(threat.discoveredEventId))
+                    Debug.LogError($"外部威胁发现事件不存在: {threat.id} / {threat.discoveredEventId}");
+                if (threat.targetVillageId != "qingshi_village")
+                    Debug.LogError($"外部威胁目标村庄无效: {threat.id} / {threat.targetVillageId}");
+                if (threat.defenseMaterialCost != 3)
+                    Debug.LogError($"外部威胁防御成本必须为3: {threat.id}");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"外部威胁配置解析失败 {file.name}: {exception.Message}");
+            }
+        }
+        if (!threatIds.Contains(ExternalThreatRules.QingshiThreatId))
+            Debug.LogError($"首次青石村威胁配置不存在: {ExternalThreatRules.QingshiThreatId}");
     }
 }

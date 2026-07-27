@@ -60,13 +60,19 @@ public class CharacterEventPanel : MonoBehaviour
         foreach (EventOptionDefinition option in active.Definition.options)
         {
             EventOptionDefinition captured = option;
+            string eventId = active.Definition.id;
             Button button = CreateButton(panel, option.text);
             button.interactable = EventManager.Instance.IsOptionAvailable(option.id, out string reason);
             if (!button.interactable && !string.IsNullOrWhiteSpace(reason))
                 button.GetComponentInChildren<TMP_Text>().text = $"{option.text}（{reason}）";
             button.onClick.AddListener(() =>
             {
-                if (EventManager.Instance.ChooseOption(captured.id)) { CloseManaged(panel.gameObject); RefreshInboxButton(); }
+                if (EventManager.Instance.ChooseOption(captured.id))
+                {
+                    CloseManaged(panel.gameObject);
+                    RefreshInboxButton();
+                    ExternalThreatPanel.TryOpenFromEvent(eventId, captured.id);
+                }
             });
             optionButtons.Add(button);
         }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public static class SaveDataVersion
 {
-    public const int Current = 5;
+    public const int Current = 6;
 }
 
 [Serializable]

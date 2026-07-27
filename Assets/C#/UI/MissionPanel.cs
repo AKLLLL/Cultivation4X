@@ -21,6 +21,7 @@ public class MissionPanel : MonoBehaviour
     public Button selectNPCButton;
     private RectTransform dynamicList;
     private TMP_Text statusText;
+    private string dynamicFeedback;
     private void Start()
     {
         EnsureDynamicUI();
@@ -126,23 +127,33 @@ public class MissionPanel : MonoBehaviour
         if (dynamicList == null || MissionManager.Instance == null) return;
         for (int i = dynamicList.childCount - 1; i >= 1; i--) Destroy(dynamicList.GetChild(i).gameObject);
         int reputation = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation;
-        statusText.text = $"宗门事务　声望 {reputation}　开放至 {FacilityRules.MaxMissionRankForReputation(reputation)} 阶任务";
+        string header = $"宗门事务　声望 {reputation}　开放至 {FacilityRules.MaxMissionRankForReputation(reputation)} 阶任务";
+        statusText.text = string.IsNullOrEmpty(dynamicFeedback) ? header : $"{header}\n{dynamicFeedback}";
+        dynamicFeedback = null;
         // 探索保持由原探索面板负责，避免在本次“宗门事务”入口中提前暴露未来系统。
         List<MissionData> visible = MissionManager.Instance.GetVisibleMissions()
             .Where(data => data.explorationKind == ExplorationMissionKind.None)
             .ToList();
         AddSection("洞府修复", visible.Where(data => data.foundingAction == FoundingActionKind.RepairFacility));
         AddSection("村庄行动", visible.Where(data => data.foundingAction == FoundingActionKind.VillagePreach || data.foundingAction == FoundingActionKind.VillageHelp));
+        AddSection("外部威胁调查", visible.Where(data => data.threatMissionKind == ThreatMissionKind.Investigation));
         AddLaborSection(visible.Where(data => IsLaborAction(data.foundingAction)));
         AddSection("宗门路线", visible.Where(data => data.foundingAction == FoundingActionKind.BuildRouteFacility ||
             data.foundingAction == FoundingActionKind.RouteAlchemy || data.foundingAction == FoundingActionKind.RouteForge ||
             data.foundingAction == FoundingActionKind.RouteFormation));
-        AddSection("常规任务", visible.Where(data => !data.isStoryAction && !data.isFacilityAction));
+        AddSection("常规任务", visible.Where(data => !data.isStoryAction && !data.isFacilityAction &&
+            data.threatMissionKind == ThreatMissionKind.None));
         AddSection("设施行动", visible.Where(data => data.isFacilityAction && !data.isStoryAction));
         foreach (Mission mission in MissionManager.Instance.GetActiveMissions().Where(item => item.State == MissionState.AwaitingReward).ToList())
         {
             Button claim = RuntimeUIFactory.Button(dynamicList, $"领取：{mission.Data.name}");
-            claim.onClick.AddListener(() => { if (!MissionManager.Instance.TryClaimReward(mission, out string reason)) statusText.text = reason; RefreshDynamicList(); });
+            claim.onClick.AddListener(() =>
+            {
+                dynamicFeedback = MissionManager.Instance.TryClaimReward(mission, out string reason)
+                    ? $"已领取：{mission.Data.name}"
+                    : reason;
+                RefreshDynamicList();
+            });
         }
     }
 

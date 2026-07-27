@@ -324,6 +324,11 @@ public class MissionManager : MonoBehaviour
     /// </summary>
     public void EvaluateMission(Mission mission)
     {
+        if (mission.Data.threatMissionKind == ThreatMissionKind.Investigation)
+        {
+            EvaluateThreatInvestigation(mission);
+            return;
+        }
         if (mission.Data.explorationKind == ExplorationMissionKind.Ongoing)
         {
             EvaluateOngoingExploration(mission);
@@ -426,6 +431,32 @@ public class MissionManager : MonoBehaviour
 
     }
 
+    private void EvaluateThreatInvestigation(Mission mission)
+    {
+        NPCRuntime npc = mission.AssignedNPC;
+        if (npc == null || !npc.Character.IsAlive)
+        {
+            mission.FailMission(false);
+            return;
+        }
+        ActiveThreatState threat = ExternalThreatRules.GetState();
+        if (threat == null || threat.status == ExternalThreatStatus.Resolved)
+        {
+            npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                "ThreatInvestigation", "调查青石村威胁时，威胁已被处理。", mission.Data.id);
+            mission.CompleteMission();
+            RecordResult(mission, MissionState.Completed);
+            SaveManager.Instance?.AutoSave();
+            return;
+        }
+        int gain = ExternalThreatRules.AddIntelligence(npc);
+        npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            "ThreatInvestigation", $"调查青石村威胁，情报+{gain}", mission.Data.id);
+        mission.CompleteMission();
+        RecordResult(mission, MissionState.Completed);
+        SaveManager.Instance?.AutoSave();
+    }
+
 
     /// <summary>
     /// 删除已经结束的任务
@@ -524,6 +555,8 @@ public class MissionManager : MonoBehaviour
         if (npc == null || !npc.CanDispatch()) { reason = "弟子当前无法执行任务"; return false; }
         if (PlayerManager.Instance == null || WarehouseManager.Instance == null) { reason = "资源系统尚未初始化"; return false; }
         if (!IsMissionVisible(data)) { reason = "当前宗门状态未开放该任务"; return false; }
+        if (data.threatMissionKind == ThreatMissionKind.Investigation && ExternalThreatRules.IsInvestigationRunning())
+        { reason = "已有弟子正在调查该威胁"; return false; }
         if (data.requiredFacilityLevel > PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) { reason = "设施等级不足"; return false; }
         if (!CanStartFoundingAction(data, npc, out reason)) return false;
         if (data.explorationKind == ExplorationMissionKind.Survey && !ExplorationRules.HasUndiscoveredRegion())
@@ -691,6 +724,7 @@ public class MissionManager : MonoBehaviour
                 break;
             case FoundingActionKind.VillageHelp:
                 PlayerManager.Instance.AddVillageRelation(20, actor);
+                ExternalThreatRules.RestoreLaborAfterVillageHelp();
                 break;
             case FoundingActionKind.BuildRouteFacility:
                 if (Enum.TryParse(data.foundingTargetId, out FacilityType built))
@@ -805,6 +839,39 @@ public class MissionManager : MonoBehaviour
         EventManager.Instance?.TryTriggerSource(EventSource.MissionFailed, mission.AssignedNPC);
     }
 
+    public void NotifyVillageThreatCancellation(Mission mission)
+    {
+        if (mission?.Data == null) return;
+        if (mission.Data.laborCost > 0) PlayerManager.Instance?.ReleaseLabor(mission.Data.laborCost);
+        dailyResults.Add(new MissionDayResult
+        {
+            missionId = mission.Data.id,
+            missionName = $"{mission.Data.name}（青石村受袭中止）",
+            state = MissionState.Failed
+        });
+        TimeManager.Instance?.RecordThreatNotice($"青石村受袭中止任务：{mission.Data.name}");
+    }
+
+    public int CancelLaborMissionsUntilValid()
+    {
+        VillageState village = PlayerManager.Instance?.playerData?.founding?.village;
+        if (village == null) return 0;
+        int cancelled = 0;
+        while (village.reservedLabor > village.totalLabor)
+        {
+            Mission target = activeMissions
+                .Where(item => item?.Data != null && item.Data.laborCost > 0 &&
+                    (item.State == MissionState.Active || item.State == MissionState.WaitingNode))
+                .OrderByDescending(item => item.RemainingDays)
+                .ThenBy(item => item.Data.id, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (target == null) break;
+            target.CancelForVillageThreat();
+            cancelled++;
+        }
+        return cancelled;
+    }
+
     public List<MissionDayResult> ConsumeDailyResults()
     {
         List<MissionDayResult> result = new List<MissionDayResult>(dailyResults);
@@ -817,6 +884,11 @@ public class MissionManager : MonoBehaviour
         activeMissions.Clear();
         foreach (MissionSaveData saved in savedMissions ?? Enumerable.Empty<MissionSaveData>())
         {
+            if (saved == null || string.IsNullOrWhiteSpace(saved.missionId))
+            {
+                Debug.LogWarning("跳过缺少任务ID的存档任务");
+                continue;
+            }
             MissionData data = GetMissionData(saved.missionId);
             NPCRuntime npc = NPCManager.Instance?.GetRuntime(saved.assignedCharacterId);
             bool laborOnly = data != null && IsLaborOnlyFoundingAction(data.foundingAction);
@@ -894,6 +966,11 @@ public class MissionManager : MonoBehaviour
     public bool IsMissionVisible(MissionData data)
     {
         if (data == null || data.missionType == MissionType.WorldEvent) return false;
+        if (data.threatMissionKind == ThreatMissionKind.Investigation)
+        {
+            ActiveThreatState threat = ExternalThreatRules.GetState();
+            return threat != null && threat.status == ExternalThreatStatus.Active && threat.intelligence < 100;
+        }
         if (data.explorationKind != ExplorationMissionKind.None) return true;
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
         if (data.isStoryAction)
@@ -930,6 +1007,7 @@ public class MissionManager : MonoBehaviour
     public MissionData GetMissionData(
         string id)
     {
+        if (string.IsNullOrWhiteSpace(id)) return null;
 
         if (
             missionTemplates.TryGetValue(
