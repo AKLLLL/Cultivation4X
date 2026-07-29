@@ -54,6 +54,41 @@ public static class RuntimeUIFactory
         return obj.GetComponent<Button>();
     }
 
+    public static RectTransform TabBar(Transform parent, string name, float height = 44)
+    {
+        GameObject obj = new GameObject(name, typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+        obj.transform.SetParent(parent, false);
+        RectTransform rect = obj.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.offsetMin = new Vector2(0f, -height);
+        rect.offsetMax = Vector2.zero;
+        HorizontalLayoutGroup layout = obj.GetComponent<HorizontalLayoutGroup>();
+        layout.spacing = 6;
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = true;
+        LayoutElement element = obj.GetComponent<LayoutElement>();
+        element.minHeight = height;
+        element.preferredHeight = height;
+        element.flexibleHeight = 0;
+        return rect;
+    }
+
+    public static Button TabButton(Transform parent, string label, bool selected, float height = 42)
+    {
+        Button button = Button(parent, label, height);
+        button.GetComponent<Image>().color = selected
+            ? new Color(0.55f, 0.36f, 0.13f, 1f)
+            : new Color(0.20f, 0.17f, 0.13f, 1f);
+        LayoutElement layout = button.GetComponent<LayoutElement>();
+        layout.flexibleWidth = 1;
+        return button;
+    }
+
     public static RectTransform ScrollContent(Transform parent, string name)
     {
         GameObject scrollObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(ScrollRect), typeof(LayoutElement));

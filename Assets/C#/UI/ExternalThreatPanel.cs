@@ -8,17 +8,26 @@ using UnityEngine.UI;
 
 public class ExternalThreatPanel : MonoBehaviour
 {
+    private enum ThreatPage
+    {
+        Intelligence,
+        Investigation,
+        Participants,
+        Plan
+    }
+
     public static ExternalThreatPanel Instance;
     public const string DiscoveryEventId = "qingshi_threat_discovered";
     public const string InspectOptionId = "inspect";
     private Button launcher;
     private RectTransform panel;
     private RectTransform content;
-    private TMP_Text details;
     private TMP_Text status;
     private Button confirm;
     private readonly List<string> selectedIds = new List<string>();
     private CombatPlanType selectedPlan = CombatPlanType.HeadOn;
+    private ThreatPage currentPage;
+    private readonly Dictionary<ThreatPage, Button> pageButtons = new Dictionary<ThreatPage, Button>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -41,10 +50,14 @@ public class ExternalThreatPanel : MonoBehaviour
 
         panel = RuntimeUIFactory.Panel(transform, "ExternalThreat", new Vector2(0.1f, 0.06f), new Vector2(0.9f, 0.94f));
         RuntimeUIFactory.Text(panel, "青石村外部威胁", 30, 48);
+        status = RuntimeUIFactory.Text(panel, string.Empty, 17, 48);
+        RectTransform tabs = RuntimeUIFactory.TabBar(panel, "ThreatTabs");
+        AddPageTab(tabs, ThreatPage.Intelligence, "威胁情报");
+        AddPageTab(tabs, ThreatPage.Investigation, "调查");
+        AddPageTab(tabs, ThreatPage.Participants, "参战弟子");
+        AddPageTab(tabs, ThreatPage.Plan, "处理方案");
         content = RuntimeUIFactory.ScrollContent(panel, "ThreatScroll");
-        details = RuntimeUIFactory.Text(content, string.Empty, 18, 180);
-        status = RuntimeUIFactory.Text(content, string.Empty, 17, 48);
-        confirm = RuntimeUIFactory.Button(content, "确认执行方案", 48);
+        confirm = RuntimeUIFactory.Button(panel, "确认执行方案", 48);
         confirm.onClick.AddListener(ResolveSelectedPlan);
         Button close = RuntimeUIFactory.Button(panel, "关闭");
         close.onClick.AddListener(Close);
@@ -105,19 +118,15 @@ public class ExternalThreatPanel : MonoBehaviour
     private void Refresh()
     {
         if (content == null) return;
-        for (int i = content.childCount - 1; i >= 2; i--)
-        {
-            Transform child = content.GetChild(i);
-            if (child == confirm.transform) continue;
-            child.gameObject.SetActive(false);
-            Destroy(child.gameObject);
-        }
+        for (int i = content.childCount - 1; i >= 0; i--)
+            Destroy(content.GetChild(i).gameObject);
+        RefreshPageTabs();
 
         ActiveThreatState threat = ExternalThreatRules.GetState();
         ExternalThreatDefinition definition = threat == null ? null : ExternalThreatRules.GetDefinition(threat.threatId);
         if (threat == null || definition == null)
         {
-            details.text = "当前没有已知外部威胁。";
+            RuntimeUIFactory.Text(content, "当前没有已知外部威胁。", 18, 60);
             status.text = string.Empty;
             confirm.gameObject.SetActive(false);
             return;
@@ -129,7 +138,7 @@ public class ExternalThreatPanel : MonoBehaviour
         }
         if (threat.status != ExternalThreatStatus.Active)
         {
-            details.text = "村民尚未确认威胁的具体方向。";
+            RuntimeUIFactory.Text(content, "村民尚未确认威胁的具体方向。", 18, 60);
             status.text = string.Empty;
             confirm.gameObject.SetActive(false);
             return;
@@ -140,11 +149,29 @@ public class ExternalThreatPanel : MonoBehaviour
             NPCRuntime npc = NPCManager.Instance?.GetRuntime(id);
             return npc == null || !npc.CanDispatch();
         });
-        details.text = BuildThreatDetails(threat, definition);
         bool investigating = ExternalThreatRules.IsInvestigationRunning();
         status.text = investigating ? "调查正在进行；仍可直接选择处理方案，当前情报不足会带来风险。" :
             threat.intelligence >= 100 ? "情报完整，可查看确定性结果预览。" : "可继续调查，也可承担未知风险立即应对。";
+        confirm.gameObject.SetActive(false);
 
+        if (currentPage == ThreatPage.Intelligence)
+            ShowIntelligence(threat, definition);
+        else if (currentPage == ThreatPage.Investigation)
+            ShowInvestigation(threat, definition, investigating);
+        else if (currentPage == ThreatPage.Participants)
+            ShowParticipants();
+        else
+            ShowPlans(threat, definition);
+    }
+
+    private void ShowIntelligence(ActiveThreatState threat, ExternalThreatDefinition definition)
+    {
+        RuntimeUIFactory.Text(content, BuildThreatDetails(threat, definition), 18, 180);
+        RuntimeUIFactory.Text(content, definition.description, 18, 80);
+    }
+
+    private void ShowInvestigation(ActiveThreatState threat, ExternalThreatDefinition definition, bool investigating)
+    {
         RuntimeUIFactory.Text(content, "调查威胁（2天，仅允许一项）", 20, 36);
         foreach (NPCRuntime npc in IdleLivingNpcs())
         {
@@ -158,7 +185,12 @@ public class ExternalThreatPanel : MonoBehaviour
                 Refresh();
             });
         }
+        if (!IdleLivingNpcs().Any())
+            RuntimeUIFactory.Text(content, "暂无可派遣调查的弟子。", 18, 42);
+    }
 
+    private void ShowParticipants()
+    {
         RuntimeUIFactory.Text(content, $"参战弟子（已选 {selectedIds.Count}/3）", 20, 36);
         foreach (NPCRuntime npc in IdleLivingNpcs())
         {
@@ -168,7 +200,12 @@ public class ExternalThreatPanel : MonoBehaviour
                 $"{(selected ? "●" : "○")} {Name(npc)}　战力 {CharacterCapabilityRules.CalculateCombatPower(npc)}", 44);
             participant.onClick.AddListener(() => ToggleParticipant(captured.CharacterId));
         }
+        if (!IdleLivingNpcs().Any())
+            RuntimeUIFactory.Text(content, "暂无可参战弟子。", 18, 42);
+    }
 
+    private void ShowPlans(ActiveThreatState threat, ExternalThreatDefinition definition)
+    {
         RuntimeUIFactory.Text(content, "处理方案", 20, 36);
         AddPlanButton(CombatPlanType.HeadOn, "正面迎击｜准备修正 1.00");
         AddPlanButton(CombatPlanType.SimpleDefense,
@@ -187,8 +224,30 @@ public class ExternalThreatPanel : MonoBehaviour
         }
 
         confirm.gameObject.SetActive(true);
-        confirm.transform.SetAsLastSibling();
         confirm.interactable = ExternalThreatRules.CanRespond(SelectedNpcs(), selectedPlan, out _);
+    }
+
+    private void AddPageTab(Transform tabs, ThreatPage page, string label)
+    {
+        Button button = RuntimeUIFactory.TabButton(tabs, label, currentPage == page);
+        pageButtons[page] = button;
+        button.onClick.AddListener(() =>
+        {
+            if (currentPage == page) return;
+            currentPage = page;
+            Refresh();
+        });
+    }
+
+    private void RefreshPageTabs()
+    {
+        foreach (KeyValuePair<ThreatPage, Button> item in pageButtons)
+        {
+            if (item.Value == null) continue;
+            item.Value.GetComponent<Image>().color = item.Key == currentPage
+                ? new Color(0.55f, 0.36f, 0.13f, 1f)
+                : new Color(0.20f, 0.17f, 0.13f, 1f);
+        }
     }
 
     private string BuildThreatDetails(ActiveThreatState threat, ExternalThreatDefinition definition)
@@ -214,10 +273,40 @@ public class ExternalThreatPanel : MonoBehaviour
         ThreatResolutionRecord record = threat.resolution;
         if (record == null)
         {
-            details.text = $"{definition.name}\n威胁已解决，但没有可展示的结算记录。";
+            RuntimeUIFactory.Text(content, $"{definition.name}\n威胁已解决，但没有可展示的结算记录。", 18, 80);
             status.text = string.Empty;
             return;
         }
+        status.text = "该威胁已经永久解决。";
+        if (currentPage == ThreatPage.Intelligence)
+        {
+            RuntimeUIFactory.Text(content,
+                $"{definition.name}｜第 {record.day} 天解决\n最终情报：{threat.intelligence}/100\n累计冲击：{threat.raidCount} 次",
+                18, 110);
+            RuntimeUIFactory.Text(content, definition.description, 18, 80);
+            return;
+        }
+        if (currentPage == ThreatPage.Investigation)
+        {
+            RuntimeUIFactory.Text(content,
+                $"调查结果\n最终情报：{threat.intelligence}/100\n敌人类型：{definition.enemyType}\n威胁战力：{definition.threatPower}",
+                18, 110);
+            return;
+        }
+        if (currentPage == ThreatPage.Participants)
+        {
+            List<string> participantIds = record.participantIds ?? new List<string>();
+            RuntimeUIFactory.Text(content, $"参战弟子（{participantIds.Count}）", 20, 36);
+            foreach (string id in participantIds)
+            {
+                NPCRuntime npc = NPCManager.Instance?.GetRuntime(id);
+                RuntimeUIFactory.Text(content, npc == null ? id : Name(npc), 18, 38);
+            }
+            if (participantIds.Count == 0)
+                RuntimeUIFactory.Text(content, "本次选择退守洞府，没有弟子直接参战。", 18, 52);
+            return;
+        }
+
         StringBuilder text = new StringBuilder();
         text.AppendLine($"{definition.name}｜第 {record.day} 天解决");
         text.AppendLine(record.narrative);
@@ -230,8 +319,7 @@ public class ExternalThreatPanel : MonoBehaviour
                 (record.combat.retreatAttempted ? $"，撤退{(record.combat.retreatSucceeded ? "成功" : "失败")}" : string.Empty));
         }
         text.AppendLine($"青石村实际变化：人口 {Signed(record.populationChange)}，劳动力 {Signed(record.laborChange)}，关系 {Signed(record.relationChange)}");
-        details.text = text.ToString();
-        status.text = "该威胁已经永久解决。";
+        RuntimeUIFactory.Text(content, text.ToString(), 18, 260);
     }
 
     private void AddPlanButton(CombatPlanType plan, string label)

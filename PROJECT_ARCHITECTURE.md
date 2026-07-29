@@ -12,6 +12,8 @@ Cultivation4X 是 Unity 单机修仙宗门经营原型。当前设计优先验�
   -> 接触青石村并取得凡人支持
   -> 建成传承方向设施，完成立宗
   -> 进入任务、设施、事件与探索循环
+  -> 宗门发展触发青石村外部威胁
+  -> 调查、选择战斗方案并承担村庄与宗门后果
 ```
 
 技术基线：
@@ -38,6 +40,7 @@ Assets/
   Resources/
     Configs/
       CharacterEvents/    来源化事件
+      ExternalThreats/    外部威胁定义
       ExplorationRegions/ 探索区域
       Founding/           立宗候选、特点和功法目录
       Items/              物品
@@ -68,7 +71,7 @@ Assets/
 - `WarehouseData.items` 保存物品；`WarehouseManager.NormalizeItems()` 合并同 ID 重复栈。
 - `PlayerData.founding.village` 保存固定村庄青石村的人口、关系、劳动力总量和已预留劳动力。
 
-凡人劳动力仅为数量资源，不创建村民实体或 AI。劳动力任务可以没有执行弟子；开始时预留数量，完成、失败或取消时释放，避免重复占用。
+凡人劳动力仅为数量资源，不创建村民实体或 AI。劳动力任务可以没有执行弟子；开始时预留数量，完成、失败或取消时释放，避免重复占用。青石村关系首次跨过支持阈值时只授予一次基础劳动力，后续关系波动不会自动补满；外部威胁可以降低人口和劳动力，并按既定顺序取消超出剩余劳动力的活动任务。
 
 ### 3.3 设施
 
@@ -94,7 +97,7 @@ Assets/
 - `Failed`
 - `AwaitingReward`
 
-普通任务受任务堂等级和每日候选约束。设施行动、探索任务、立宗故事任务和劳动力任务均复用同一状态机，不创建第二套任务系统。`isStoryAction` 任务可在任务堂为 0 时执行；`FoundingActionKind` 描述修复、村庄、劳动力、路线建设和路线行动的结算语义。
+普通任务受任务堂等级和每日候选约束。设施行动、探索任务、立宗故事任务、劳动力任务和威胁调查均复用同一状态机，不创建第二套任务系统。`isStoryAction` 任务可在任务堂为 0 时执行；`FoundingActionKind` 描述修复、村庄、劳动力、路线建设和路线行动的结算语义，`ThreatMissionKind` 标记威胁调查任务。
 
 任务成本与劳动力在启动时原子校验和预留。仓库容量不足时使用 `AwaitingReward` 保留奖励，同时释放执行弟子。
 
@@ -102,9 +105,9 @@ Assets/
 
 `EventManager` 负责配置加载、来源触发、参与者绑定、收件箱、过期、效果执行和历史记录。事件内容来自 JSON 模板与受控效果枚举，不使用运行时大模型生成。
 
-主要来源包括任务开始/节点/完成/失败、修炼、伤病、设施升级、秘境、炼丹、探索、宗门日常、招募、后续事件和立宗里程碑。立宗功法理解、村庄关系以及传承方向通过事件收件箱呈现选择和结果。
+主要来源包括任务开始/节点/完成/失败、修炼、伤病、设施升级、秘境、炼丹、探索、宗门日常、招募、后续事件、立宗里程碑和外部威胁发现。立宗功法理解、村庄关系以及传承方向通过事件收件箱呈现选择和结果。
 
-关键事件不会自动过期，并可阻止继续结束一天。旧 `RandomEventManager` 仅保留为兼容和调试入口。
+关键事件不会自动过期，并可阻止继续结束一天。普通非关键事件在立宗后的第 10、20、30……天最多抽取一条；显式 ID、关键事件、FollowUp、探索发现和威胁发现仍即时进入收件箱。旧 `RandomEventManager` 仅保留为兼容和调试入口。
 
 ### 3.6 探索与发现
 
@@ -117,6 +120,18 @@ Assets/
 - `Ongoing`：最终发现后的持续驻守，每个区域同时最多一个。
 
 区域进度由 `ExplorationRules` 推进，发现事件进入 `EventManager` 收件箱，奖励继续走现有奖励与仓库路径。`ExplorationPanel` 是当前验证 UI，不代表未来世界地图方案。
+
+### 3.7 外部威胁与战斗结算
+
+外部威胁采用“持久化威胁状态 + 无状态数值规则”，不新增全局 Manager，也不建立实时战斗、回合、血量、技能循环或战斗 AI。
+
+- `ExternalThreatDefinition`：从 `Resources/Configs/ExternalThreats` 加载触发条件、威胁战力、袭击周期、调查任务、准备成本和固定叙事模板。
+- `ActiveThreatState`：保存在 `FoundingState.externalThreat`，记录 `Scheduled / Active / Resolved`、触发日、下次袭击日、情报、袭击次数、玩家选择和完整结算。
+- `CombatPowerCalculator`：根据人物基础属性、战斗悟性、战斗经验、境界、宗门功法和预留装备参数临时计算战力，不保存冗余战力字段。
+- `CombatResolver`：纯数值执行第一次交手、苦战、五档结果和撤退判定；准备、情报和先手修正统一作用于我方有效战力。
+- `ExternalThreatRules`：负责青石村威胁调度、周期压力、调查情报、方案校验、后果应用和固定模板描述。
+
+首个切片为“沾染灵气的野兽冲击青石村”：关系达到 20 后延迟 5 天激活，玩家可以反复派遣单名弟子执行调查任务，并在正面迎击、简单防御和退守洞府之间选择。战斗结果可以改变弟子伤势、经验、死亡状态以及村庄人口、劳动力和关系，但失败不会直接结束游戏。
 
 ## 4. 洞府立宗状态机
 
@@ -145,21 +160,24 @@ CandidateSelection
 
 ## 5. 存档与迁移
 
-`GameState` 当前版本为 `SaveDataVersion.Current = 4`。主要内容：
+`GameState` 当前版本为 `SaveDataVersion.Current = 6`。主要内容：
 
 - 天数、确定性随机种子和抽取次数
-- 宗门资源、设施、立宗状态、村庄和探索区域
+- 宗门资源、设施、立宗状态、村庄、探索区域和外部威胁状态
 - 仓库
 - 全部人物状态
 - 活动任务与每日候选
 - 事件历史、待触发事件、收件箱和当前事件
+- 普通事件十日节奏的生成日与当日生成计数
 - 最近未读日结
 
 `SaveManager.MigrateState()` 负责旧字段默认值和版本迁移：
 
 - v1–v3 旧档迁移为“已完成立宗”，保留既有角色和设施等级。
 - v4 新档允许 0 级设施及未完成立宗状态。
-- 加载旧版本存档并迁移前，会建立 `.pre-v4` 备份作为回滚点。
+- v5 增加战斗悟性、战斗经验和任务能力快照。
+- v6 增加外部威胁状态、青石村一次性劳动力授予标记和普通事件节奏状态。
+- 加载旧版本存档并迁移前，会按当前版本建立 `.pre-v6` 备份作为回滚点。
 - 加载后恢复人物、任务、事件和仓库，并规范化重复物品栈。
 
 兼容要求：不得改名已有 JSON 字段、境界旧枚举值、角色稳定 ID 或 `MissionState`；新增存档字段必须有默认值和迁移测试。
@@ -168,11 +186,11 @@ CandidateSelection
 
 | Manager | 主要职责 |
 |---|---|
-| `TimeManager` | 每日推进入口、日结生成、自动保存 |
+| `TimeManager` | 每日推进入口、外部威胁日处理顺序、日结生成、自动保存 |
 | `NPCManager` | 创建/恢复/查询角色，派遣、恢复、伤亡、关系与招募 |
-| `MissionManager` | 所有任务配置加载、校验、推进、失败清理和待领奖 |
+| `MissionManager` | 所有任务配置加载、校验、推进、失败/取消清理、威胁调查和待领奖 |
 | `EventManager` | 来源化事件、收件箱、过期、效果和历史 |
-| `PlayerManager` | 宗门资源、设施、立宗状态、功法理解、村庄关系和劳动力 |
+| `PlayerManager` | 宗门资源、设施、立宗状态、功法理解、村庄人口、关系和劳动力 |
 | `WarehouseManager` | 物品增减、容量检查和重复栈合并 |
 | `RewardManager` | 向宗门、人物和仓库发放任务奖励 |
 | `SaveManager` | 捕获、保存、读取、备份和迁移 `GameState` |
@@ -180,7 +198,7 @@ CandidateSelection
 | `UIManager` | 面板打开、关闭、Esc 返回栈及按打开顺序分配模态面板显示层级 |
 | `RandomEventManager` | 旧随机事件兼容与调试 |
 
-立宗切片沿用现有 Manager，没有新增全局单例。需要跨场景保留的对象通过 `DontDestroyUtility.MarkPersistent()` 处理。
+立宗、探索和外部威胁切片沿用现有 Manager，没有新增全局单例。战斗与威胁规则位于无状态数据/规则类中；需要跨场景保留的对象通过 `DontDestroyUtility.MarkPersistent()` 处理。
 
 ## 7. 每日推进顺序
 
@@ -192,10 +210,11 @@ CandidateSelection
 4. 天数 +1。
 5. `NPCManager.OnDayPassed()` 推进恢复和空闲修炼；立宗核心弟子的空闲修炼同时推进功法理解。
 6. 广播 `OnDayPassed`，由 `MissionManager` 推进活动任务。
-7. `EventManager.ProcessDay()` 处理后续事件、宗门日常和招募检查。
-8. 生成 `DaySettlementSummary`。
-9. 自动保存。
-10. 显示每日结算。
+7. `ExternalThreatRules.ProcessDay()` 激活威胁、施加周期袭击并取消超额劳动力任务。
+8. `EventManager.ProcessDay()` 处理后续事件、整十日普通事件和招募检查。
+9. 生成 `DaySettlementSummary`，合并任务、事件和威胁通知。
+10. 自动保存。
+11. 显示每日结算。
 
 结束日前的派遣消耗、事件选择、设施升级和待领奖领取通过既有预推进资源记录进入下一份日结。
 
@@ -207,6 +226,7 @@ CandidateSelection
 - `SectPanel` / `NPCInfoPanel`：弟子列表与人物详情。
 - `MissionPanel` / `MissionNodePanel`：任务、设施行动、节点选择和待领奖。
 - `CharacterEventPanel`：事件收件箱、正文和选项。
+- `ExternalThreatPanel`：威胁情报、调查、参战弟子、处理方案和结算记录。
 - `SectDevelopmentPanel`：设施状态和既有升级入口。
 - `ExplorationPanel`：区域列表、详情与探索派遣。
 - `AlchemyPanel`：炼丹设施行动。
@@ -214,6 +234,18 @@ CandidateSelection
 - `WarehousePanel`：仓库与物品详情。
 
 `FoundingPanel`、`CharacterEventPanel`、`DaySettlementPanel`、`SectDevelopmentPanel`、`ExplorationPanel` 和 `AlchemyPanel` 使用 `RuntimeUIFactory` 创建基础 UGUI 控件。UI 通过 Manager 命令接口改变状态，不应直接修改 Manager 内部集合。
+
+内容较多的面板使用轻量页签而不是无限延长单一滚动列表：
+
+- `FoundingPanel`：候选前五名/后五名，跨页保留选择，确认区固定在底部。
+- `MissionPanel`：洞府修复、劳动力、村庄与威胁、其他任务；待领奖固定显示。
+- `ExternalThreatPanel`：威胁情报、调查、参战弟子、处理方案。
+- `NPCSelectPanel`：超过 8 人后按每页 8 人分页。
+- `ExplorationPanel`：区域总览、区域详情、派遣弟子。
+- `DaySettlementPanel`：总览、任务与事件、弟子变化、资源与设施。
+- `CharacterEventPanel`：正文独立滚动，事件选项始终位于滚动区外。
+
+页签只管理展示状态，不能复制或改变任务、威胁、事件和人物数据。跨页选择仍由原面板字段保存。
 
 ## 9. 配置约定
 
@@ -226,6 +258,7 @@ CandidateSelection
 - `Configs/Founding/founding.json` 是候选姓名、特点和三条传承的目录。
 - `Configs/Missions/founding` 保存立宗故事与劳动力任务。
 - `Configs/CharacterEvents/founding_*` 保存立宗里程碑事件。
+- `Configs/ExternalThreats` 保存外部威胁定义；调查任务仍位于 `Configs/Missions`。
 - 设施行动、探索和立宗行为均复用任务系统。
 - 配置 ID 的跨文件引用由 `ConfigValidator` 和 EditMode 测试检查。
 
@@ -237,16 +270,19 @@ EditMode 测试文件：
 - `FacilityLoopTests.cs`
 - `EventInboxTests.cs`
 - `ExplorationSystemTests.cs`
+- `ExternalThreatTests.cs`
 - `FoundingSystemTests.cs`
+- `SectVitalityTests.cs`
+- `UIPaginationTests.cs`
 
-立宗测试覆盖候选确定性与唯一性、生成角色读档、凡人境界兼容、v3 → v4 迁移、v4 的 0 级设施、故事任务绕过任务堂、成本原子扣除、功法理解、村庄劳动力预留/释放、路线建设失败清理、无 NPC 劳动力任务、完成条件及配置交叉引用。
+自动化覆盖候选确定性与唯一性、人物与任务存档迁移、设施循环、来源化事件、探索、宗门生命力、外部威胁两阶段结算、调查/袭击/撤退边界、村庄后果、普通事件十日节奏，以及两批 UI 页签结构和跨页状态保留。
 
-当前自动化基线：Unity EditMode 45/45 通过。合并前仍需确认：
+当前自动化基线：Unity EditMode 92/92 通过。合并前仍需确认：
 
 1. Unity Editor 编译通过。
 2. Resources JSON 可解析且引用有效。
 3. `git diff --check` 无格式错误且没有无关场景、Prefab、字体或 ProjectSettings 改动。
-4. 手动验证候选选择、传承选择、修复、理解里程碑、村庄支持、路线建设、完成立宗，以及保存后重启恢复。
+4. 手动验证候选选择、任务/威胁/探索/日结页签、事件正文滚动、Esc 返回、威胁调查与结算，以及保存后重启恢复。
 
 `dotnet build` 不能可靠验证该项目，因为解决方案中存在 Unity 生成的同名 `Assembly-CSharp` 项目；以 Unity Editor 和 Unity Test Runner 为准。
 
@@ -287,3 +323,5 @@ EditMode 测试文件：
 立宗新档只有 5 份基础材料；洞府修复仍复用现有 Mission。护山阵把普通任务失败伤势从 3 天降为 1 天。立宗完成后，未修复的洞府与村庄事务仍可执行。
 
 存档版本为 v5。迁移会以普通悟性补齐旧生成弟子的战斗悟性、将战斗经验安全归零，并在写入迁移前建立 `.pre-v5` 备份；缺少任务能力快照的活动任务会在恢复时按当前执行者计算一次。
+
+此后 v6 在不改变既有人物和任务稳定 ID 的前提下加入外部威胁、青石村劳动力授予标记和事件生成节奏；当前写入的存档统一使用 v6。

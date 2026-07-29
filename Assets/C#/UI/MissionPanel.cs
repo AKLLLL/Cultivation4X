@@ -6,6 +6,14 @@ using System.Linq;
 
 public class MissionPanel : MonoBehaviour
 {
+    private enum MissionPage
+    {
+        Repair,
+        Labor,
+        VillageThreat,
+        Other
+    }
+
     [Header("UI引用")]
     [SerializeField] private GameObject missionPanel;
     [SerializeField] private GameObject npcSelectPanel;
@@ -20,8 +28,11 @@ public class MissionPanel : MonoBehaviour
 
     public Button selectNPCButton;
     private RectTransform dynamicList;
+    private RectTransform rewardArea;
     private TMP_Text statusText;
     private string dynamicFeedback;
+    private MissionPage currentPage;
+    private readonly Dictionary<MissionPage, Button> pageButtons = new Dictionary<MissionPage, Button>();
     private void Start()
     {
         EnsureDynamicUI();
@@ -118,14 +129,22 @@ public class MissionPanel : MonoBehaviour
     {
         if (dynamicList != null || missionPanel == null) return;
         RectTransform container = RuntimeUIFactory.Panel(missionPanel.transform, "SectAffairs", new Vector2(0.52f, 0.08f), new Vector2(0.97f, 0.92f));
+        statusText = RuntimeUIFactory.Text(container, string.Empty, 17, 52);
+        rewardArea = CreateFixedArea(container, "AwaitingRewards");
+        RectTransform tabs = RuntimeUIFactory.TabBar(container, "MissionTabs");
+        AddPageTab(tabs, MissionPage.Repair, "洞府修复");
+        AddPageTab(tabs, MissionPage.Labor, "劳动力任务");
+        AddPageTab(tabs, MissionPage.VillageThreat, "村庄与威胁");
+        AddPageTab(tabs, MissionPage.Other, "其他任务");
         dynamicList = RuntimeUIFactory.ScrollContent(container, "MissionScroll");
-        statusText = RuntimeUIFactory.Text(dynamicList, string.Empty, 17, 52);
     }
 
     private void RefreshDynamicList()
     {
         if (dynamicList == null || MissionManager.Instance == null) return;
-        for (int i = dynamicList.childCount - 1; i >= 1; i--) Destroy(dynamicList.GetChild(i).gameObject);
+        ClearChildren(dynamicList);
+        ClearChildren(rewardArea);
+        RefreshPageTabs();
         int reputation = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation;
         string header = $"宗门事务　声望 {reputation}　开放至 {FacilityRules.MaxMissionRankForReputation(reputation)} 阶任务";
         statusText.text = string.IsNullOrEmpty(dynamicFeedback) ? header : $"{header}\n{dynamicFeedback}";
@@ -134,19 +153,33 @@ public class MissionPanel : MonoBehaviour
         List<MissionData> visible = MissionManager.Instance.GetVisibleMissions()
             .Where(data => data.explorationKind == ExplorationMissionKind.None)
             .ToList();
-        AddSection("洞府修复", visible.Where(data => data.foundingAction == FoundingActionKind.RepairFacility));
-        AddSection("村庄行动", visible.Where(data => data.foundingAction == FoundingActionKind.VillagePreach || data.foundingAction == FoundingActionKind.VillageHelp));
-        AddSection("外部威胁调查", visible.Where(data => data.threatMissionKind == ThreatMissionKind.Investigation));
-        AddLaborSection(visible.Where(data => IsLaborAction(data.foundingAction)));
-        AddSection("宗门路线", visible.Where(data => data.foundingAction == FoundingActionKind.BuildRouteFacility ||
-            data.foundingAction == FoundingActionKind.RouteAlchemy || data.foundingAction == FoundingActionKind.RouteForge ||
-            data.foundingAction == FoundingActionKind.RouteFormation));
-        AddSection("常规任务", visible.Where(data => !data.isStoryAction && !data.isFacilityAction &&
-            data.threatMissionKind == ThreatMissionKind.None));
-        AddSection("设施行动", visible.Where(data => data.isFacilityAction && !data.isStoryAction));
-        foreach (Mission mission in MissionManager.Instance.GetActiveMissions().Where(item => item.State == MissionState.AwaitingReward).ToList())
+        List<MissionData> pageMissions = visible.Where(data => GetMissionPage(data) == currentPage).ToList();
+        if (currentPage == MissionPage.Repair)
+            AddSection("洞府修复", pageMissions);
+        else if (currentPage == MissionPage.Labor)
+            AddLaborSection(pageMissions);
+        else if (currentPage == MissionPage.VillageThreat)
         {
-            Button claim = RuntimeUIFactory.Button(dynamicList, $"领取：{mission.Data.name}");
+            AddSection("村庄行动", pageMissions.Where(data => data.threatMissionKind == ThreatMissionKind.None));
+            AddSection("外部威胁调查", pageMissions.Where(data => data.threatMissionKind == ThreatMissionKind.Investigation));
+        }
+        else
+        {
+            AddSection("宗门路线", pageMissions.Where(IsRouteAction));
+            AddSection("常规任务", pageMissions.Where(data => !data.isStoryAction && !data.isFacilityAction &&
+                data.threatMissionKind == ThreatMissionKind.None && !IsRouteAction(data)));
+            AddSection("设施行动", pageMissions.Where(data => data.isFacilityAction && !data.isStoryAction));
+        }
+        if (pageMissions.Count == 0)
+            RuntimeUIFactory.Text(dynamicList, "当前分页暂无可用任务。", 18, 42);
+
+        List<Mission> awaitingRewards = MissionManager.Instance.GetActiveMissions()
+            .Where(item => item.State == MissionState.AwaitingReward).ToList();
+        if (awaitingRewards.Count > 0)
+            RuntimeUIFactory.Text(rewardArea, $"待领奖任务（{awaitingRewards.Count}）", 18, 32);
+        foreach (Mission mission in awaitingRewards)
+        {
+            Button claim = RuntimeUIFactory.Button(rewardArea, $"领取：{mission.Data.name}", 38);
             claim.onClick.AddListener(() =>
             {
                 dynamicFeedback = MissionManager.Instance.TryClaimReward(mission, out string reason)
@@ -155,6 +188,69 @@ public class MissionPanel : MonoBehaviour
                 RefreshDynamicList();
             });
         }
+    }
+
+    private void AddPageTab(Transform tabs, MissionPage page, string label)
+    {
+        Button button = RuntimeUIFactory.TabButton(tabs, label, currentPage == page);
+        pageButtons[page] = button;
+        button.onClick.AddListener(() =>
+        {
+            if (currentPage == page) return;
+            currentPage = page;
+            RefreshDynamicList();
+        });
+    }
+
+    private void RefreshPageTabs()
+    {
+        foreach (KeyValuePair<MissionPage, Button> item in pageButtons)
+        {
+            if (item.Value == null) continue;
+            item.Value.GetComponent<Image>().color = item.Key == currentPage
+                ? new Color(0.55f, 0.36f, 0.13f, 1f)
+                : new Color(0.20f, 0.17f, 0.13f, 1f);
+        }
+    }
+
+    private static RectTransform CreateFixedArea(Transform parent, string name)
+    {
+        GameObject obj = new GameObject(name, typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        obj.transform.SetParent(parent, false);
+        VerticalLayoutGroup layout = obj.GetComponent<VerticalLayoutGroup>();
+        layout.spacing = 4;
+        layout.childForceExpandHeight = false;
+        layout.childControlHeight = true;
+        obj.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        return obj.GetComponent<RectTransform>();
+    }
+
+    private static void ClearChildren(Transform parent)
+    {
+        if (parent == null) return;
+        for (int i = parent.childCount - 1; i >= 0; i--)
+            Destroy(parent.GetChild(i).gameObject);
+    }
+
+    private static MissionPage GetMissionPage(MissionData data)
+    {
+        if (data.foundingAction == FoundingActionKind.RepairFacility)
+            return MissionPage.Repair;
+        if (IsLaborAction(data.foundingAction))
+            return MissionPage.Labor;
+        if (data.foundingAction == FoundingActionKind.VillagePreach ||
+            data.foundingAction == FoundingActionKind.VillageHelp ||
+            data.threatMissionKind == ThreatMissionKind.Investigation)
+            return MissionPage.VillageThreat;
+        return MissionPage.Other;
+    }
+
+    private static bool IsRouteAction(MissionData data)
+    {
+        return data.foundingAction == FoundingActionKind.BuildRouteFacility ||
+            data.foundingAction == FoundingActionKind.RouteAlchemy ||
+            data.foundingAction == FoundingActionKind.RouteForge ||
+            data.foundingAction == FoundingActionKind.RouteFormation;
     }
 
     private void AddMissionButton(MissionData data)
