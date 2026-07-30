@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Cultivation4X.WorldMap;
 using UnityEngine;
 
 /// <summary>
@@ -24,6 +25,8 @@ public class PlayerManager : MonoBehaviour
 
     public void InitializeNewFoundingGame(int seed)
     {
+        WorldMap generatedMap = WorldGenerator.Generate(new MapGenerationSettings { seed = seed });
+        WorldMapSession.Set(generatedMap);
         playerData = new PlayerData
         {
             gold = 100,
@@ -41,8 +44,10 @@ public class PlayerManager : MonoBehaviour
             {
                 initialized = true,
                 completed = false,
-                stage = FoundingStage.CandidateSelection,
+                stage = FoundingStage.WorldSelection,
                 candidateSeed = seed,
+                worldSeed = seed,
+                selectedWorldCellIndex = -1,
                 candidates = FoundingRules.GenerateCandidates(seed),
                 selectedFounderIds = new List<string>(),
                 village = new VillageState()
@@ -226,6 +231,24 @@ public class PlayerManager : MonoBehaviour
             village.milestoneEventQueued = true;
         ExternalThreatRules.TryScheduleFromRelation(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
         OnFoundingChanged?.Invoke();
+    }
+
+    public bool ConfirmWorldSite(int cellIndex, out string reason)
+    {
+        FoundingState state = playerData?.founding;
+        WorldMap map = WorldMapSession.Current;
+        if (state == null || state.completed || state.stage != FoundingStage.WorldSelection)
+        { reason = "当前不能选择洞府位置"; return false; }
+        if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
+        { reason = "地图格不存在"; return false; }
+        if (!map.cells[cellIndex].isBuildable)
+        { reason = "该地形不能建立洞府"; return false; }
+        state.selectedWorldCellIndex = cellIndex;
+        state.stage = FoundingStage.CandidateSelection;
+        reason = null;
+        OnFoundingChanged?.Invoke();
+        SaveManager.Instance?.AutoSave();
+        return true;
     }
 
     public int ChangeVillagePopulation(int amount)

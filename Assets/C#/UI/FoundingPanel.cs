@@ -101,7 +101,7 @@ public class FoundingPanel : MonoBehaviour
         bool mandatory = state != null && !state.completed &&
                          (state.stage == FoundingStage.CandidateSelection || state.stage == FoundingStage.TechniqueSelection);
         blocker.SetActive(mandatory);
-        launcher.gameObject.SetActive(state != null && !mandatory);
+        launcher.gameObject.SetActive(state != null && state.stage != FoundingStage.WorldSelection && !mandatory);
         if (mandatory)
         {
             OpenManagedPanel();

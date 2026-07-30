@@ -6,10 +6,11 @@ using UnityEngine;
 
 public enum FoundingStage
 {
-    CandidateSelection,
-    TechniqueSelection,
-    Cave,
-    Completed
+    WorldSelection = -1,
+    CandidateSelection = 0,
+    TechniqueSelection = 1,
+    Cave = 2,
+    Completed = 3
 }
 
 public enum FoundingActionKind
@@ -72,6 +73,8 @@ public class FoundingState
     public bool completed;
     public FoundingStage stage;
     public int candidateSeed;
+    public int worldSeed;
+    public int selectedWorldCellIndex = -1;
     public List<FounderCandidateData> candidates = new List<FounderCandidateData>();
     public List<string> selectedFounderIds = new List<string>();
     public string selectedTechniqueId;

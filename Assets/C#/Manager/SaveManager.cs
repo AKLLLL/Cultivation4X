@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Linq;
+using Cultivation4X.WorldMap;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -59,6 +60,7 @@ public class SaveManager : MonoBehaviour
             randomSeed = EventManager.Instance == null ? 48621 : EventManager.Instance.RandomSeed,
             randomRollCount = EventManager.Instance == null ? 0 : EventManager.Instance.RandomRollCount,
             sect = PlayerManager.Instance == null ? new PlayerData() : PlayerManager.Instance.playerData,
+            worldMap = WorldMapSession.Current,
             warehouse = WarehouseManager.Instance == null ? new WarehouseData() : WarehouseManager.Instance.warehouseData,
             characters = NPCManager.Instance == null
                 ? new System.Collections.Generic.List<CharacterState>()
@@ -110,14 +112,13 @@ public class SaveManager : MonoBehaviour
             if (state == null || state.version > SaveDataVersion.Current)
                 throw new InvalidDataException("存档版本不受支持");
             if (state.version < SaveDataVersion.Current)
-            {
-                string backupPath = SavePath + ".pre-v" + SaveDataVersion.Current;
-                if (!File.Exists(backupPath)) File.Copy(SavePath, backupPath);
-            }
+                throw new InvalidDataException("世界地图生成版本更新不兼容旧档，请删除旧存档并开始新游戏");
 
+            ValidateWorldMapState(state);
             MigrateState(state);
             TimeManager.Instance?.RestoreDay(state.currentDay);
             if (PlayerManager.Instance != null) PlayerManager.Instance.playerData = state.sect ?? new PlayerData();
+            WorldMapSession.Set(state.worldMap);
             if (WarehouseManager.Instance != null)
             {
                 WarehouseManager.Instance.warehouseData = state.warehouse ?? new WarehouseData();
@@ -225,6 +226,61 @@ public class SaveManager : MonoBehaviour
                 character.baseCombatComprehension = Mathf.Max(0, character.baseComprehension);
         }
         state.version = SaveDataVersion.Current;
+    }
+
+    public static void ValidateWorldMapState(GameState state)
+    {
+        if (state?.worldMap == null)
+            throw new InvalidDataException("存档缺少世界地图快照");
+
+        WorldMap map = state.worldMap;
+        long expectedCellCount = (long)map.width * map.height;
+        if (map.width < 8 || map.height < 8 || expectedCellCount > int.MaxValue ||
+            map.cells == null || map.cells.Length != expectedCellCount)
+            throw new InvalidDataException("世界地图尺寸或格子数量无效");
+        if (map.generationVersion != 3 || map.generationSettings == null)
+            throw new InvalidDataException("世界地图生成版本或参数快照无效");
+        if (MapGenerationSettingsValidator.Validate(map.generationSettings).Count > 0 ||
+            map.generationSettings.width != map.width ||
+            map.generationSettings.height != map.height ||
+            map.generationSettings.seed != map.userSeed ||
+            map.generationSettings.generationVersion != map.generationVersion)
+            throw new InvalidDataException("世界地图生成参数快照不一致");
+
+        for (int index = 0; index < map.cells.Length; index++)
+        {
+            WorldCell cell = map.cells[index];
+            if (cell == null || cell.index != index ||
+                cell.coord.col != index % map.width || cell.coord.row != index / map.width)
+                throw new InvalidDataException($"世界地图格子 {index} 无效");
+        }
+
+        if (map.rivers == null || map.spiritVeins == null || map.pointsOfInterest == null)
+            throw new InvalidDataException("世界地图覆盖层数据缺失");
+        if (map.rivers.Any(segment => segment == null ||
+            segment.fromCellIndex < 0 || segment.fromCellIndex >= map.cells.Length ||
+            segment.toCellIndex < 0 || segment.toCellIndex >= map.cells.Length ||
+            map.GetDirection(segment.fromCellIndex, segment.toCellIndex) < 0))
+            throw new InvalidDataException("世界地图河流索引无效");
+        if (map.spiritVeins.Any(vein => vein == null || vein.pathCellIndices == null ||
+            vein.pathCellIndices.Any(index => index < 0 || index >= map.cells.Length)))
+            throw new InvalidDataException("世界地图灵脉索引无效");
+
+        string[] requiredPointIds = { "qingyun_outskirts", "mistwood", "chixia_ridge" };
+        if (map.pointsOfInterest.Any(point => point == null || string.IsNullOrWhiteSpace(point.id) ||
+            point.cellIndex < 0 || point.cellIndex >= map.cells.Length) ||
+            map.pointsOfInterest.GroupBy(point => point.id).Any(group => group.Count() != 1) ||
+            requiredPointIds.Any(id => map.pointsOfInterest.All(point => point.id != id)))
+            throw new InvalidDataException("世界地图探索地点映射无效");
+
+        FoundingState founding = state.sect?.founding;
+        if (founding == null) return;
+        int selected = founding.selectedWorldCellIndex;
+        if (selected < -1 || selected >= map.cells.Length)
+            throw new InvalidDataException("洞府选址索引无效");
+        if (founding.initialized && founding.stage != FoundingStage.WorldSelection &&
+            (selected < 0 || !map.cells[selected].isBuildable))
+            throw new InvalidDataException("存档缺少有效的洞府选址");
     }
 
     private static ActiveThreatState NormalizeThreatState(ActiveThreatState state)

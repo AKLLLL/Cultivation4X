@@ -49,14 +49,21 @@ public class ExplorationPanel : MonoBehaviour
         AddPageTab(tabs, ExplorationPage.Dispatch, "派遣弟子");
         content = RuntimeUIFactory.ScrollContent(panel, "ExplorationScroll");
         closeButton = RuntimeUIFactory.Button(panel, "关闭", 40);
-        closeButton.onClick.AddListener(() => panel.gameObject.SetActive(false));
+        closeButton.onClick.AddListener(Close);
         panel.gameObject.SetActive(false);
     }
 
     private void Open()
     {
-        panel.gameObject.SetActive(true);
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject);
+        else panel.gameObject.SetActive(true);
         Refresh();
+    }
+
+    private void Close()
+    {
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(panel.gameObject);
+        else panel.gameObject.SetActive(false);
     }
 
     private void Refresh()
@@ -104,7 +111,12 @@ public class ExplorationPanel : MonoBehaviour
         foreach (ExplorationRegionDefinition region in regions)
         {
             ExplorationRegionState state = ExplorationRules.GetState(region.id);
-            string label = state == null ? "未知区域" : $"{region.name}　发现度 {state.stage * 100 / ExplorationRules.MaxStage}%";
+            int mapCellIndex = ExplorationRules.GetMapCellIndex(region.id);
+            string coordinate = mapCellIndex >= 0 && Cultivation4X.WorldMap.WorldMapSession.Current != null
+                ? $"　地图格 {Cultivation4X.WorldMap.WorldMapSession.Current.cells[mapCellIndex].coord.col}," +
+                  $"{Cultivation4X.WorldMap.WorldMapSession.Current.cells[mapCellIndex].coord.row}"
+                : string.Empty;
+            string label = state == null ? "未知区域" : $"{region.name}　发现度 {state.stage * 100 / ExplorationRules.MaxStage}%{coordinate}";
             Button button = RuntimeUIFactory.Button(content, label, 42);
             button.onClick.AddListener(() =>
             {
