@@ -34,6 +34,7 @@ namespace Cultivation4X.WorldMap
         private TMP_Text details;
         private Button auraButton;
         private Button confirmButton;
+        private Button sectBriefButton;
         private Canvas hudCanvas;
         private RectTransform hudControls;
         private GameObject selectionBlocker;
@@ -59,6 +60,7 @@ namespace Cultivation4X.WorldMap
             mapCamera.orthographic = true;
             mapCamera.backgroundColor = new Color(0.035f, 0.045f, 0.055f);
             mapCamera.transform.position = new Vector3(0f, 0f, -10f);
+            mapCamera.transform.rotation = Quaternion.identity;
             CreateLayerRoots();
             CreateHud();
         }
@@ -80,14 +82,16 @@ namespace Cultivation4X.WorldMap
         private void Update()
         {
             if (map == null || mapCamera == null) return;
+            bool panelOpen = UIManager.Instance != null && UIManager.Instance.HasOpenPanels;
             float wheel = Input.mouseScrollDelta.y;
-            if (Mathf.Abs(wheel) > 0.01f)
+            if (Mathf.Abs(wheel) > 0.01f && !panelOpen)
             {
                 mapCamera.orthographicSize = Mathf.Clamp(mapCamera.orthographicSize * (wheel > 0 ? 0.88f : 1.12f), 5f, 140f);
                 RefreshPresentationForZoom();
             }
-            if (Input.GetMouseButtonDown(1)) dragOrigin = mapCamera.ScreenToWorldPoint(Input.mousePosition);
-            if (Input.GetMouseButton(1))
+            if (Input.GetMouseButtonDown(1) && !panelOpen)
+                dragOrigin = mapCamera.ScreenToWorldPoint(Input.mousePosition);
+            if (Input.GetMouseButton(1) && !panelOpen)
             {
                 Vector3 current = mapCamera.ScreenToWorldPoint(Input.mousePosition);
                 Vector3 delta = dragOrigin - current;
@@ -121,8 +125,10 @@ namespace Cultivation4X.WorldMap
                         continue;
 
                     // The transparent blocker exists only to stop the game's other canvases.
-                    // It intentionally still permits selecting a map cell.
-                    return result.gameObject != selectionBlocker;
+                    // It intentionally still permits selecting a map cell, but it must not
+                    // hide a real HUD control that appears later in the raycast results.
+                    if (result.gameObject == selectionBlocker) continue;
+                    return true;
                 }
             }
 
@@ -172,6 +178,7 @@ namespace Cultivation4X.WorldMap
             if (viewMode == WorldMapViewMode.Landform || viewMode == WorldMapViewMode.Biome) BuildRivers();
             if (viewMode == WorldMapViewMode.SpiritVeinPaths) BuildVeins();
             BuildPresentationLayers();
+            BuildInfluenceOverlay();
             RebuildSelection();
         }
 
@@ -212,7 +219,8 @@ namespace Cultivation4X.WorldMap
 
         private void BuildRivers()
         {
-            WorldMapGeometryBuffer buffer = WorldMapOverlayGeometry.BuildRiverGeometry(map, Center);
+            WorldMapGeometryBuffer buffer = WorldMapOverlayGeometry.BuildRiverGeometry(
+                map, Center, CanShowGameplayCell);
             AddMeshObject("Rivers", buffer, Layer("Rivers"), 3);
         }
 
@@ -268,7 +276,11 @@ namespace Cultivation4X.WorldMap
             blockerRect.anchorMax = Vector2.one;
             blockerRect.offsetMin = blockerRect.offsetMax = Vector2.zero;
             selectionBlocker.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.001f);
-            hudControls = RuntimeUIFactory.Panel(hud.transform, "MapControls", new Vector2(0.79f, 0.20f), new Vector2(0.99f, 0.76f));
+            hudControls = RuntimeUIFactory.Panel(hud.transform, "MapControls",
+                new Vector2(0.79f, 1f), new Vector2(0.99f, 1f));
+            hudControls.pivot = new Vector2(0.5f, 1f);
+            hudControls.anchoredPosition = new Vector2(0f, -64f);
+            hudControls.sizeDelta = new Vector2(0f, 380f);
             RectTransform panel = hudControls;
             RuntimeUIFactory.Text(panel, "世界地图", 25, 38);
             auraButton = RuntimeUIFactory.Button(panel, "普通 / 灵气视图", 38);
@@ -281,10 +293,19 @@ namespace Cultivation4X.WorldMap
             Button fit = RuntimeUIFactory.Button(panel, "回到全图", 38);
             fit.onClick.AddListener(FitCamera);
             details = RuntimeUIFactory.Text(panel, "点击地图格查看详情。", 16, 95);
-            confirmButton = RuntimeUIFactory.Button(panel, "确认洞府选址", 42);
+            confirmButton = RuntimeUIFactory.Button(panel, "建立宗门", 42);
             confirmButton.onClick.AddListener(ConfirmSite);
             confirmButton.gameObject.SetActive(false);
             CreateObservabilityHud(hud.transform);
+            // 宗门简报按钮固定在界面左下角，面板本身仍居中弹出。
+            sectBriefButton = RuntimeUIFactory.Button(hud.transform, "宗门简报", 38);
+            RectTransform briefRect = sectBriefButton.GetComponent<RectTransform>();
+            briefRect.anchorMin = briefRect.anchorMax = new Vector2(0f, 0f);
+            briefRect.pivot = new Vector2(0f, 0f);
+            briefRect.anchoredPosition = new Vector2(12f, 12f);
+            briefRect.sizeDelta = new Vector2(130f, 38f);
+            sectBriefButton.onClick.AddListener(() => SectWorldInterface.Instance?.OpenSectBrief());
+            sectBriefButton.gameObject.SetActive(false);
         }
 
         private void ConfirmSite()
@@ -297,16 +318,18 @@ namespace Cultivation4X.WorldMap
         private void RefreshSelectionMode()
         {
             bool selecting = PlayerManager.Instance?.playerData?.founding?.stage == FoundingStage.WorldSelection;
-            bool completed = PlayerManager.Instance?.playerData?.founding?.completed == true;
+            bool hasSectBase = WorldMapProgressRules.GetSectBase(WorldMapSession.Progress) != null;
             RefreshPresentationMarkers();
             if (selecting && viewMode != WorldMapViewMode.Landform)
                 viewMode = WorldMapViewMode.Landform;
             if (hudCanvas != null) hudCanvas.sortingOrder = selecting ? 1000 : 100;
             if (selectionBlocker != null) selectionBlocker.SetActive(selecting);
-            if (hudControls != null) hudControls.gameObject.SetActive(selecting || completed);
-            if (auraButton != null) auraButton.interactable = !selecting;
+            if (hudControls != null) hudControls.gameObject.SetActive(selecting || hasSectBase);
+            if (auraButton != null) auraButton.gameObject.SetActive(false);
             if (confirmButton != null) confirmButton.gameObject.SetActive(selecting);
-            SetObservabilityVisible(completed && !selecting);
+            if (sectBriefButton != null) sectBriefButton.gameObject.SetActive(false);
+            SetDebugToggleVisible(!selecting && hasSectBase);
+            if (selecting) SetDebugViewEnabled(false);
             if (map != null) Rebuild();
             RefreshDetails();
         }
@@ -317,11 +340,31 @@ namespace Cultivation4X.WorldMap
             if (details != null)
                 details.text = selectedCellIndex < 0 && selecting
                     ? "请在地图上选择可建设格作为洞府。"
-                    : WorldMapCellDetailsFormatter.Format(map, selectedCellIndex, viewMode, selecting, presentationMarkers);
+                    : WorldMapCellDetailsFormatter.Format(map, selectedCellIndex, viewMode, selecting,
+                        VisibleMarkersForDetails(), WorldMapSession.Progress, PlayerManager.Instance?.playerData);
             if (confirmButton != null)
                 confirmButton.interactable = selecting && map?.cells != null &&
                                              selectedCellIndex >= 0 && selectedCellIndex < map.cells.Length &&
                                              map.cells[selectedCellIndex].isBuildable;
+            if (sectBriefButton != null)
+            {
+                MapSiteData sectBase = WorldMapProgressRules.GetSectBase(WorldMapSession.Progress);
+                sectBriefButton.gameObject.SetActive(!selecting && sectBase != null &&
+                                                      sectBase.cellIndex == selectedCellIndex);
+            }
+        }
+
+        private IEnumerable<WorldMapPresentationMarker> VisibleMarkersForDetails() =>
+            presentationMarkers.Where(marker => marker != null && CanShowGameplayCell(marker.cellIndex));
+
+        private bool CanShowGameplayCell(int cellIndex)
+        {
+            if (debugViewEnabled) return true;
+            PlayerData sect = PlayerManager.Instance?.playerData;
+            FoundingState founding = sect?.founding;
+            if (founding == null || !FoundingRules.HasReachedCave(founding)) return true;
+            return WorldMapProgressRules.GetKnowledge(map, WorldMapSession.Progress, cellIndex,
+                founding.selectedWorldCellIndex, sect.influenceRadius) == KnowledgeState.Known;
         }
 
         private void FitCamera()
@@ -330,6 +373,7 @@ namespace Cultivation4X.WorldMap
             float width = (map.width + 0.5f) * Sqrt3;
             float height = map.height * 1.5f;
             mapCamera.transform.position = new Vector3(width * 0.5f, height * 0.5f, -10f);
+            mapCamera.transform.rotation = Quaternion.identity;
             mapCamera.orthographicSize = Mathf.Max(height * 0.53f, width / Mathf.Max(1.2f, mapCamera.aspect) * 0.53f);
             RefreshPresentationForZoom();
         }

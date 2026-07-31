@@ -23,6 +23,11 @@ public class UIManager : MonoBehaviour
     /// </summary>
     private readonly Stack<PanelEntry> panelStack = new Stack<PanelEntry>();
 
+    /// <summary>
+    /// 是否还有未关闭的模态面板（世界地图据此暂停缩放和平移）。
+    /// </summary>
+    public bool HasOpenPanels => panelStack.Count > 0;
+
     private sealed class PanelEntry
     {
         public GameObject panel;
@@ -30,6 +35,7 @@ public class UIManager : MonoBehaviour
         public Canvas canvas;
         public bool previousOverrideSorting;
         public int previousSortingOrder;
+        public int assignedSortingOrder;
     }
 
     private void Awake()
@@ -78,23 +84,51 @@ public class UIManager : MonoBehaviour
             Debug.LogWarning("UIPanel为空");
             return;
         }
-        // 已经打开，不重复压栈
+        // 已经打开的面板再次打开时，提升到栈顶并置为最上层，
+        // 避免被后打开的面板（如宗门布局）盖住。
         if (panel.activeSelf)
+        {
+            PanelEntry existing = RemoveFromStack(panel);
+            if (existing != null)
+            {
+                existing.assignedSortingOrder = nextSortingOrder++;
+                existing.canvas.overrideSorting = true;
+                existing.canvas.sortingOrder = existing.assignedSortingOrder;
+                panelStack.Push(existing);
+            }
+            else
+            {
+                existing = CreateEntry(panel, onClose);
+                panelStack.Push(existing);
+            }
             return;
+        }
 
+        PanelEntry entry = CreateEntry(panel, onClose);
+        panel.SetActive(true);
+        // 运行时添加的嵌套 Canvas 在对象激活时会被父画布重置，
+        // 激活后必须重新应用层级。
+        entry.canvas.overrideSorting = true;
+        entry.canvas.sortingOrder = entry.assignedSortingOrder;
+        panelStack.Push(entry);
+    }
+
+    private PanelEntry CreateEntry(GameObject panel, Action onClose)
+    {
         Canvas canvas = EnsurePanelCanvas(panel);
+        int assigned = nextSortingOrder++;
         PanelEntry entry = new PanelEntry
         {
             panel = panel,
             onClose = onClose,
             canvas = canvas,
             previousOverrideSorting = canvas.overrideSorting,
-            previousSortingOrder = canvas.sortingOrder
+            previousSortingOrder = canvas.sortingOrder,
+            assignedSortingOrder = assigned
         };
         canvas.overrideSorting = true;
-        canvas.sortingOrder = nextSortingOrder++;
-        panel.SetActive(true);
-        panelStack.Push(entry);
+        canvas.sortingOrder = assigned;
+        return entry;
     }
 
     /// <summary>

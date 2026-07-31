@@ -182,6 +182,49 @@ namespace Cultivation4X.WorldMap
     public static class WorldMapCellDetailsFormatter
     {
         public static string Format(WorldMap map, int cellIndex, WorldMapViewMode mode, bool siteSelectionMode,
+            IEnumerable<WorldMapPresentationMarker> markers, WorldMapProgressState progress, PlayerData sect)
+        {
+            if (siteSelectionMode || sect?.founding == null ||
+                !FoundingRules.HasReachedCave(sect.founding))
+                return Format(map, cellIndex, mode, siteSelectionMode, markers);
+            if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
+                return "点击地图格查看详情。";
+
+            int home = sect.founding.selectedWorldCellIndex;
+            InfluenceLevel influence = WorldMapProgressRules.GetInfluence(
+                map, cellIndex, home, sect.influenceRadius);
+            KnowledgeState knowledge = WorldMapProgressRules.GetKnowledge(
+                map, progress, cellIndex, home, sect.influenceRadius);
+            WorldCell cell = map.cells[cellIndex];
+            if (knowledge == KnowledgeState.Unknown)
+                return $"坐标 {cell.coord.col},{cell.coord.row}\n认知：未知｜宗门影响：无";
+
+            string terrain = $"{LandformLabel(cell.landform)}/{BiomeLabel(cell.biome)}";
+            string markerText = string.Join("、", (markers ?? Enumerable.Empty<WorldMapPresentationMarker>())
+                .Where(marker => marker != null && marker.cellIndex == cellIndex).Select(marker => marker.label));
+            if (string.IsNullOrEmpty(markerText)) markerText = "无";
+            string veinSummary = map.spiritVeins?.Any(vein =>
+                vein?.pathCellIndices?.Contains(cellIndex) == true) == true ? "有" : "无";
+            string danger = DangerLabel(WorldMapProgressRules.GetDanger(cell));
+
+            if (influence != InfluenceLevel.Core)
+                return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n" +
+                       $"灵气：{AuraBand(cell.totalAura)}｜主五行：{DominantElementLabel(cell)}｜灵脉：{veinSummary}\n" +
+                       $"危险：{danger}｜地点：{markerText}｜宗门影响：" +
+                       (influence == InfluenceLevel.Influence ? "边缘" : "无");
+
+            string veins = string.Join("、", (map.spiritVeins ?? new List<SpiritVein>())
+                .Where(vein => vein?.pathCellIndices?.Contains(cellIndex) == true)
+                .Select(vein => $"{vein.id}({vein.primaryElement}/{vein.size})"));
+            if (string.IsNullOrEmpty(veins)) veins = "无";
+            return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}｜宗门影响：核心\n" +
+                   $"高度 {cell.height:0.000}｜温度 {cell.temperature:0.000}｜湿度 {cell.moisture:0.000}\n" +
+                   $"基础灵气 {cell.baseAura:0.000}｜总灵气 {cell.totalAura:0.000}\n" +
+                   $"金 {cell.elementalAura.metal:0.000} 木 {cell.elementalAura.wood:0.000} 水 {cell.elementalAura.water:0.000} 火 {cell.elementalAura.fire:0.000} 土 {cell.elementalAura.earth:0.000}\n" +
+                   $"危险：{danger}｜地点：{markerText}｜灵脉：{veins}";
+        }
+
+        public static string Format(WorldMap map, int cellIndex, WorldMapViewMode mode, bool siteSelectionMode,
             IEnumerable<WorldMapPresentationMarker> markers)
         {
             if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
@@ -190,9 +233,7 @@ namespace Cultivation4X.WorldMap
             string terrain = $"{LandformLabel(cell.landform)}/{BiomeLabel(cell.biome)}";
             if (siteSelectionMode)
             {
-                string auraBand = cell.totalAura < 0.25f ? "低" : cell.totalAura < 0.5f ? "普通" :
-                    cell.totalAura < 0.75f ? "浓郁" : "极高";
-                return $"格 {cell.coord.col},{cell.coord.row}｜{terrain}\n灵气：{auraBand}｜可建设：{(cell.isBuildable ? "是" : "否")}";
+                return $"格 {cell.coord.col},{cell.coord.row}｜{terrain}\n灵气：{AuraBand(cell.totalAura)}｜可建设：{(cell.isBuildable ? "是" : "否")}";
             }
 
             int incoming = map.rivers?.Count(segment => segment.toCellIndex == cellIndex) ?? 0;
@@ -248,6 +289,31 @@ namespace Cultivation4X.WorldMap
                 case BiomeType.Snowfield: return "雪原";
                 case BiomeType.Alpine: return "高山";
                 default: return biome.ToString();
+            }
+        }
+
+        public static string AuraBand(float aura) =>
+            aura < 0.25f ? "低" : aura < 0.5f ? "普通" : aura < 0.75f ? "浓郁" : "极高";
+
+        public static string DominantElementLabel(WorldCell cell)
+        {
+            if (cell == null) return "无";
+            string label = "金";
+            float maximum = cell.elementalAura.metal;
+            if (cell.elementalAura.wood > maximum) { label = "木"; maximum = cell.elementalAura.wood; }
+            if (cell.elementalAura.water > maximum) { label = "水"; maximum = cell.elementalAura.water; }
+            if (cell.elementalAura.fire > maximum) { label = "火"; maximum = cell.elementalAura.fire; }
+            if (cell.elementalAura.earth > maximum) label = "土";
+            return label;
+        }
+
+        public static string DangerLabel(WorldDangerLevel level)
+        {
+            switch (level)
+            {
+                case WorldDangerLevel.High: return "高";
+                case WorldDangerLevel.Medium: return "中";
+                default: return "低";
             }
         }
     }

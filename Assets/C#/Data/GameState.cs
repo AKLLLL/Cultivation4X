@@ -4,7 +4,7 @@ using Cultivation4X.WorldMap;
 
 public static class SaveDataVersion
 {
-    public const int Current = 8;
+    public const int Current = 9;
 }
 
 [Serializable]
@@ -16,6 +16,7 @@ public class GameState
     public int randomRollCount;
     public PlayerData sect = new PlayerData();
     public WorldMap worldMap;
+    public WorldMapProgressState worldMapProgress = new WorldMapProgressState();
     public WarehouseData warehouse = new WarehouseData();
     public List<CharacterState> characters = new List<CharacterState>();
     public List<MissionSaveData> activeMissions = new List<MissionSaveData>();

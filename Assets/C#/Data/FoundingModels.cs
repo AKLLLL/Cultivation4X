@@ -10,7 +10,8 @@ public enum FoundingStage
     CandidateSelection = 0,
     TechniqueSelection = 1,
     Cave = 2,
-    Completed = 3
+    Completed = 3,
+    SectConfirmation = 4
 }
 
 public enum FoundingActionKind
@@ -147,6 +148,9 @@ public static class FoundingRules
     }
 
     public static void ResetCatalogForTests() => catalog = null;
+
+    public static bool HasReachedCave(FoundingState state) =>
+        state != null && (state.stage == FoundingStage.Cave || state.stage == FoundingStage.Completed);
 
     public static FoundingTechniqueDefinition GetTechnique(string id) =>
         Catalog.techniques.FirstOrDefault(item => item.id == id);

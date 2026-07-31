@@ -177,7 +177,8 @@ namespace Cultivation4X.WorldMap
 
     public static class WorldMapOverlayGeometry
     {
-        public static WorldMapGeometryBuffer BuildRiverGeometry(WorldMap map, Func<HexCoord, Vector2> cellCenter)
+        public static WorldMapGeometryBuffer BuildRiverGeometry(WorldMap map, Func<HexCoord, Vector2> cellCenter,
+            Func<int, bool> cellVisible = null)
         {
             var buffer = new WorldMapGeometryBuffer();
             if (map?.rivers == null || map.cells == null || cellCenter == null) return buffer;
@@ -185,6 +186,9 @@ namespace Cultivation4X.WorldMap
             {
                 if (segment.fromCellIndex < 0 || segment.toCellIndex < 0 ||
                     segment.fromCellIndex >= map.cells.Length || segment.toCellIndex >= map.cells.Length)
+                    continue;
+                if (cellVisible != null &&
+                    (!cellVisible(segment.fromCellIndex) || !cellVisible(segment.toCellIndex)))
                     continue;
                 float width = Mathf.Clamp(0.055f + Mathf.Sqrt(Mathf.Max(0f, segment.flow)) / 55f, 0.07f, 0.26f);
                 buffer.AddLine(cellCenter(map.cells[segment.fromCellIndex].coord),

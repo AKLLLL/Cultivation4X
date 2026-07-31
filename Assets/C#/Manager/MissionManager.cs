@@ -616,7 +616,7 @@ public class MissionManager : MonoBehaviour
         if (!IsLaborOnlyFoundingAction(data.foundingAction)) { reason = "该任务不是劳动力任务"; return false; }
         if (PlayerManager.Instance == null || WarehouseManager.Instance == null) { reason = "资源系统尚未初始化"; return false; }
         FoundingState state = PlayerManager.Instance.playerData.founding;
-        if (state == null || state.stage < FoundingStage.Cave) { reason = "立宗剧情尚未进入该阶段"; return false; }
+        if (!FoundingRules.HasReachedCave(state)) { reason = "立宗剧情尚未进入该阶段"; return false; }
         if (state.village == null || state.village.totalLabor - state.village.reservedLabor < data.laborCost)
         { reason = "可用劳动力不足"; return false; }
         if (activeMissions.Any(item => (item.State == MissionState.Active || item.State == MissionState.WaitingNode) &&
@@ -685,7 +685,7 @@ public class MissionManager : MonoBehaviour
         bool routeAction = data.foundingAction == FoundingActionKind.RouteAlchemy ||
                            data.foundingAction == FoundingActionKind.RouteForge ||
                            data.foundingAction == FoundingActionKind.RouteFormation;
-        if (state == null || state.stage < FoundingStage.Cave)
+        if (!FoundingRules.HasReachedCave(state))
         { reason = "立宗剧情尚未进入该阶段"; return false; }
         if ((data.foundingAction == FoundingActionKind.RepairFacility ||
              data.foundingAction == FoundingActionKind.BuildRouteFacility) &&
@@ -975,7 +975,7 @@ public class MissionManager : MonoBehaviour
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
         if (data.isStoryAction)
         {
-            if (founding == null || founding.stage < FoundingStage.Cave) return false;
+            if (!FoundingRules.HasReachedCave(founding)) return false;
             if (data.foundingAction == FoundingActionKind.RepairFacility &&
                 Enum.TryParse(data.foundingTargetId, out FacilityType repaired) &&
                 PlayerManager.Instance.GetFacilityLevel(repaired) > 0) return false;

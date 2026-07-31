@@ -205,7 +205,8 @@ public class WorldMapIntegrationTests
                 {
                     initialized = true,
                     stage = FoundingStage.WorldSelection,
-                    selectedWorldCellIndex = -1
+                    selectedWorldCellIndex = -1,
+                    candidates = FoundingRules.GenerateCandidates(9191)
                 }
             }
         };

@@ -39,6 +39,7 @@ public class ExplorationPanel : MonoBehaviour
         rect.anchoredPosition = new Vector2(15, -70);
         rect.sizeDelta = new Vector2(150, 45);
         launcher.onClick.AddListener(Open);
+        launcher.gameObject.SetActive(false);
 
         panel = RuntimeUIFactory.Panel(transform, "ExplorationHall", new Vector2(0.12f, 0.06f), new Vector2(0.88f, 0.94f));
         RuntimeUIFactory.Text(panel, "探索堂", 30, 42);
@@ -59,6 +60,8 @@ public class ExplorationPanel : MonoBehaviour
         else panel.gameObject.SetActive(true);
         Refresh();
     }
+
+    public void OpenFromSectLayout() => Open();
 
     private void Close()
     {

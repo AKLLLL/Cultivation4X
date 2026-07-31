@@ -61,6 +61,7 @@ public class SaveManager : MonoBehaviour
             randomRollCount = EventManager.Instance == null ? 0 : EventManager.Instance.RandomRollCount,
             sect = PlayerManager.Instance == null ? new PlayerData() : PlayerManager.Instance.playerData,
             worldMap = WorldMapSession.Current,
+            worldMapProgress = WorldMapSession.Progress ?? new WorldMapProgressState(),
             warehouse = WarehouseManager.Instance == null ? new WarehouseData() : WarehouseManager.Instance.warehouseData,
             characters = NPCManager.Instance == null
                 ? new System.Collections.Generic.List<CharacterState>()
@@ -118,7 +119,7 @@ public class SaveManager : MonoBehaviour
             MigrateState(state);
             TimeManager.Instance?.RestoreDay(state.currentDay);
             if (PlayerManager.Instance != null) PlayerManager.Instance.playerData = state.sect ?? new PlayerData();
-            WorldMapSession.Set(state.worldMap);
+            WorldMapSession.Set(state.worldMap, state.worldMapProgress);
             if (WarehouseManager.Instance != null)
             {
                 WarehouseManager.Instance.warehouseData = state.warehouse ?? new WarehouseData();
@@ -148,6 +149,11 @@ public class SaveManager : MonoBehaviour
     {
         int sourceVersion = state.version;
         state.sect = state.sect ?? new PlayerData();
+        state.worldMapProgress = state.worldMapProgress ?? new WorldMapProgressState();
+        state.worldMapProgress.revealedCellIndices =
+            state.worldMapProgress.revealedCellIndices ?? new System.Collections.Generic.List<int>();
+        state.worldMapProgress.mapSites =
+            state.worldMapProgress.mapSites ?? new System.Collections.Generic.List<MapSiteData>();
         int minimumFacilityLevel = sourceVersion < 4 ? 1 : 0;
         state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
         state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
@@ -273,14 +279,105 @@ public class SaveManager : MonoBehaviour
             requiredPointIds.Any(id => map.pointsOfInterest.All(point => point.id != id)))
             throw new InvalidDataException("世界地图探索地点映射无效");
 
+        WorldMapProgressState progress = state.worldMapProgress;
+        if (progress?.revealedCellIndices == null || progress.mapSites == null)
+            throw new InvalidDataException("世界地图进度数据缺失");
+        if (progress.revealedCellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
+            progress.revealedCellIndices.Distinct().Count() != progress.revealedCellIndices.Count)
+            throw new InvalidDataException("世界地图认知索引无效");
+        if (progress.mapSites.Any(site => site == null || string.IsNullOrWhiteSpace(site.siteId) ||
+            site.cellIndex < 0 || site.cellIndex >= map.cells.Length ||
+            !Enum.IsDefined(typeof(MapSiteType), site.siteType)) ||
+            progress.mapSites.GroupBy(site => site.siteId).Any(group => group.Count() != 1))
+            throw new InvalidDataException("世界地图地点数据无效");
+
         FoundingState founding = state.sect?.founding;
-        if (founding == null) return;
+        if (founding == null || !founding.initialized)
+            throw new InvalidDataException("存档缺少有效的立宗状态");
+        if (!Enum.IsDefined(typeof(FoundingStage), founding.stage))
+            throw new InvalidDataException("立宗阶段无效");
+        if (founding.candidates == null || founding.candidates.Count < 3 ||
+            founding.candidates.Any(candidate => candidate == null ||
+                string.IsNullOrWhiteSpace(candidate.candidateId)) ||
+            founding.candidates.GroupBy(candidate => candidate.candidateId)
+                .Any(group => group.Count() != 1) ||
+            founding.selectedFounderIds == null)
+            throw new InvalidDataException("开局候选弟子数据无效");
+
+        bool foundersSelected = founding.stage == FoundingStage.TechniqueSelection ||
+                                founding.stage == FoundingStage.SectConfirmation ||
+                                founding.stage == FoundingStage.Cave ||
+                                founding.stage == FoundingStage.Completed;
+        if (!foundersSelected)
+        {
+            if (founding.selectedFounderIds.Count != 0 ||
+                !string.IsNullOrEmpty(founding.selectedTechniqueId) ||
+                (state.characters?.Count ?? 0) != 0)
+                throw new InvalidDataException("弟子选择前存在残留的立宗载荷");
+        }
+        else
+        {
+            if (founding.selectedFounderIds.Count != 3 ||
+                founding.selectedFounderIds.Any(string.IsNullOrWhiteSpace) ||
+                founding.selectedFounderIds.Distinct().Count() != 3 ||
+                founding.selectedFounderIds.Any(id =>
+                    founding.candidates.All(candidate => candidate.candidateId != id)) ||
+                state.characters == null ||
+                founding.selectedFounderIds.Any(id =>
+                    state.characters.Count(character => character?.characterId == id) != 1))
+                throw new InvalidDataException("已选弟子与角色快照不一致");
+        }
+
+        bool techniqueSelected = founding.stage == FoundingStage.SectConfirmation ||
+                                 founding.stage == FoundingStage.Cave ||
+                                 founding.stage == FoundingStage.Completed;
+        if (techniqueSelected)
+        {
+            if (FoundingRules.GetTechnique(founding.selectedTechniqueId) == null)
+                throw new InvalidDataException("存档缺少有效的初始功法");
+        }
+        else if (!string.IsNullOrEmpty(founding.selectedTechniqueId))
+            throw new InvalidDataException("功法选择前存在残留的初始功法");
+
         int selected = founding.selectedWorldCellIndex;
         if (selected < -1 || selected >= map.cells.Length)
             throw new InvalidDataException("洞府选址索引无效");
+        if (founding.stage == FoundingStage.WorldSelection && selected != -1)
+            throw new InvalidDataException("选址阶段不应已有洞府落点");
         if (founding.initialized && founding.stage != FoundingStage.WorldSelection &&
             (selected < 0 || !map.cells[selected].isBuildable))
             throw new InvalidDataException("存档缺少有效的洞府选址");
+
+        System.Collections.Generic.List<MapSiteData> sectBases = progress.mapSites
+            .Where(site => site.siteType == MapSiteType.SectBase).ToList();
+        bool hasEstablishedBase = founding.stage == FoundingStage.Cave ||
+                                  founding.stage == FoundingStage.Completed;
+        if (founding.completed != (founding.stage == FoundingStage.Completed))
+            throw new InvalidDataException("立宗完成标记与阶段不一致");
+        if (!hasEstablishedBase)
+        {
+            if (sectBases.Count != 0 ||
+                !string.IsNullOrEmpty(state.sect.sectId) ||
+                !string.IsNullOrEmpty(state.sect.sectName) ||
+                state.sect.influenceRadius != 0 ||
+                state.sect.foundedDay != 0)
+                throw new InvalidDataException("立宗确认前不应存在宗门驻地");
+            return;
+        }
+
+        MapSiteData sectBase = sectBases.Count == 1 ? sectBases[0] : null;
+        if (sectBase == null ||
+            sectBase.siteId != WorldMapProgressRules.PlayerSectBaseId ||
+            sectBase.cellIndex != selected ||
+            !sectBase.isRevealed || !sectBase.canInteract ||
+            state.sect.sectId != "player_sect" ||
+            string.IsNullOrWhiteSpace(state.sect.sectName) ||
+            state.sect.sectName.Length < 2 || state.sect.sectName.Length > 12 ||
+            state.sect.sectName.Any(char.IsControl) ||
+            state.sect.sectName != sectBase.siteName ||
+            state.sect.influenceRadius != 2 ||
+            state.sect.foundedDay < 0)
+            throw new InvalidDataException("宗门驻地与宗门数据不一致");
     }
 
     private static ActiveThreatState NormalizeThreatState(ActiveThreatState state)

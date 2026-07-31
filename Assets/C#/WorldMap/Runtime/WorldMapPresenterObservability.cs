@@ -17,6 +17,8 @@ namespace Cultivation4X.WorldMap
         private List<WorldMapPresentationMarker> presentationMarkers = new List<WorldMapPresentationMarker>();
         private WorldMapViewMode viewMode = WorldMapViewMode.Landform;
         private GameObject observabilityRoot;
+        private Button observabilityToggle;
+        private bool debugViewEnabled;
         private TMP_Text legendText;
         private TMP_Text statisticsText;
         private TMP_Text parametersText;
@@ -30,6 +32,7 @@ namespace Cultivation4X.WorldMap
         {
             bool selecting = PlayerManager.Instance?.playerData?.founding?.stage == FoundingStage.WorldSelection;
             if (selecting && mode != WorldMapViewMode.Landform) return;
+            if (!debugViewEnabled && mode != WorldMapViewMode.Landform) return;
             if (viewMode == mode) return;
             viewMode = mode;
             Rebuild();
@@ -64,7 +67,7 @@ namespace Cultivation4X.WorldMap
             foreach (string layerName in new[]
             {
                 "Terrain", "Boundaries", "TerrainIcons", "Rivers", "SpiritVeins",
-                "FactionMarkers", "LocationMarkers", "Selection"
+                "FactionMarkers", "LocationMarkers", "Influence", "Selection"
             })
             {
                 GameObject root = new GameObject(layerName);
@@ -84,11 +87,12 @@ namespace Cultivation4X.WorldMap
             int caveIndex = PlayerManager.Instance?.playerData?.founding?.selectedWorldCellIndex ?? -1;
             if (map?.cells != null && caveIndex >= 0 && caveIndex < map.cells.Length)
             {
+                MapSiteData sectBase = WorldMapProgressRules.GetSectBase(WorldMapSession.Progress);
                 presentationMarkers.Add(new WorldMapPresentationMarker
                 {
-                    id = "player_cave",
-                    label = "宗门洞府",
-                    kind = WorldMapMarkerKind.Cave,
+                    id = sectBase?.siteId ?? "player_cave",
+                    label = sectBase?.siteName ?? "待建洞府",
+                    kind = sectBase == null ? WorldMapMarkerKind.Cave : WorldMapMarkerKind.FactionSeat,
                     cellIndex = caveIndex
                 });
             }
@@ -100,10 +104,12 @@ namespace Cultivation4X.WorldMap
             WorldMapGeometryBuffer buffer = new WorldMapGeometryBuffer();
             foreach (WorldCell cell in map.cells)
             {
+                if (!CanShowGameplayCell(cell.index)) continue;
                 for (int direction = 0; direction < 6; direction++)
                 {
                     int neighborIndex = map.GetIndex(map.GetNeighbor(cell.coord, direction));
                     if (neighborIndex <= cell.index) continue;
+                    if (!CanShowGameplayCell(neighborIndex)) continue;
                     WorldCell neighbor = map.cells[neighborIndex];
                     bool cellWater = IsWater(cell.landform);
                     bool neighborWater = IsWater(neighbor.landform);
@@ -155,6 +161,7 @@ namespace Cultivation4X.WorldMap
                      WorldMapPresentationPolicy.BuildTerrainIconPlacements(
                          map, viewMode, projectedDiameter, presentationMarkers))
             {
+                if (!CanShowGameplayCell(placement.cellIndex)) continue;
                 WorldMapIconGeometry.AddTerrainIcon(terrain, placement.kind,
                     Center(map.cells[placement.cellIndex].coord), 0.72f, TerrainIconColor(placement.kind));
             }
@@ -169,6 +176,7 @@ namespace Cultivation4X.WorldMap
             foreach (WorldMapPresentationMarker marker in presentationMarkers)
             {
                 if (marker.cellIndex < 0 || marker.cellIndex >= map.cells.Length ||
+                    !CanShowGameplayCell(marker.cellIndex) ||
                     !WorldMapPresentationPolicy.MarkerVisible(marker, viewMode, lastDensityTier, map.effectiveSeed))
                     continue;
                 WorldMapGeometryBuffer target = marker.kind == WorldMapMarkerKind.Cave
@@ -182,6 +190,33 @@ namespace Cultivation4X.WorldMap
             AddMeshObject("LocationMarkers", locations, Layer("LocationMarkers"), 6);
             AddMeshObject("FactionMarkers", factions, Layer("FactionMarkers"), 7);
             AddMeshObject("CaveMarkers", caves, Layer("LocationMarkers"), 8);
+        }
+
+        private void BuildInfluenceOverlay()
+        {
+            PlayerData sect = PlayerManager.Instance?.playerData;
+            FoundingState founding = sect?.founding;
+            if (debugViewEnabled || !FoundingRules.HasReachedCave(founding) || map?.cells == null) return;
+            WorldMapGeometryBuffer buffer = new WorldMapGeometryBuffer();
+            foreach (WorldCell cell in map.cells)
+            {
+                InfluenceLevel influence = WorldMapProgressRules.GetInfluence(
+                    map, cell.index, founding.selectedWorldCellIndex, sect.influenceRadius);
+                if (influence == InfluenceLevel.None) continue;
+                Color color = influence == InfluenceLevel.Core
+                    ? new Color(1f, 0.74f, 0.18f, 0.95f)
+                    : new Color(0.52f, 0.82f, 1f, 0.52f);
+                float width = influence == InfluenceLevel.Core ? 0.11f : 0.045f;
+                Vector2 center = Center(cell.coord);
+                for (int corner = 0; corner < 6; corner++)
+                {
+                    float a = Mathf.Deg2Rad * (corner * 60f - 30f);
+                    float b = Mathf.Deg2Rad * ((corner + 1) * 60f - 30f);
+                    buffer.AddLine(center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.92f,
+                        center + new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * 0.92f, width, color);
+                }
+            }
+            AddMeshObject("SectInfluence", buffer, Layer("Influence"), 5);
         }
 
         private void RefreshPresentationForZoom()
@@ -239,6 +274,10 @@ namespace Cultivation4X.WorldMap
 
         private Color CellColor(WorldCell cell)
         {
+            if (!CanShowGameplayCell(cell.index))
+                // 未认知格显示压暗的地形色，只保留大概的地形轮廓。
+                return Color.Lerp(LandformColor(cell.landform),
+                    new Color(0.03f, 0.035f, 0.04f), 0.6f);
             switch (viewMode)
             {
                 case WorldMapViewMode.Landform: return LandformColor(cell.landform);
@@ -306,6 +345,14 @@ namespace Cultivation4X.WorldMap
 
         private void CreateObservabilityHud(Transform canvas)
         {
+            observabilityToggle = RuntimeUIFactory.Button(canvas, "地图调试", 38);
+            RectTransform toggleRect = observabilityToggle.GetComponent<RectTransform>();
+            toggleRect.anchorMin = toggleRect.anchorMax = new Vector2(0f, 0f);
+            toggleRect.pivot = new Vector2(0f, 0f);
+            toggleRect.anchoredPosition = new Vector2(152f, 12f);
+            toggleRect.sizeDelta = new Vector2(130f, 38f);
+            observabilityToggle.onClick.AddListener(() => SetDebugViewEnabled(!debugViewEnabled));
+
             observabilityRoot = new GameObject("WorldMapObservability", typeof(RectTransform),
                 typeof(Image), typeof(VerticalLayoutGroup));
             observabilityRoot.transform.SetParent(canvas, false);
@@ -315,6 +362,9 @@ namespace Cultivation4X.WorldMap
             rect.pivot = new Vector2(0f, 0.5f);
             rect.anchoredPosition = new Vector2(12f, 0f);
             rect.sizeDelta = new Vector2(410f, -24f);
+            // 上端避开顶部资源栏，下端避开左下角的地图调试按钮。
+            rect.offsetMin = new Vector2(rect.offsetMin.x, 58f);
+            rect.offsetMax = new Vector2(rect.offsetMax.x, -64f);
             observabilityRoot.GetComponent<Image>().color = new Color(0.04f, 0.04f, 0.04f, 0.86f);
             VerticalLayoutGroup layout = observabilityRoot.GetComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(12, 12, 12, 12);
@@ -343,7 +393,7 @@ namespace Cultivation4X.WorldMap
             AddViewButton(viewPage, "五行主属性", WorldMapViewMode.DominantElement);
             AddViewButton(viewPage, "灵脉路径", WorldMapViewMode.SpiritVeinPaths);
             GameObject legendGraphic = new GameObject("MapLegendSymbols", typeof(RectTransform),
-                typeof(WorldMapLegendGraphic), typeof(LayoutElement));
+                typeof(CanvasRenderer), typeof(WorldMapLegendGraphic), typeof(LayoutElement));
             legendGraphic.transform.SetParent(viewPage, false);
             legendGraphic.GetComponent<LayoutElement>().preferredHeight = 92f;
             legendText = AddObservabilityText(viewPage, string.Empty, 15, 210);
@@ -355,7 +405,7 @@ namespace Cultivation4X.WorldMap
                 "参数随地图快照保存；正式游戏中只读。", 15, 620);
 
             ShowObservabilityPage(0);
-            SetObservabilityVisible(false);
+            SetDebugViewEnabled(false);
         }
 
         private Transform CreateObservabilityScrollPage(string name)
@@ -410,6 +460,26 @@ namespace Cultivation4X.WorldMap
         private void SetObservabilityVisible(bool visible)
         {
             if (observabilityRoot != null) observabilityRoot.SetActive(visible);
+        }
+
+        private void SetDebugToggleVisible(bool visible)
+        {
+            if (observabilityToggle != null) observabilityToggle.gameObject.SetActive(visible);
+            if (!visible) SetDebugViewEnabled(false);
+        }
+
+        private void SetDebugViewEnabled(bool enabled)
+        {
+            debugViewEnabled = enabled;
+            if (!enabled && viewMode != WorldMapViewMode.Landform)
+                viewMode = WorldMapViewMode.Landform;
+            SetObservabilityVisible(enabled);
+            if (map != null)
+            {
+                Rebuild();
+                RefreshLegend();
+                RefreshDetails();
+            }
         }
 
         private void RefreshObservability()

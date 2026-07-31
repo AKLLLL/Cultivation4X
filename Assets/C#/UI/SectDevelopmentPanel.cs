@@ -24,6 +24,7 @@ public class SectDevelopmentPanel : MonoBehaviour
         launchRect.anchorMin = launchRect.anchorMax = new Vector2(0, 1); launchRect.pivot = new Vector2(0, 1);
         launchRect.anchoredPosition = new Vector2(15, -15); launchRect.sizeDelta = new Vector2(150, 45);
         launcher.onClick.AddListener(Open);
+        launcher.gameObject.SetActive(false);
         panel = RuntimeUIFactory.Panel(transform, "Development", new Vector2(0.12f, 0.1f), new Vector2(0.88f, 0.9f));
         RuntimeUIFactory.Text(panel, "宗门建设", 30, 48);
         resources = RuntimeUIFactory.Text(panel, string.Empty, 20, 44);
@@ -51,6 +52,8 @@ public class SectDevelopmentPanel : MonoBehaviour
         if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject, CloseInternal);
         else panel.gameObject.SetActive(true);
     }
+
+    public void OpenFromSectLayout() => Open();
 
     private void Close()
     {

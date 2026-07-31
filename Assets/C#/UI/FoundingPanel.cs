@@ -15,6 +15,8 @@ public class FoundingPanel : MonoBehaviour
     private Button candidateConfirmButton;
     private Button launcher;
     private GameObject blocker;
+    private TMP_InputField sectNameInput;
+    private TMP_Text sectConfirmationFeedback;
     private readonly HashSet<string> selectedCandidateIds = new HashSet<string>();
     private int candidatePage;
 
@@ -99,9 +101,11 @@ public class FoundingPanel : MonoBehaviour
         }
         FoundingState state = PlayerManager.Instance?.playerData?.founding;
         bool mandatory = state != null && !state.completed &&
-                         (state.stage == FoundingStage.CandidateSelection || state.stage == FoundingStage.TechniqueSelection);
+                         (state.stage == FoundingStage.CandidateSelection ||
+                          state.stage == FoundingStage.TechniqueSelection ||
+                          state.stage == FoundingStage.SectConfirmation);
         blocker.SetActive(mandatory);
-        launcher.gameObject.SetActive(state != null && state.stage != FoundingStage.WorldSelection && !mandatory);
+        launcher.gameObject.SetActive(false);
         if (mandatory)
         {
             OpenManagedPanel();
@@ -110,6 +114,12 @@ public class FoundingPanel : MonoBehaviour
     }
 
     private void Open()
+    {
+        OpenManagedPanel();
+        Refresh();
+    }
+
+    public void OpenFromSectLayout()
     {
         OpenManagedPanel();
         Refresh();
@@ -135,6 +145,7 @@ public class FoundingPanel : MonoBehaviour
 
         if (state.stage == FoundingStage.CandidateSelection) ShowCandidates(state);
         else if (state.stage == FoundingStage.TechniqueSelection) ShowTechniques();
+        else if (state.stage == FoundingStage.SectConfirmation) ShowSectConfirmation(state);
         else ShowCave(state);
     }
 
@@ -250,6 +261,66 @@ public class FoundingPanel : MonoBehaviour
         }
     }
 
+    private void ShowSectConfirmation(FoundingState state)
+    {
+        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
+        Cultivation4X.WorldMap.WorldMap map = Cultivation4X.WorldMap.WorldMapSession.Current;
+        Cultivation4X.WorldMap.WorldCell cell = map?.cells != null &&
+            state.selectedWorldCellIndex >= 0 && state.selectedWorldCellIndex < map.cells.Length
+                ? map.cells[state.selectedWorldCellIndex]
+                : null;
+        string location = cell == null
+            ? "无效"
+            : $"{cell.coord.col},{cell.coord.row}　" +
+              $"{Cultivation4X.WorldMap.WorldMapCellDetailsFormatter.LandformLabel(cell.landform)}/" +
+              $"{Cultivation4X.WorldMap.WorldMapCellDetailsFormatter.BiomeLabel(cell.biome)}";
+        RuntimeUIFactory.Text(content, "确认建立宗门", 32, 50);
+        RuntimeUIFactory.Text(content,
+            $"落点：{location}\n" +
+            $"核心弟子：{string.Join("、", state.selectedFounderIds.Select(id => state.candidates.FirstOrDefault(candidate => candidate.candidateId == id)?.displayName ?? id))}\n" +
+            $"初始功法：{technique?.name ?? "无效"}",
+            19, 94);
+        sectNameInput = CreateSectNameInput(content, "青云宗");
+        sectConfirmationFeedback = RuntimeUIFactory.Text(content,
+            "宗门名称为 2–12 个字符，确认后弟子与功法不可更改。", 17, 42);
+        Button confirm = RuntimeUIFactory.Button(content, "确认建立宗门", 46);
+        confirm.onClick.AddListener(() =>
+        {
+            if (PlayerManager.Instance == null) return;
+            if (!PlayerManager.Instance.ConfirmSectFounding(sectNameInput?.text, out string reason))
+            {
+                if (sectConfirmationFeedback != null) sectConfirmationFeedback.text = reason;
+                Debug.LogWarning(reason);
+                return;
+            }
+            CloseManagedPanel();
+            SectWorldInterface.Instance?.OpenSectBrief();
+        });
+    }
+
+    private static TMP_InputField CreateSectNameInput(Transform parent, string value)
+    {
+        GameObject root = new GameObject("SectNameInput", typeof(RectTransform), typeof(Image),
+            typeof(TMP_InputField), typeof(LayoutElement));
+        root.transform.SetParent(parent, false);
+        root.GetComponent<Image>().color = new Color(0.12f, 0.10f, 0.08f, 0.95f);
+        root.GetComponent<LayoutElement>().preferredHeight = 48f;
+
+        TMP_Text text = RuntimeUIFactory.Text(root.transform, value, 22, 46);
+        text.rectTransform.anchorMin = Vector2.zero;
+        text.rectTransform.anchorMax = Vector2.one;
+        text.rectTransform.offsetMin = new Vector2(12f, 4f);
+        text.rectTransform.offsetMax = new Vector2(-12f, -4f);
+        text.alignment = TextAlignmentOptions.MidlineLeft;
+
+        TMP_InputField input = root.GetComponent<TMP_InputField>();
+        input.textComponent = text;
+        input.textViewport = root.GetComponent<RectTransform>();
+        input.text = value;
+        input.characterLimit = 12;
+        return input;
+    }
+
     private void ShowCave(FoundingState state)
     {
         FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
@@ -317,7 +388,7 @@ public class FoundingPanel : MonoBehaviour
         if (PlayerManager.Instance?.playerData?.founding != null)
         {
             blocker.SetActive(false);
-            launcher.gameObject.SetActive(true);
+            launcher.gameObject.SetActive(false);
         }
     }
 

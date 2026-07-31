@@ -7,6 +7,11 @@ using UnityEngine;
 [System.Serializable]
 public class PlayerData
 {
+    public string sectId;
+    public string sectName;
+    public int foundedDay;
+    public int influenceRadius;
+
     /// <summary>
     /// 玩家金币
     /// </summary>

@@ -267,7 +267,17 @@ namespace Cultivation4X.WorldMap
     public static class WorldMapSession
     {
         public static WorldMap Current { get; private set; }
-        public static void Set(WorldMap map) => Current = map;
-        public static void Clear() => Current = null;
+        public static WorldMapProgressState Progress { get; private set; }
+        public static void Set(WorldMap map) => Set(map, new WorldMapProgressState());
+        public static void Set(WorldMap map, WorldMapProgressState progress)
+        {
+            Current = map;
+            Progress = progress ?? new WorldMapProgressState();
+        }
+        public static void Clear()
+        {
+            Current = null;
+            Progress = null;
+        }
     }
 }

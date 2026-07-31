@@ -51,9 +51,12 @@ public class AlchemyPanel : MonoBehaviour
     private void Open()
     {
         pendingMissionId = null;
-        panel.gameObject.SetActive(true);
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject);
+        else panel.gameObject.SetActive(true);
         Refresh();
     }
+
+    public void OpenFromSectLayout() => Open();
 
     private void Refresh()
     {
@@ -137,6 +140,10 @@ public class AlchemyPanel : MonoBehaviour
     private void AddCloseButton()
     {
         Button close = RuntimeUIFactory.Button(panel, "关闭", 40);
-        close.onClick.AddListener(() => panel.gameObject.SetActive(false));
+        close.onClick.AddListener(() =>
+        {
+            if (UIManager.Instance != null) UIManager.Instance.ClosePanel(panel.gameObject);
+            else panel.gameObject.SetActive(false);
+        });
     }
 }

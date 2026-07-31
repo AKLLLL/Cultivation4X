@@ -82,7 +82,7 @@ public class ExternalThreatPanel : MonoBehaviour
         ActiveThreatState threat = ExternalThreatRules.GetState();
         bool visible = threat != null &&
             (threat.status == ExternalThreatStatus.Active || threat.status == ExternalThreatStatus.Resolved);
-        if (launcher.gameObject.activeSelf != visible) launcher.gameObject.SetActive(visible);
+        if (launcher.gameObject.activeSelf) launcher.gameObject.SetActive(false);
         if (visible)
             launcher.GetComponentInChildren<TMP_Text>().text =
                 threat.status == ExternalThreatStatus.Resolved ? "上次威胁记录" : "外部威胁：青石村";
@@ -94,6 +94,8 @@ public class ExternalThreatPanel : MonoBehaviour
         if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject, CloseInternal);
         else panel.gameObject.SetActive(true);
     }
+
+    public void OpenFromSectLayout() => Open();
 
     public static bool TryOpenFromEvent(string eventId, string optionId)
     {
