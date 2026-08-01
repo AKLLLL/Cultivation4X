@@ -110,11 +110,10 @@ public class PlayerManager : MonoBehaviour
         { reason = "初始弟子运行时数据缺失"; return false; }
         if (FoundingRules.GetTechnique(state.selectedTechniqueId) == null)
         { reason = "初始功法数据无效"; return false; }
-        if (WorldMapProgressRules.GetSectBase(progress) != null || !string.IsNullOrEmpty(playerData.sectId))
+        if (WorldMapProgressRules.GetSectBase(progress) != null || !string.IsNullOrEmpty(playerData.sectId) ||
+            (progress?.influenceSources?.Count ?? 0) != 0 || (progress?.cellInfluences?.Count ?? 0) != 0)
         { reason = "宗门驻地已经建立"; return false; }
 
-        if (progress == null) progress = new WorldMapProgressState();
-        if (progress.mapSites == null) progress.mapSites = new List<MapSiteData>();
         MapSiteData sectBase = new MapSiteData
         {
             siteId = WorldMapProgressRules.PlayerSectBaseId,
@@ -124,14 +123,33 @@ public class PlayerManager : MonoBehaviour
             isRevealed = true,
             canInteract = true
         };
+        InfluenceSourceData sectBaseSource = new InfluenceSourceData
+        {
+            sourceId = sectBase.siteId,
+            sourceType = InfluenceSourceType.SectBase,
+            cellIndex = sectBase.cellIndex,
+            controllerSectId = "player_sect",
+            baseStrength = WorldMapInfluenceRules.SectBaseStrength,
+            radius = WorldMapInfluenceRules.SectBaseRadius,
+            isActive = true
+        };
+        WorldMapProgressState updatedProgress = new WorldMapProgressState
+        {
+            revealedCellIndices = new List<int>(progress?.revealedCellIndices ?? new List<int>()),
+            mapSites = new List<MapSiteData>(progress?.mapSites ?? new List<MapSiteData>()) { sectBase },
+            influenceSources = new List<InfluenceSourceData>(progress?.influenceSources ?? new List<InfluenceSourceData>())
+                { sectBaseSource },
+            cellInfluences = new List<CellInfluenceState>(),
+            isInfluenceDirty = true
+        };
+        WorldMapInfluenceRules.Recalculate(map, updatedProgress);
 
-        progress.mapSites.Add(sectBase);
         playerData.sectId = "player_sect";
         playerData.sectName = sectName;
         playerData.foundedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
         playerData.influenceRadius = 2;
         state.stage = FoundingStage.Cave;
-        WorldMapSession.Set(map, progress);
+        WorldMapSession.Set(map, updatedProgress);
         reason = null;
         OnFoundingChanged?.Invoke();
         SaveManager.Instance?.AutoSave();

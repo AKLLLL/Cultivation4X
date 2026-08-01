@@ -20,6 +20,7 @@ namespace Cultivation4X.WorldMap
         private Button observabilityToggle;
         private bool debugViewEnabled;
         private TMP_Text legendText;
+        private TMP_Text influenceLegendText;
         private TMP_Text statisticsText;
         private TMP_Text parametersText;
         private WorldMapIconDensityTier lastDensityTier = WorldMapIconDensityTier.Hidden;
@@ -197,16 +198,17 @@ namespace Cultivation4X.WorldMap
             PlayerData sect = PlayerManager.Instance?.playerData;
             FoundingState founding = sect?.founding;
             if (debugViewEnabled || !FoundingRules.HasReachedCave(founding) || map?.cells == null) return;
+            WorldMapProgressState progress = WorldMapSession.Progress;
+            WorldMapInfluenceRules.EnsureCurrent(map, progress);
             WorldMapGeometryBuffer buffer = new WorldMapGeometryBuffer();
-            foreach (WorldCell cell in map.cells)
+            foreach (CellInfluenceState influence in progress?.cellInfluences ??
+                     new List<CellInfluenceState>())
             {
-                InfluenceLevel influence = WorldMapProgressRules.GetInfluence(
-                    map, cell.index, founding.selectedWorldCellIndex, sect.influenceRadius);
-                if (influence == InfluenceLevel.None) continue;
-                Color color = influence == InfluenceLevel.Core
-                    ? new Color(1f, 0.74f, 0.18f, 0.95f)
-                    : new Color(0.52f, 0.82f, 1f, 0.52f);
-                float width = influence == InfluenceLevel.Core ? 0.11f : 0.045f;
+                if (influence == null || influence.level == InfluenceLevel.None ||
+                    influence.cellIndex < 0 || influence.cellIndex >= map.cells.Length) continue;
+                if (!WorldMapInfluencePresentation.TryGetOverlayStyle(
+                        influence.level, out Color color, out float width)) continue;
+                WorldCell cell = map.cells[influence.cellIndex];
                 Vector2 center = Center(cell.coord);
                 for (int corner = 0; corner < 6; corner++)
                 {

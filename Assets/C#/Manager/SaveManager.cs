@@ -54,6 +54,7 @@ public class SaveManager : MonoBehaviour
 
     public GameState CaptureState()
     {
+        WorldMapInfluenceRules.EnsureCurrent(WorldMapSession.Current, WorldMapSession.Progress);
         return new GameState
         {
             currentDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
@@ -115,6 +116,7 @@ public class SaveManager : MonoBehaviour
             if (state.version < SaveDataVersion.Current)
                 throw new InvalidDataException("世界地图生成版本更新不兼容旧档，请删除旧存档并开始新游戏");
 
+            PrepareInfluenceStateForValidation(state);
             ValidateWorldMapState(state);
             MigrateState(state);
             TimeManager.Instance?.RestoreDay(state.currentDay);
@@ -154,6 +156,10 @@ public class SaveManager : MonoBehaviour
             state.worldMapProgress.revealedCellIndices ?? new System.Collections.Generic.List<int>();
         state.worldMapProgress.mapSites =
             state.worldMapProgress.mapSites ?? new System.Collections.Generic.List<MapSiteData>();
+        state.worldMapProgress.influenceSources =
+            state.worldMapProgress.influenceSources ?? new System.Collections.Generic.List<InfluenceSourceData>();
+        state.worldMapProgress.cellInfluences =
+            state.worldMapProgress.cellInfluences ?? new System.Collections.Generic.List<CellInfluenceState>();
         int minimumFacilityLevel = sourceVersion < 4 ? 1 : 0;
         state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
         state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
@@ -280,7 +286,8 @@ public class SaveManager : MonoBehaviour
             throw new InvalidDataException("世界地图探索地点映射无效");
 
         WorldMapProgressState progress = state.worldMapProgress;
-        if (progress?.revealedCellIndices == null || progress.mapSites == null)
+        if (progress?.revealedCellIndices == null || progress.mapSites == null ||
+            progress.influenceSources == null || progress.cellInfluences == null)
             throw new InvalidDataException("世界地图进度数据缺失");
         if (progress.revealedCellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
             progress.revealedCellIndices.Distinct().Count() != progress.revealedCellIndices.Count)
@@ -290,6 +297,7 @@ public class SaveManager : MonoBehaviour
             !Enum.IsDefined(typeof(MapSiteType), site.siteType)) ||
             progress.mapSites.GroupBy(site => site.siteId).Any(group => group.Count() != 1))
             throw new InvalidDataException("世界地图地点数据无效");
+        ValidateInfluenceCache(map, progress);
 
         FoundingState founding = state.sect?.founding;
         if (founding == null || !founding.initialized)
@@ -357,6 +365,8 @@ public class SaveManager : MonoBehaviour
         if (!hasEstablishedBase)
         {
             if (sectBases.Count != 0 ||
+                progress.influenceSources.Count != 0 ||
+                progress.cellInfluences.Count != 0 ||
                 !string.IsNullOrEmpty(state.sect.sectId) ||
                 !string.IsNullOrEmpty(state.sect.sectName) ||
                 state.sect.influenceRadius != 0 ||
@@ -366,6 +376,9 @@ public class SaveManager : MonoBehaviour
         }
 
         MapSiteData sectBase = sectBases.Count == 1 ? sectBases[0] : null;
+        InfluenceSourceData sectBaseSource = progress.influenceSources.Count == 1
+            ? progress.influenceSources[0]
+            : null;
         if (sectBase == null ||
             sectBase.siteId != WorldMapProgressRules.PlayerSectBaseId ||
             sectBase.cellIndex != selected ||
@@ -376,8 +389,91 @@ public class SaveManager : MonoBehaviour
             state.sect.sectName.Any(char.IsControl) ||
             state.sect.sectName != sectBase.siteName ||
             state.sect.influenceRadius != 2 ||
-            state.sect.foundedDay < 0)
+            state.sect.foundedDay < 0 ||
+            sectBaseSource == null ||
+            sectBaseSource.sourceId != sectBase.siteId ||
+            sectBaseSource.sourceType != InfluenceSourceType.SectBase ||
+            sectBaseSource.cellIndex != sectBase.cellIndex ||
+            sectBaseSource.controllerSectId != state.sect.sectId ||
+            sectBaseSource.baseStrength != WorldMapInfluenceRules.SectBaseStrength ||
+            sectBaseSource.radius != WorldMapInfluenceRules.SectBaseRadius ||
+            !sectBaseSource.isActive)
             throw new InvalidDataException("宗门驻地与宗门数据不一致");
+    }
+
+    private static void PrepareInfluenceStateForValidation(GameState state)
+    {
+        if (state == null) return;
+        WorldMapProgressState progress = state.worldMapProgress;
+        if (progress == null) return;
+        if (progress.influenceSources == null) return;
+        progress.cellInfluences = progress.cellInfluences ??
+            new System.Collections.Generic.List<CellInfluenceState>();
+        bool sourcesSafe = state.worldMap?.cells != null &&
+                           progress.influenceSources.All(source =>
+                               WorldMapInfluenceRules.IsUsableSource(state.worldMap, source) &&
+                               source.baseStrength == WorldMapInfluenceRules.SectBaseStrength &&
+                               source.radius == WorldMapInfluenceRules.SectBaseRadius) &&
+                           progress.influenceSources.Select(source => source.sourceId)
+                               .Distinct(StringComparer.Ordinal).Count() == progress.influenceSources.Count;
+        if (sourcesSafe && (progress.isInfluenceDirty ||
+                            (progress.influenceSources.Count > 0 && progress.cellInfluences.Count == 0)))
+            WorldMapInfluenceRules.Recalculate(state.worldMap, progress);
+    }
+
+    private static void ValidateInfluenceCache(WorldMap map, WorldMapProgressState progress)
+    {
+        if (progress.isInfluenceDirty)
+            throw new InvalidDataException("世界地图影响力缓存未完成计算");
+        if (progress.influenceSources.Any(source =>
+                !WorldMapInfluenceRules.IsUsableSource(map, source) ||
+                !Enum.IsDefined(typeof(InfluenceSourceType), source.sourceType)) ||
+            progress.influenceSources.GroupBy(source => source.sourceId).Any(group => group.Count() != 1))
+            throw new InvalidDataException("世界地图影响力来源无效");
+        if (progress.cellInfluences.Any(cell => IsInvalidInfluenceCell(map, progress, cell)) ||
+            progress.cellInfluences.GroupBy(cell => cell.cellIndex).Any(group => group.Count() != 1) ||
+            !progress.cellInfluences.Select(cell => cell.cellIndex)
+                .SequenceEqual(progress.cellInfluences.Select(cell => cell.cellIndex).OrderBy(index => index)))
+            throw new InvalidDataException("世界地图影响力格缓存无效");
+
+        WorldMapProgressState expected = new WorldMapProgressState
+        {
+            influenceSources = progress.influenceSources,
+            isInfluenceDirty = true
+        };
+        WorldMapInfluenceRules.Recalculate(map, expected);
+        if (expected.cellInfluences.Count != progress.cellInfluences.Count)
+            throw new InvalidDataException("世界地图影响力缓存与来源不一致");
+        for (int index = 0; index < expected.cellInfluences.Count; index++)
+        {
+            CellInfluenceState left = expected.cellInfluences[index];
+            CellInfluenceState right = progress.cellInfluences[index];
+            if (left.cellIndex != right.cellIndex || left.value != right.value || left.level != right.level ||
+                left.controllerSectId != right.controllerSectId ||
+                !left.sourceIds.SequenceEqual(right.sourceIds, StringComparer.Ordinal))
+                throw new InvalidDataException("世界地图影响力缓存与来源不一致");
+        }
+    }
+
+    private static bool IsInvalidInfluenceCell(WorldMap map, WorldMapProgressState progress,
+        CellInfluenceState cell)
+    {
+        if (cell == null || cell.cellIndex < 0 || cell.cellIndex >= map.cells.Length ||
+            cell.value < 1 || cell.value > 100 ||
+            !Enum.IsDefined(typeof(InfluenceLevel), cell.level) ||
+            cell.level != WorldMapInfluenceRules.LevelForValue(cell.value) ||
+            string.IsNullOrWhiteSpace(cell.controllerSectId) ||
+            cell.sourceIds == null || cell.sourceIds.Count == 0 ||
+            cell.sourceIds.Any(string.IsNullOrWhiteSpace) ||
+            cell.sourceIds.Distinct(StringComparer.Ordinal).Count() != cell.sourceIds.Count ||
+            !cell.sourceIds.SequenceEqual(cell.sourceIds.OrderBy(id => id, StringComparer.Ordinal)))
+            return true;
+        foreach (string sourceId in cell.sourceIds)
+        {
+            InfluenceSourceData source = progress.influenceSources.FirstOrDefault(item => item.sourceId == sourceId);
+            if (source == null || source.controllerSectId != cell.controllerSectId) return true;
+        }
+        return false;
     }
 
     private static ActiveThreatState NormalizeThreatState(ActiveThreatState state)

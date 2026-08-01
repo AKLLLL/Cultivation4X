@@ -297,6 +297,13 @@ namespace Cultivation4X.WorldMap
             confirmButton.onClick.AddListener(ConfirmSite);
             confirmButton.gameObject.SetActive(false);
             CreateObservabilityHud(hud.transform);
+            influenceLegendText = RuntimeUIFactory.Text(hud.transform,
+                WorldMapInfluencePresentation.LegendText, 14, 30);
+            RectTransform legendRect = influenceLegendText.rectTransform;
+            legendRect.anchorMin = legendRect.anchorMax = new Vector2(0.5f, 0f);
+            legendRect.pivot = new Vector2(0.5f, 0f);
+            legendRect.anchoredPosition = new Vector2(0f, 12f);
+            legendRect.sizeDelta = new Vector2(560f, 30f);
             // 宗门简报按钮固定在界面左下角，面板本身仍居中弹出。
             sectBriefButton = RuntimeUIFactory.Button(hud.transform, "宗门简报", 38);
             RectTransform briefRect = sectBriefButton.GetComponent<RectTransform>();
@@ -328,6 +335,7 @@ namespace Cultivation4X.WorldMap
             if (auraButton != null) auraButton.gameObject.SetActive(false);
             if (confirmButton != null) confirmButton.gameObject.SetActive(selecting);
             if (sectBriefButton != null) sectBriefButton.gameObject.SetActive(false);
+            if (influenceLegendText != null) influenceLegendText.gameObject.SetActive(!selecting && hasSectBase);
             SetDebugToggleVisible(!selecting && hasSectBase);
             if (selecting) SetDebugViewEnabled(false);
             if (map != null) Rebuild();
@@ -360,11 +368,10 @@ namespace Cultivation4X.WorldMap
         private bool CanShowGameplayCell(int cellIndex)
         {
             if (debugViewEnabled) return true;
-            PlayerData sect = PlayerManager.Instance?.playerData;
-            FoundingState founding = sect?.founding;
+            FoundingState founding = PlayerManager.Instance?.playerData?.founding;
             if (founding == null || !FoundingRules.HasReachedCave(founding)) return true;
-            return WorldMapProgressRules.GetKnowledge(map, WorldMapSession.Progress, cellIndex,
-                founding.selectedWorldCellIndex, sect.influenceRadius) == KnowledgeState.Known;
+            return WorldMapInfluenceRules.GetCellState(map, WorldMapSession.Progress, cellIndex).knowledge ==
+                   KnowledgeState.Known;
         }
 
         private void FitCamera()

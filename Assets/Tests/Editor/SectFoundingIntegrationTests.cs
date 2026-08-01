@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Cultivation4X.WorldMap;
 using Newtonsoft.Json;
 using NUnit.Framework;
@@ -59,6 +60,14 @@ public class SectFoundingIntegrationTests
         Assert.NotNull(sectBase);
         Assert.AreEqual(buildable, sectBase.cellIndex);
         Assert.AreEqual("青云宗", sectBase.siteName);
+        Assert.AreEqual(1, WorldMapSession.Progress.influenceSources.Count);
+        Assert.AreEqual(sectBase.siteId, WorldMapSession.Progress.influenceSources.Single().sourceId);
+        InfluenceSourceData source = WorldMapSession.Progress.influenceSources.Single();
+        Assert.AreEqual(WorldMapInfluenceRules.SectBaseStrength, source.baseStrength);
+        Assert.AreEqual(WorldMapInfluenceRules.SectBaseRadius, source.radius);
+        Assert.IsTrue(source.isActive);
+        Assert.AreEqual(19, WorldMapSession.Progress.cellInfluences.Count);
+        Assert.IsFalse(WorldMapSession.Progress.isInfluenceDirty);
         Assert.IsFalse(player.ConfirmSectFounding("第二宗门", out _));
         Assert.AreEqual(1, WorldMapSession.Progress.mapSites.Count(site =>
             site.siteType == MapSiteType.SectBase));
@@ -100,7 +109,7 @@ public class SectFoundingIntegrationTests
     }
 
     [Test]
-    public void VersionNineSnapshot_RoundTripsSectProgressAndRejectsInconsistentBase()
+    public void VersionTenSnapshot_RoundTripsSectProgressAndRejectsInconsistentBase()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         NPCManager npcs = Add<NPCManager>("NPCs");
@@ -117,7 +126,7 @@ public class SectFoundingIntegrationTests
                 .Select(npc => npc.Character).ToList()
         };
 
-        Assert.AreEqual(9, state.version);
+        Assert.AreEqual(10, state.version);
         Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(state));
         GameState restored = JsonConvert.DeserializeObject<GameState>(
             JsonConvert.SerializeObject(state));
@@ -154,6 +163,8 @@ public class SectFoundingIntegrationTests
         missingTechnique.sect.sectName = null;
         missingTechnique.sect.influenceRadius = 0;
         missingTechnique.worldMapProgress.mapSites.Clear();
+        missingTechnique.worldMapProgress.influenceSources.Clear();
+        missingTechnique.worldMapProgress.cellInfluences.Clear();
         Assert.Throws<InvalidDataException>(() =>
             SaveManager.ValidateWorldMapState(missingTechnique));
 
@@ -161,6 +172,91 @@ public class SectFoundingIntegrationTests
             restored.worldMap.cells.Length - 1;
         Assert.Throws<InvalidDataException>(() =>
             SaveManager.ValidateWorldMapState(restored));
+
+        GameState invalidSource = JsonConvert.DeserializeObject<GameState>(
+            JsonConvert.SerializeObject(state));
+        invalidSource.worldMapProgress.influenceSources.Single().cellIndex = -1;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(invalidSource));
+
+        GameState invalidCache = JsonConvert.DeserializeObject<GameState>(
+            JsonConvert.SerializeObject(state));
+        invalidCache.worldMapProgress.cellInfluences.Single(item => item.level == InfluenceLevel.Core).value = 99;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(invalidCache));
+
+        foreach (System.Action<InfluenceSourceData> invalidate in new System.Action<InfluenceSourceData>[]
+                 {
+                     source => source.baseStrength = 99,
+                     source => source.radius = 1,
+                     source => source.isActive = false
+                 })
+        {
+            GameState invalidSchema = JsonConvert.DeserializeObject<GameState>(
+                JsonConvert.SerializeObject(state));
+            invalidate(invalidSchema.worldMapProgress.influenceSources.Single());
+            Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(invalidSchema));
+        }
+    }
+
+    [Test]
+    public void InfluenceLoadPreparation_DoesNotRepairMissingProgressOrSourceTruth()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        player.InitializeNewFoundingGame(804);
+        GameState valid = new GameState
+        {
+            worldMap = WorldMapSession.Current,
+            worldMapProgress = WorldMapSession.Progress,
+            sect = player.playerData
+        };
+        Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(valid));
+
+        GameState missingProgress = JsonConvert.DeserializeObject<GameState>(
+            JsonConvert.SerializeObject(valid));
+        missingProgress.worldMapProgress = null;
+
+        InvokeInfluencePreparation(missingProgress);
+
+        Assert.IsNull(missingProgress.worldMapProgress);
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(missingProgress));
+
+        GameState missingSources = JsonConvert.DeserializeObject<GameState>(
+            JsonConvert.SerializeObject(valid));
+        missingSources.worldMapProgress.influenceSources = null;
+
+        InvokeInfluencePreparation(missingSources);
+
+        Assert.IsNull(missingSources.worldMapProgress.influenceSources);
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(missingSources));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void InfluenceLoadPreparation_RecoversEmptyOrDirtyCache(bool dirty)
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        NPCManager npcs = Add<NPCManager>("NPCs");
+        PlayerManager.Instance = player;
+        NPCManager.Instance = npcs;
+        AdvanceToConfirmation(player, dirty ? 805 : 806);
+        Assert.IsTrue(player.ConfirmSectFounding("归元宗", out string reason), reason);
+        GameState state = new GameState
+        {
+            worldMap = WorldMapSession.Current,
+            worldMapProgress = WorldMapSession.Progress,
+            sect = player.playerData,
+            characters = npcs.GetAllNPC().Select(npc => npc.Character).ToList()
+        };
+        state = JsonConvert.DeserializeObject<GameState>(JsonConvert.SerializeObject(state));
+        int expectedInfluenceCount = state.worldMapProgress.cellInfluences.Count;
+        if (!dirty) state.worldMapProgress.cellInfluences.Clear();
+        state.worldMapProgress.isInfluenceDirty = dirty;
+
+        InvokeInfluencePreparation(state);
+
+        Assert.IsFalse(state.worldMapProgress.isInfluenceDirty);
+        Assert.AreEqual(expectedInfluenceCount, state.worldMapProgress.cellInfluences.Count);
+        Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(state));
     }
 
     [Test]
@@ -183,6 +279,14 @@ public class SectFoundingIntegrationTests
             .Select(candidate => candidate.candidateId).ToList();
         Assert.IsTrue(player.ConfirmFounderSelection(founders, out string founderReason), founderReason);
         Assert.IsTrue(player.SelectFoundingTechnique("qingmu", out string techniqueReason), techniqueReason);
+    }
+
+    private static void InvokeInfluencePreparation(GameState state)
+    {
+        MethodInfo method = typeof(SaveManager).GetMethod("PrepareInfluenceStateForValidation",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        method.Invoke(null, new object[] { state });
     }
 
     private T Add<T>(string name) where T : Component

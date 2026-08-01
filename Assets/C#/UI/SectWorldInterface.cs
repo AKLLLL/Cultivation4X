@@ -17,10 +17,6 @@ public sealed class SectWorldInterface : MonoBehaviour
     private RectTransform summaryPanel;
     private string lastResourceText;
     private float nextResourceRefreshTime;
-    private WorldMap cachedInfluenceMap;
-    private int cachedInfluenceHome = -1;
-    private int cachedInfluenceRadius = -1;
-    private int cachedInfluenceCount;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -81,8 +77,14 @@ public sealed class SectWorldInterface : MonoBehaviour
         int materials = WarehouseManager.Instance == null
             ? 0
             : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId);
-        int influence = WorldMapProgressRules.CountInfluenceCells(
-            map, site.cellIndex, sect.influenceRadius);
+        WorldMapProgressState progress = WorldMapSession.Progress;
+        WorldMapInfluenceRules.EnsureCurrent(map, progress);
+        int core = progress.cellInfluences.Count(item => item.level == InfluenceLevel.Core);
+        int influence = progress.cellInfluences.Count(item => item.level == InfluenceLevel.Influence);
+        int outer = progress.cellInfluences.Count(item => item.level == InfluenceLevel.Outer);
+        int known = progress.revealedCellIndices.Concat(progress.cellInfluences.Select(item => item.cellIndex))
+            .Distinct().Count();
+        int activeSources = progress.influenceSources.Count(item => item?.isActive == true);
 
         RuntimeUIFactory.Text(briefPanel, sect.sectName, 32, 48);
         RuntimeUIFactory.Text(briefPanel,
@@ -91,7 +93,8 @@ public sealed class SectWorldInterface : MonoBehaviour
             $"{WorldMapCellDetailsFormatter.BiomeLabel(cell.biome)}\n" +
             $"灵气 {WorldMapCellDetailsFormatter.AuraBand(cell.totalAura)}（{cell.totalAura:0.000}）　" +
             $"弟子 {disciples}　功法 {technique?.name ?? "无"}\n" +
-            $"灵材 {sect.gold}　基础材料 {materials}　声望 {sect.reputation}　影响格 {influence}",
+            $"灵材 {sect.gold}　基础材料 {materials}　声望 {sect.reputation}\n" +
+            $"影响力：核心 {core}　影响 {influence}　外缘 {outer}　认知并集 {known}　活跃来源 {activeSources}",
             19, 104);
         Button enter = RuntimeUIFactory.Button(briefPanel, "进入宗门", 46);
         enter.onClick.AddListener(OpenSectLayout);
@@ -216,8 +219,9 @@ public sealed class SectWorldInterface : MonoBehaviour
         FoundingState founding = sect?.founding;
         bool established = FoundingRules.HasReachedCave(founding) &&
                            WorldMapProgressRules.GetSectBase(WorldMapSession.Progress) != null;
-        int influence = established ? GetCachedInfluenceCount(
-            WorldMapSession.Current, founding.selectedWorldCellIndex, sect.influenceRadius) : 0;
+        WorldMapProgressState progress = WorldMapSession.Progress;
+        if (established) WorldMapInfluenceRules.EnsureCurrent(WorldMapSession.Current, progress);
+        int influence = established ? progress.cellInfluences.Count : 0;
         string value = $"灵材 {sect?.gold ?? 0} 基础材料 {materials} 弟子 {LivingDiscipleCount()} " +
                        $"声望 {sect?.reputation ?? 0} 影响 {influence}格 第 {day}天";
         if (value != lastResourceText && resourceText != null)
@@ -226,18 +230,6 @@ public sealed class SectWorldInterface : MonoBehaviour
             lastResourceText = value;
         }
         if (warehouseButton != null) warehouseButton.interactable = established;
-    }
-
-    private int GetCachedInfluenceCount(WorldMap map, int home, int radius)
-    {
-        if (cachedInfluenceMap == map && cachedInfluenceHome == home &&
-            cachedInfluenceRadius == radius)
-            return cachedInfluenceCount;
-        cachedInfluenceMap = map;
-        cachedInfluenceHome = home;
-        cachedInfluenceRadius = radius;
-        cachedInfluenceCount = WorldMapProgressRules.CountInfluenceCells(map, home, radius);
-        return cachedInfluenceCount;
     }
 
     private void OpenWarehouse() => OpenSceneComponent<WarehousePanel>();

@@ -4,7 +4,7 @@ using Cultivation4X.WorldMap;
 
 public static class SaveDataVersion
 {
-    public const int Current = 9;
+    public const int Current = 10;
 }
 
 [Serializable]

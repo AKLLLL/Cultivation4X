@@ -12,9 +12,15 @@ namespace Cultivation4X.WorldMap
 
     public enum InfluenceLevel
     {
-        None,
-        Influence,
-        Core
+        None = 0,
+        Outer = 1,
+        Influence = 2,
+        Core = 3
+    }
+
+    public enum InfluenceSourceType
+    {
+        SectBase = 0
     }
 
     public enum MapSiteType
@@ -45,31 +51,14 @@ namespace Cultivation4X.WorldMap
     {
         public List<int> revealedCellIndices = new List<int>();
         public List<MapSiteData> mapSites = new List<MapSiteData>();
+        public List<InfluenceSourceData> influenceSources = new List<InfluenceSourceData>();
+        public List<CellInfluenceState> cellInfluences = new List<CellInfluenceState>();
+        public bool isInfluenceDirty;
     }
 
     public static class WorldMapProgressRules
     {
         public const string PlayerSectBaseId = "player_sect_base";
-
-        public static InfluenceLevel GetInfluence(WorldMap map, int cellIndex, int homeCellIndex, int radius)
-        {
-            if (!IsValidCell(map, cellIndex) || !IsValidCell(map, homeCellIndex) || radius < 0)
-                return InfluenceLevel.None;
-            int distance = HexCoord.Distance(map.cells[cellIndex].coord, map.cells[homeCellIndex].coord);
-            if (distance == 0) return InfluenceLevel.Core;
-            return distance <= radius ? InfluenceLevel.Influence : InfluenceLevel.None;
-        }
-
-        public static KnowledgeState GetKnowledge(WorldMap map, WorldMapProgressState progress,
-            int cellIndex, int homeCellIndex, int radius)
-        {
-            if (!IsValidCell(map, cellIndex)) return KnowledgeState.Unknown;
-            if (GetInfluence(map, cellIndex, homeCellIndex, radius) != InfluenceLevel.None)
-                return KnowledgeState.Known;
-            return progress?.revealedCellIndices?.Contains(cellIndex) == true
-                ? KnowledgeState.Known
-                : KnowledgeState.Unknown;
-        }
 
         public static bool RevealCell(WorldMap map, WorldMapProgressState progress, int cellIndex)
         {
@@ -78,13 +67,6 @@ namespace Cultivation4X.WorldMap
             if (!progress.revealedCellIndices.Contains(cellIndex))
                 progress.revealedCellIndices.Add(cellIndex);
             return true;
-        }
-
-        public static int CountInfluenceCells(WorldMap map, int homeCellIndex, int radius)
-        {
-            if (map?.cells == null) return 0;
-            return map.cells.Count(cell =>
-                GetInfluence(map, cell.index, homeCellIndex, radius) != InfluenceLevel.None);
         }
 
         public static WorldDangerLevel GetDanger(WorldCell cell)
@@ -108,7 +90,7 @@ namespace Cultivation4X.WorldMap
             progress?.mapSites?.FirstOrDefault(site =>
                 site != null && site.siteType == MapSiteType.SectBase);
 
-        private static bool IsValidCell(WorldMap map, int cellIndex) =>
+        internal static bool IsValidCell(WorldMap map, int cellIndex) =>
             map?.cells != null && cellIndex >= 0 && cellIndex < map.cells.Length;
     }
 }

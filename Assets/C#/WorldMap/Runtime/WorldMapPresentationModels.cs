@@ -2,12 +2,33 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using UnityEngine;
 
 namespace Cultivation4X.WorldMap
 {
     public enum WorldMapTerrainIconKind { Water, Plain, Hill, Mountain, Forest, Snow }
     public enum WorldMapMarkerKind { FactionSeat, Village, Cave, PointOfInterest }
     public enum WorldMapIconDensityTier { Hidden, Sparse, Medium, Dense, Full }
+
+    public static class WorldMapInfluencePresentation
+    {
+        public const string LegendText = "影响力：外缘（冷色细边）　影响（蓝色）　核心（金色）";
+
+        public static bool TryGetOverlayStyle(InfluenceLevel level, out Color color, out float width)
+        {
+            switch (level)
+            {
+                case InfluenceLevel.Outer:
+                    color = new Color(0.45f, 0.70f, 0.88f, 0.34f); width = 0.035f; return true;
+                case InfluenceLevel.Influence:
+                    color = new Color(0.30f, 0.66f, 1f, 0.62f); width = 0.065f; return true;
+                case InfluenceLevel.Core:
+                    color = new Color(1f, 0.74f, 0.18f, 0.95f); width = 0.11f; return true;
+                default:
+                    color = default(Color); width = 0f; return false;
+            }
+        }
+    }
 
     [Serializable]
     public sealed class WorldMapPresentationMarker
@@ -190,14 +211,10 @@ namespace Cultivation4X.WorldMap
             if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
                 return "点击地图格查看详情。";
 
-            int home = sect.founding.selectedWorldCellIndex;
-            InfluenceLevel influence = WorldMapProgressRules.GetInfluence(
-                map, cellIndex, home, sect.influenceRadius);
-            KnowledgeState knowledge = WorldMapProgressRules.GetKnowledge(
-                map, progress, cellIndex, home, sect.influenceRadius);
+            CellInfluenceRuntimeState influence = WorldMapInfluenceRules.GetCellState(map, progress, cellIndex);
             WorldCell cell = map.cells[cellIndex];
-            if (knowledge == KnowledgeState.Unknown)
-                return $"坐标 {cell.coord.col},{cell.coord.row}\n认知：未知｜宗门影响：无";
+            if (influence.knowledge == KnowledgeState.Unknown)
+                return $"坐标 {cell.coord.col},{cell.coord.row}\n认知：未知";
 
             string terrain = $"{LandformLabel(cell.landform)}/{BiomeLabel(cell.biome)}";
             string markerText = string.Join("、", (markers ?? Enumerable.Empty<WorldMapPresentationMarker>())
@@ -207,21 +224,34 @@ namespace Cultivation4X.WorldMap
                 vein?.pathCellIndices?.Contains(cellIndex) == true) == true ? "有" : "无";
             string danger = DangerLabel(WorldMapProgressRules.GetDanger(cell));
 
-            if (influence != InfluenceLevel.Core)
+            string influenceSummary = $"认知：已知｜影响值：{influence.value}｜等级：{InfluenceLabel(influence.level)}｜" +
+                                      $"控制宗门：{influence.controllerSectId ?? "无"}｜来源：" +
+                                      (influence.sourceIds.Count == 0 ? "无" : string.Join("、", influence.sourceIds));
+            if (influence.level != InfluenceLevel.Core)
                 return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n" +
                        $"灵气：{AuraBand(cell.totalAura)}｜主五行：{DominantElementLabel(cell)}｜灵脉：{veinSummary}\n" +
-                       $"危险：{danger}｜地点：{markerText}｜宗门影响：" +
-                       (influence == InfluenceLevel.Influence ? "边缘" : "无");
+                       $"危险：{danger}｜地点：{markerText}\n{influenceSummary}";
 
             string veins = string.Join("、", (map.spiritVeins ?? new List<SpiritVein>())
                 .Where(vein => vein?.pathCellIndices?.Contains(cellIndex) == true)
                 .Select(vein => $"{vein.id}({vein.primaryElement}/{vein.size})"));
             if (string.IsNullOrEmpty(veins)) veins = "无";
-            return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}｜宗门影响：核心\n" +
+            return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n{influenceSummary}\n" +
                    $"高度 {cell.height:0.000}｜温度 {cell.temperature:0.000}｜湿度 {cell.moisture:0.000}\n" +
                    $"基础灵气 {cell.baseAura:0.000}｜总灵气 {cell.totalAura:0.000}\n" +
                    $"金 {cell.elementalAura.metal:0.000} 木 {cell.elementalAura.wood:0.000} 水 {cell.elementalAura.water:0.000} 火 {cell.elementalAura.fire:0.000} 土 {cell.elementalAura.earth:0.000}\n" +
                    $"危险：{danger}｜地点：{markerText}｜灵脉：{veins}";
+        }
+
+        private static string InfluenceLabel(InfluenceLevel level)
+        {
+            switch (level)
+            {
+                case InfluenceLevel.Outer: return "外缘";
+                case InfluenceLevel.Influence: return "影响";
+                case InfluenceLevel.Core: return "核心";
+                default: return "无";
+            }
         }
 
         public static string Format(WorldMap map, int cellIndex, WorldMapViewMode mode, bool siteSelectionMode,
