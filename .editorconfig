@@ -1,0 +1,12 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+
+[*.{cs,json,asmdef,asmref,shader,compute,txt,md}]
+charset = utf-8
+
+[*.meta]
+charset = utf-8

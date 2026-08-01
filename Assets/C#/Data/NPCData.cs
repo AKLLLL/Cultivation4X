@@ -35,6 +35,8 @@ public class NPCData : ScriptableObject
     [Header("天赋")]
     //悟性
     public int comprehension;
+    //战斗悟性；旧模板为0时运行时回退到普通悟性。
+    public int combatComprehension;
     //根骨
     public int physique;
 }

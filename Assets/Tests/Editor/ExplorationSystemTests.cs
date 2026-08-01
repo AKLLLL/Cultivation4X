@@ -52,7 +52,7 @@ public class ExplorationSystemTests
     {
         GameState state = JsonConvert.DeserializeObject<GameState>("{\"version\":2,\"sect\":{\"gold\":7,\"explorationRegions\":[{\"regionId\":\"qingyun_outskirts\",\"stage\":1},{\"regionId\":\"qingyun_outskirts\",\"stage\":8},{\"regionId\":\"future_region\",\"stage\":2}]}}");
         SaveManager.MigrateState(state);
-        Assert.AreEqual(3, state.version);
+        Assert.AreEqual(SaveDataVersion.Current, state.version);
         Assert.AreEqual(7, state.sect.gold);
         Assert.AreEqual(ExplorationRules.MaxStage, state.sect.explorationRegions.Single(item => item.regionId == "qingyun_outskirts").stage);
         Assert.AreEqual(2, state.sect.explorationRegions.Single(item => item.regionId == "future_region").stage);
@@ -131,7 +131,6 @@ public class ExplorationSystemTests
         NPCRuntime fourth = CreateRuntime(context.npcs, "fourth");
         context.player.playerData.explorationRegions.Add(new ExplorationRegionState { regionId = "qingyun_outskirts", stage = 1 });
         context.player.playerData.explorationRegions.Add(new ExplorationRegionState { regionId = "mistwood", stage = 0 });
-        context.player.playerData.explorationRegions.Add(new ExplorationRegionState { regionId = "chixia_ridge", stage = 0 });
 
         context.missions.TriggerMission(ExplorationRules.SurveyMissionId, context.npc);
         Assert.IsTrue(context.missions.CanTriggerMission("exploration_progress_qingyun", second, out _));

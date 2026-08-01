@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public static class SaveDataVersion
 {
-    public const int Current = 3;
+    public const int Current = 6;
 }
 
 [Serializable]
@@ -39,4 +39,7 @@ public class MissionSaveData
     public int elapsedDays;
     public int currentNodeIndex;
     public Reward reward;
+    public bool hasCapabilitySnapshot;
+    public int capabilityScore;
+    public MissionResultTier resultTier;
 }

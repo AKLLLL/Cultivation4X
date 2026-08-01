@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// UI管理器
@@ -8,6 +10,8 @@ using UnityEngine;
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
+    private const int ManagedPanelSortingBase = 2000;
+    private int nextSortingOrder = ManagedPanelSortingBase;
 
     [Header("所有UI面板")]
     [SerializeField]
@@ -17,7 +21,16 @@ public class UIManager : MonoBehaviour
     /// 当前打开的面板
     /// 后打开的位于栈顶。
     /// </summary>
-    private Stack<GameObject> panelStack = new Stack<GameObject>();
+    private readonly Stack<PanelEntry> panelStack = new Stack<PanelEntry>();
+
+    private sealed class PanelEntry
+    {
+        public GameObject panel;
+        public Action onClose;
+        public Canvas canvas;
+        public bool previousOverrideSorting;
+        public int previousSortingOrder;
+    }
 
     private void Awake()
     {
@@ -55,6 +68,11 @@ public class UIManager : MonoBehaviour
     /// </summary>
     public void OpenPanel(GameObject panel)
     {
+        OpenPanel(panel, null);
+    }
+
+    public void OpenPanel(GameObject panel, Action onClose)
+    {
         if (panel == null)
         {
             Debug.LogWarning("UIPanel为空");
@@ -64,9 +82,19 @@ public class UIManager : MonoBehaviour
         if (panel.activeSelf)
             return;
 
+        Canvas canvas = EnsurePanelCanvas(panel);
+        PanelEntry entry = new PanelEntry
+        {
+            panel = panel,
+            onClose = onClose,
+            canvas = canvas,
+            previousOverrideSorting = canvas.overrideSorting,
+            previousSortingOrder = canvas.sortingOrder
+        };
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = nextSortingOrder++;
         panel.SetActive(true);
-
-        panelStack.Push(panel);
+        panelStack.Push(entry);
     }
 
     /// <summary>
@@ -77,9 +105,10 @@ public class UIManager : MonoBehaviour
         if (panel == null)
             return;
 
+        PanelEntry entry = RemoveFromStack(panel);
         panel.SetActive(false);
-
-        RemoveFromStack(panel);
+        RestoreCanvas(entry);
+        entry?.onClose?.Invoke();
 
        // Debug.Log($"关闭面板：{panel.panelName}");
     }
@@ -91,12 +120,15 @@ public class UIManager : MonoBehaviour
     {
         while (panelStack.Count > 0)
         {
-            GameObject panel = panelStack.Pop();
+            PanelEntry entry = panelStack.Pop();
+            GameObject panel = entry.panel;
 
             if (panel==null)
                 continue;
             Debug.Log("关闭：" + panel.name);
             panel.SetActive(false);
+            RestoreCanvas(entry);
+            entry.onClose?.Invoke();
 
             return;
         }
@@ -106,26 +138,44 @@ public class UIManager : MonoBehaviour
     /// 从Stack移除指定面板
     /// Stack本身不能删除中间元素，因此需要重建。
     /// </summary>
-    private void RemoveFromStack(GameObject panel)
+    private PanelEntry RemoveFromStack(GameObject panel)
     {
         if (panelStack.Count == 0)
-            return;
+            return null;
 
-        Stack<GameObject> temp = new Stack<GameObject>();
+        Stack<PanelEntry> temp = new Stack<PanelEntry>();
+        PanelEntry removed = null;
 
         while (panelStack.Count > 0)
         {
-            GameObject p = panelStack.Pop();
+            PanelEntry entry = panelStack.Pop();
 
-            if (p != panel)
+            if (entry.panel != panel)
             {
-                temp.Push(p);
+                temp.Push(entry);
             }
+            else if (removed == null) removed = entry;
         }
 
         while (temp.Count > 0)
         {
             panelStack.Push(temp.Pop());
         }
+        return removed;
+    }
+
+    private static Canvas EnsurePanelCanvas(GameObject panel)
+    {
+        Canvas canvas = panel.GetComponent<Canvas>();
+        if (canvas == null) canvas = panel.AddComponent<Canvas>();
+        if (panel.GetComponent<GraphicRaycaster>() == null) panel.AddComponent<GraphicRaycaster>();
+        return canvas;
+    }
+
+    private static void RestoreCanvas(PanelEntry entry)
+    {
+        if (entry?.canvas == null) return;
+        entry.canvas.overrideSorting = entry.previousOverrideSorting;
+        entry.canvas.sortingOrder = entry.previousSortingOrder;
     }
 }

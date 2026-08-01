@@ -31,7 +31,7 @@ public class WarehouseManager : MonoBehaviour
 
             if (warehouseData == null) warehouseData = new WarehouseData();
             if (warehouseData.items.Count == 0)
-                warehouseData.items.Add(new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 10 });
+                warehouseData.items.Add(new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 5 });
             NormalizeItems();
 
             DontDestroyUtility.MarkPersistent(gameObject);
@@ -70,7 +70,7 @@ public class WarehouseManager : MonoBehaviour
     {
         NormalizeItems();
         int level = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse);
-        int freeSlots = FacilityRules.WarehouseSlots(level) - warehouseData.items.Count;
+        int freeSlots = Mathf.Max(0, FacilityRules.WarehouseSlots(level) - warehouseData.items.Count);
         var newIds = new System.Collections.Generic.HashSet<string>();
         foreach (ItemReward reward in rewards ?? new ItemReward[0])
         {

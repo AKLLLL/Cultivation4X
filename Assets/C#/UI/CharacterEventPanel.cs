@@ -10,6 +10,8 @@ public class CharacterEventPanel : MonoBehaviour
     private RectTransform panel;
     private TMP_Text titleText;
     private TMP_Text bodyText;
+    private RectTransform bodyContent;
+    private RectTransform optionsContainer;
     private readonly List<Button> optionButtons = new List<Button>();
     private RectTransform inboxPanel;
     private Button inboxButton;
@@ -50,26 +52,34 @@ public class CharacterEventPanel : MonoBehaviour
 
     private void Show(ActiveCharacterEvent active)
     {
-        inboxPanel.gameObject.SetActive(false);
-        panel.gameObject.SetActive(true);
+        CloseManaged(inboxPanel.gameObject);
+        OpenManaged(panel.gameObject);
         titleText.text = EventManager.Format(active.Definition.title, active.Participants);
         bodyText.text = EventManager.Format(active.Definition.body, active.Participants);
+        RefreshBodyLayout();
         foreach (Button button in optionButtons) Destroy(button.gameObject);
         optionButtons.Clear();
 
         foreach (EventOptionDefinition option in active.Definition.options)
         {
             EventOptionDefinition captured = option;
-            Button button = CreateButton(panel, option.text);
+            string eventId = active.Definition.id;
+            Button button = CreateButton(optionsContainer, option.text);
             button.interactable = EventManager.Instance.IsOptionAvailable(option.id, out string reason);
             if (!button.interactable && !string.IsNullOrWhiteSpace(reason))
                 button.GetComponentInChildren<TMP_Text>().text = $"{option.text}（{reason}）";
             button.onClick.AddListener(() =>
             {
-                if (EventManager.Instance.ChooseOption(captured.id)) { panel.gameObject.SetActive(false); RefreshInboxButton(); }
+                if (EventManager.Instance.ChooseOption(captured.id))
+                {
+                    CloseManaged(panel.gameObject);
+                    RefreshInboxButton();
+                    ExternalThreatPanel.TryOpenFromEvent(eventId, captured.id);
+                }
             });
             optionButtons.Add(button);
         }
+        LayoutRebuilder.ForceRebuildLayoutImmediate(optionsContainer);
     }
 
     private void BuildRuntimeUI()
@@ -87,7 +97,7 @@ public class CharacterEventPanel : MonoBehaviour
         inboxButton.onClick.AddListener(ShowInbox);
         inboxPanel = RuntimeUIFactory.Panel(transform, "Inbox", new Vector2(0.2f, 0.15f), new Vector2(0.8f, 0.85f));
 
-        GameObject panelObject = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        GameObject panelObject = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
         panelObject.transform.SetParent(transform, false);
         panel = panelObject.GetComponent<RectTransform>();
         panel.anchorMin = new Vector2(0.2f, 0.15f);
@@ -99,7 +109,10 @@ public class CharacterEventPanel : MonoBehaviour
         layout.spacing = 16;
         layout.childForceExpandHeight = false;
         titleText = CreateText(panel, 32, FontStyles.Bold);
-        bodyText = CreateText(panel, 22, FontStyles.Normal);
+        bodyContent = RuntimeUIFactory.ScrollContent(panel, "EventBodyScroll");
+        bodyText = CreateText(bodyContent, 22, FontStyles.Normal);
+        bodyText.GetComponent<LayoutElement>().preferredHeight = 90;
+        optionsContainer = CreateOptionsContainer(panel);
     }
 
     private void OnResolved(EventHistoryRecord _) => RefreshInboxButton();
@@ -113,7 +126,7 @@ public class CharacterEventPanel : MonoBehaviour
     private void ShowInbox()
     {
         if (EventManager.Instance == null) return;
-        panel.gameObject.SetActive(false);
+        CloseManaged(panel.gameObject);
         for (int i = inboxPanel.childCount - 1; i >= 0; i--) Destroy(inboxPanel.GetChild(i).gameObject);
         RuntimeUIFactory.Text(inboxPanel, "事件收件箱", 30, 48);
         foreach (EventInboxEntry entry in EventManager.Instance.GetInbox())
@@ -124,9 +137,22 @@ public class CharacterEventPanel : MonoBehaviour
             Button button = RuntimeUIFactory.Button(inboxPanel, $"{definition?.title ?? entry.eventId}　{expiry}", 48);
             button.onClick.AddListener(() => EventManager.Instance.OpenInboxEntry(captured.entryId));
         }
-        Button close = RuntimeUIFactory.Button(inboxPanel, "关闭"); close.onClick.AddListener(() => inboxPanel.gameObject.SetActive(false));
-        inboxPanel.gameObject.SetActive(true);
+        Button close = RuntimeUIFactory.Button(inboxPanel, "关闭"); close.onClick.AddListener(() => CloseManaged(inboxPanel.gameObject));
+        OpenManaged(inboxPanel.gameObject);
         RefreshInboxButton();
+    }
+
+    private static void OpenManaged(GameObject target)
+    {
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(target);
+        else target.SetActive(true);
+    }
+
+    private static void CloseManaged(GameObject target)
+    {
+        if (target == null || !target.activeSelf) return;
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(target);
+        else target.SetActive(false);
     }
 
     private static TMP_Text CreateText(Transform parent, int size, FontStyles style)
@@ -140,6 +166,35 @@ public class CharacterEventPanel : MonoBehaviour
         text.enableWordWrapping = true;
         obj.GetComponent<LayoutElement>().preferredHeight = size * 3;
         return text;
+    }
+
+    private void RefreshBodyLayout()
+    {
+        if (bodyText == null || bodyContent == null) return;
+        bodyText.ForceMeshUpdate();
+        LayoutElement bodyLayout = bodyText.GetComponent<LayoutElement>();
+        float height = Mathf.Max(90f, bodyText.preferredHeight + 24f);
+        bodyLayout.minHeight = height;
+        bodyLayout.preferredHeight = height;
+        LayoutRebuilder.ForceRebuildLayoutImmediate(bodyContent);
+        ScrollRect scroll = bodyContent.GetComponentInParent<ScrollRect>();
+        if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+    }
+
+    private static RectTransform CreateOptionsContainer(Transform parent)
+    {
+        GameObject obj = new GameObject("Options", typeof(RectTransform), typeof(VerticalLayoutGroup),
+            typeof(ContentSizeFitter), typeof(LayoutElement));
+        obj.transform.SetParent(parent, false);
+        VerticalLayoutGroup layout = obj.GetComponent<VerticalLayoutGroup>();
+        layout.spacing = 10;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+        obj.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        obj.GetComponent<LayoutElement>().flexibleHeight = 0;
+        return obj.GetComponent<RectTransform>();
     }
 
     private static Button CreateButton(Transform parent, string label)

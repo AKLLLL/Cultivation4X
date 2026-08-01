@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -23,6 +24,7 @@ public class TimeManager : MonoBehaviour
     private readonly System.Collections.Generic.List<FacilityUpgradeRecord> facilityUpgrades = new System.Collections.Generic.List<FacilityUpgradeRecord>();
     private int preAdvanceGoldChange;
     private int preAdvanceMaterialChange;
+    private readonly System.Collections.Generic.List<string> threatNotices = new System.Collections.Generic.List<string>();
     private bool isAdvancingDay;
     public DaySettlementSummary UnreadDaySettlement { get; private set; }
     public bool IsSettlementOpen { get; private set; }
@@ -56,9 +58,10 @@ public class TimeManager : MonoBehaviour
 
         Debug.Log($"今天是第 {CurrentDay} 天");
 
-        // 固定顺序：角色恢复/修炼 -> 任务推进 -> 事件抽取 -> 自动保存。
+        // 固定顺序：角色恢复/修炼 -> 任务推进 -> 外部威胁 -> 事件抽取 -> 结算 -> 自动保存。
         NPCManager.Instance?.OnDayPassed();
         OnDayPassed?.Invoke(CurrentDay);
+        ExternalThreatRules.ProcessDay(CurrentDay);
         EventManager.Instance?.ProcessDay(CurrentDay);
         isAdvancingDay = false;
         UnreadDaySettlement = BuildSettlement(before);
@@ -76,6 +79,11 @@ public class TimeManager : MonoBehaviour
         if (isAdvancingDay) return;
         preAdvanceGoldChange += goldChange;
         preAdvanceMaterialChange += basicMaterialChange;
+    }
+
+    public void RecordThreatNotice(string notice)
+    {
+        if (!string.IsNullOrWhiteSpace(notice)) threatNotices.Add(notice);
     }
 
     public void RestoreUnreadSettlement(DaySettlementSummary summary)
@@ -96,8 +104,11 @@ public class TimeManager : MonoBehaviour
         };
         if (NPCManager.Instance != null)
             foreach (NPCRuntime npc in NPCManager.Instance.GetAllNPC())
+            {
+                if (string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
                 result.characters[npc.CharacterId] = new CharacterSnapshot
                 { cultivation = npc.Cultivation, realm = npc.Realm, health = npc.Health };
+            }
         return result;
     }
 
@@ -110,15 +121,18 @@ public class TimeManager : MonoBehaviour
             reputationChange = (PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation) - before.reputation,
             basicMaterialChange = ((WarehouseManager.Instance == null ? 0 : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId)) - before.material) + preAdvanceMaterialChange,
             missionResults = MissionManager.Instance == null ? new System.Collections.Generic.List<MissionDayResult>() : MissionManager.Instance.ConsumeDailyResults(),
-            newEventTitles = EventManager.Instance == null ? new System.Collections.Generic.List<string>() : EventManager.Instance.ConsumeNewEventTitles(),
+            newEventTitles = (EventManager.Instance == null ? new System.Collections.Generic.List<string>() : EventManager.Instance.ConsumeNewEventTitles())
+                .Concat(threatNotices).ToList(),
             facilityUpgrades = new System.Collections.Generic.List<FacilityUpgradeRecord>(facilityUpgrades)
         };
         facilityUpgrades.Clear();
+        threatNotices.Clear();
         preAdvanceGoldChange = 0;
         preAdvanceMaterialChange = 0;
         if (NPCManager.Instance != null)
             foreach (NPCRuntime npc in NPCManager.Instance.GetAllNPC())
             {
+                if (string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
                 before.characters.TryGetValue(npc.CharacterId, out CharacterSnapshot old);
                 old = old ?? new CharacterSnapshot { realm = npc.Realm, health = npc.Health };
                 int cultivationChange = npc.Cultivation - old.cultivation;

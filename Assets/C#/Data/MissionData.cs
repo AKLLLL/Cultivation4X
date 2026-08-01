@@ -20,8 +20,14 @@ public class MissionData
     public int goldCost;
     public List<ItemReward> itemCosts = new List<ItemReward>();
     public bool isFacilityAction;
+    public bool usesFacilityLevelScaling = true;
+    public bool isStoryAction;
+    public FoundingActionKind foundingAction;
+    public string foundingTargetId;
+    public int laborCost;
     public ExplorationMissionKind explorationKind;
     public string explorationRegionId;
+    public ThreatMissionKind threatMissionKind;
 
     // 完成所需天数
     public int needDays;
@@ -35,6 +41,10 @@ public class MissionData
     public int requiredAttack;
     // 所需智力
     public int requiredIntelligence;
+    public int requiredCombatPower;
+    public List<string> preferredTechniqueTags = new List<string>();
+    public List<string> preferredTraitIds = new List<string>();
+    public int excellentScore = 130;
     // 事件节点
     // </summary>
     public List<MissionNodeData> nodes;

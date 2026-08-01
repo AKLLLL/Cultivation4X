@@ -7,7 +7,11 @@ public enum FacilityType
     TrainingRoom,
     SecretRealm,
     AlchemyRoom,
-    ExplorationHall
+    ExplorationHall,
+    ProtectionArray,
+    InheritanceChamber,
+    ForgeRoom,
+    FormationPlatform
 }
 
 [Serializable]
@@ -33,6 +37,8 @@ public static class FacilityRules
     public static int SecretRealmMaterialReward(int level) => LevelValue(level, 3, 5, 8);
     public static int AlchemyDays(int level) => LevelValue(level, 3, 2, 2);
     public static int AlchemyPillReward(int level) => LevelValue(level, 1, 1, 2);
+    public static int FailureInjuryDays(int protectionArrayLevel) => protectionArrayLevel > 0 ? 1 : 3;
+    public static int MaxMissionRankForReputation(int reputation) => reputation >= 300 ? 3 : reputation >= 100 ? 2 : 1;
 
     public static int ActionDays(FacilityType facility, int level)
     {
@@ -53,6 +59,7 @@ public static class FacilityRules
 
     private static int LevelValue(int level, int one, int two, int three)
     {
+        if (level <= 0) return 0;
         if (level <= 1) return one;
         return level == 2 ? two : three;
     }

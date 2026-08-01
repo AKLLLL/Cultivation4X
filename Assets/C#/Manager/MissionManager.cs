@@ -270,11 +270,15 @@ public class MissionManager : MonoBehaviour
             Debug.LogWarning(reason);
             return;
         }
+        if (!PlayerManager.Instance.TryReserveLabor(mission.Data.laborCost, out reason))
+        {
+            RefundMissionCosts(mission.Data);
+            Debug.LogWarning(reason);
+            return;
+        }
         mission.StartMission(npc);
         if (mission.Data.explorationKind == ExplorationMissionKind.None)
-            EventManager.Instance?.TryTriggerSource(mission.Data.isFacilityAction
-            ? (mission.Data.requiredFacility == FacilityType.SecretRealm ? EventSource.SecretRealm : EventSource.Alchemy)
-            : EventSource.MissionStart, npc);
+            TriggerMissionSource(mission.Data, npc, false);
 
         activeMissions.Add(mission); 
         if (mission.Data.explorationKind == ExplorationMissionKind.Ongoing)
@@ -285,7 +289,33 @@ public class MissionManager : MonoBehaviour
         Debug.Log(
             $"开始任务:{mission.Data.name}"
         );
+        SaveManager.Instance?.AutoSave();
+    }
 
+    public void TriggerLaborMission(string missionId)
+    {
+        if (!CanTriggerLaborMission(missionId, out string reason))
+        {
+            Debug.LogWarning(reason);
+            return;
+        }
+        Mission mission = CreateMission(missionId);
+        if (mission == null)
+            return;
+        if (!TrySpendMissionCosts(mission.Data, out reason))
+        {
+            Debug.LogWarning(reason);
+            return;
+        }
+        if (!PlayerManager.Instance.TryReserveLabor(mission.Data.laborCost, out reason))
+        {
+            RefundMissionCosts(mission.Data);
+            Debug.LogWarning(reason);
+            return;
+        }
+        mission.StartLaborMission();
+        activeMissions.Add(mission);
+        SaveManager.Instance?.AutoSave();
     }
 
 
@@ -294,6 +324,11 @@ public class MissionManager : MonoBehaviour
     /// </summary>
     public void EvaluateMission(Mission mission)
     {
+        if (mission.Data.threatMissionKind == ThreatMissionKind.Investigation)
+        {
+            EvaluateThreatInvestigation(mission);
+            return;
+        }
         if (mission.Data.explorationKind == ExplorationMissionKind.Ongoing)
         {
             EvaluateOngoingExploration(mission);
@@ -311,6 +346,24 @@ public class MissionManager : MonoBehaviour
         MissionData data =
             mission.Data;
 
+        if (IsLaborOnlyFoundingAction(data.foundingAction))
+        {
+            if (!RewardManager.Instance.CanGiveReward(mission.Reward))
+            {
+                mission.WaitForReward();
+                RecordResult(mission, MissionState.AwaitingReward);
+                Debug.LogWarning($"Labor mission reward is waiting for warehouse space: {data.name}");
+                return;
+            }
+            ApplyFoundingSuccess(data, null);
+            mission.CompleteMission();
+            GiveSectReward(mission.Reward);
+            RecordResult(mission, MissionState.Completed);
+            RemoveMission(mission);
+            SaveManager.Instance?.AutoSave();
+            return;
+        }
+
 
         if (npc == null)
         {
@@ -323,14 +376,11 @@ public class MissionManager : MonoBehaviour
 
         }
 
-        bool attackPass =
-            npc.Attack >= data.requiredAttack;
-
-        bool intelligencePass =
-            npc.Intelligence >= data.requiredIntelligence;
-
-        if (attackPass && intelligencePass)
+        if (mission.ResultTier != MissionResultTier.Insufficient)
         {
+
+            if (mission.ResultTier == MissionResultTier.Excellent) mission.ApplyExcellentRewardBonus();
+            RecordMissionOutcome(npc, data, mission.ResultTier);
 
             if (!RewardManager.Instance.CanGiveReward(mission.Reward))
             {
@@ -345,7 +395,11 @@ public class MissionManager : MonoBehaviour
                 $"【{npc.Data.npcName}】成功完成任务：【{data.name}】"
             );
 
+            ApplyFoundingSuccess(data, npc);
             mission.CompleteMission();
+
+            if (data.missionType == MissionType.Combat)
+                npc.AddCombatExperience(mission.ResultTier == MissionResultTier.Excellent ? 5 : 3);
 
             NPCManager.Instance.Recover(npc);
 
@@ -354,14 +408,17 @@ public class MissionManager : MonoBehaviour
                 mission.Reward
             );
             RecordResult(mission, MissionState.Completed);
-            EventManager.Instance?.TryTriggerSource(data.isFacilityAction
-                ? (data.requiredFacility == FacilityType.SecretRealm ? EventSource.SecretRealm : EventSource.Alchemy)
-                : EventSource.MissionComplete, npc);
+            TriggerMissionSource(data, npc, true);
             RemoveMission(mission);
+            SaveManager.Instance?.AutoSave();
 
         }
         else
         {
+
+            if (data.missionType == MissionType.Combat)
+                npc.AddCombatExperience(1);
+            RecordMissionOutcome(npc, data, MissionResultTier.Insufficient);
 
             Debug.Log(
                 $"任务失败：【{npc.Data.npcName}】能力不足"
@@ -372,6 +429,32 @@ public class MissionManager : MonoBehaviour
 
         }
 
+    }
+
+    private void EvaluateThreatInvestigation(Mission mission)
+    {
+        NPCRuntime npc = mission.AssignedNPC;
+        if (npc == null || !npc.Character.IsAlive)
+        {
+            mission.FailMission(false);
+            return;
+        }
+        ActiveThreatState threat = ExternalThreatRules.GetState();
+        if (threat == null || threat.status == ExternalThreatStatus.Resolved)
+        {
+            npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                "ThreatInvestigation", "调查青石村威胁时，威胁已被处理。", mission.Data.id);
+            mission.CompleteMission();
+            RecordResult(mission, MissionState.Completed);
+            SaveManager.Instance?.AutoSave();
+            return;
+        }
+        int gain = ExternalThreatRules.AddIntelligence(npc);
+        npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            "ThreatInvestigation", $"调查青石村威胁，情报+{gain}", mission.Data.id);
+        mission.CompleteMission();
+        RecordResult(mission, MissionState.Completed);
+        SaveManager.Instance?.AutoSave();
     }
 
 
@@ -460,6 +543,7 @@ public class MissionManager : MonoBehaviour
         {
             LastExplorationNotice = $"{region.name}的探索发现暂未进入事件收件箱，将在后续区域行动时重试。";
             lastExplorationNoticeRegionId = regionId;
+            Debug.LogWarning($"探索事件入箱失败: {region.firstProgressEventId}; EventManager={(EventManager.Instance == null ? "null" : "ready")}; actor={actor?.CharacterId}");
         }
         return enqueued;
     }
@@ -470,9 +554,11 @@ public class MissionManager : MonoBehaviour
         if (data == null) { reason = "任务不存在"; return false; }
         if (npc == null || !npc.CanDispatch()) { reason = "弟子当前无法执行任务"; return false; }
         if (PlayerManager.Instance == null || WarehouseManager.Instance == null) { reason = "资源系统尚未初始化"; return false; }
-        int hallLevel = PlayerManager.Instance.GetFacilityLevel(FacilityType.MissionHall);
-        if (data.missionRank > hallLevel || data.requiredMissionHallLevel > hallLevel) { reason = "任务堂等级不足"; return false; }
+        if (!IsMissionVisible(data)) { reason = "当前宗门状态未开放该任务"; return false; }
+        if (data.threatMissionKind == ThreatMissionKind.Investigation && ExternalThreatRules.IsInvestigationRunning())
+        { reason = "已有弟子正在调查该威胁"; return false; }
         if (data.requiredFacilityLevel > PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) { reason = "设施等级不足"; return false; }
+        if (!CanStartFoundingAction(data, npc, out reason)) return false;
         if (data.explorationKind == ExplorationMissionKind.Survey && !ExplorationRules.HasUndiscoveredRegion())
         { reason = "所有预设区域均已发现"; return false; }
         if (data.explorationKind == ExplorationMissionKind.Progress)
@@ -486,9 +572,6 @@ public class MissionManager : MonoBehaviour
             ExplorationRegionState state = ExplorationRules.GetState(data.explorationRegionId);
             if (state == null || state.stage < ExplorationRules.MaxStage) { reason = "尚未发现区域的特殊存在"; return false; }
         }
-        if (data.explorationKind == ExplorationMissionKind.None && !data.isFacilityAction && !dailyMissionCandidateIds.Contains(missionId))
-        { reason = "该任务不在今日候选中"; return false; }
-
         Func<Mission, bool> running = item => item.State == MissionState.Active || item.State == MissionState.WaitingNode;
         if (data.explorationKind == ExplorationMissionKind.Survey)
         {
@@ -512,9 +595,33 @@ public class MissionManager : MonoBehaviour
             if (activeMissions.Any(item => running(item) && item.Data.isFacilityAction && item.Data.requiredFacility == data.requiredFacility))
             { reason = "该设施正在使用"; return false; }
         }
-        else if (activeMissions.Count(item => running(item) && !item.Data.isFacilityAction && missionTemplates.ContainsKey(item.Data.id)) >= FacilityRules.MissionConcurrency(hallLevel))
-        { reason = "任务堂并行槽已满"; return false; }
+        else if (data.isStoryAction)
+        {
+            if (activeMissions.Any(item => running(item) && item.Data.isStoryAction &&
+                !string.IsNullOrEmpty(data.foundingTargetId) && item.Data.foundingTargetId == data.foundingTargetId))
+            { reason = "该剧情行动已经在进行"; return false; }
+        }
+        if (!TryGetMissionCosts(data, out Dictionary<string, int> costs, out reason)) return false;
+        if (PlayerManager.Instance.playerData.gold < data.goldCost) { reason = "灵材不足"; return false; }
+        foreach (var cost in costs)
+            if (WarehouseManager.Instance.GetItemCount(cost.Key) < cost.Value) { reason = "材料不足"; return false; }
+        reason = null;
+        return true;
+    }
 
+    public bool CanTriggerLaborMission(string missionId, out string reason)
+    {
+        MissionData data = GetMissionData(missionId);
+        if (data == null) { reason = "任务不存在"; return false; }
+        if (!IsLaborOnlyFoundingAction(data.foundingAction)) { reason = "该任务不是劳动力任务"; return false; }
+        if (PlayerManager.Instance == null || WarehouseManager.Instance == null) { reason = "资源系统尚未初始化"; return false; }
+        FoundingState state = PlayerManager.Instance.playerData.founding;
+        if (state == null || state.stage < FoundingStage.Cave) { reason = "立宗剧情尚未进入该阶段"; return false; }
+        if (state.village == null || state.village.totalLabor - state.village.reservedLabor < data.laborCost)
+        { reason = "可用劳动力不足"; return false; }
+        if (activeMissions.Any(item => (item.State == MissionState.Active || item.State == MissionState.WaitingNode) &&
+            item.Data.foundingAction == data.foundingAction))
+        { reason = "同类劳动力任务已在进行"; return false; }
         if (!TryGetMissionCosts(data, out Dictionary<string, int> costs, out reason)) return false;
         if (PlayerManager.Instance.playerData.gold < data.goldCost) { reason = "灵材不足"; return false; }
         foreach (var cost in costs)
@@ -559,6 +666,94 @@ public class MissionManager : MonoBehaviour
         return true;
     }
 
+    private void RefundMissionCosts(MissionData data)
+    {
+        if (data == null) return;
+        PlayerManager.Instance?.AddGold(Mathf.Max(0, data.goldCost));
+        foreach (ItemReward cost in data.itemCosts ?? new List<ItemReward>())
+            if (cost != null && cost.count > 0) WarehouseManager.Instance?.AddItem(cost.itemId, cost.count);
+        int material = (data.itemCosts ?? new List<ItemReward>())
+            .Where(item => item != null && item.itemId == FacilityRules.BasicMaterialId)
+            .Sum(item => Mathf.Max(0, item.count));
+        TimeManager.Instance?.RecordPreAdvanceResourceChange(Mathf.Max(0, data.goldCost), material);
+    }
+
+    private bool CanStartFoundingAction(MissionData data, NPCRuntime npc, out string reason)
+    {
+        if (data.foundingAction == FoundingActionKind.None) { reason = null; return true; }
+        FoundingState state = PlayerManager.Instance.playerData.founding;
+        bool routeAction = data.foundingAction == FoundingActionKind.RouteAlchemy ||
+                           data.foundingAction == FoundingActionKind.RouteForge ||
+                           data.foundingAction == FoundingActionKind.RouteFormation;
+        if (state == null || state.stage < FoundingStage.Cave)
+        { reason = "立宗剧情尚未进入该阶段"; return false; }
+        if ((data.foundingAction == FoundingActionKind.RepairFacility ||
+             data.foundingAction == FoundingActionKind.BuildRouteFacility) &&
+            npc.Realm < CultivationRealm.QiRefining)
+        { reason = "只有修士可以执行该行动"; return false; }
+
+        if (data.foundingAction == FoundingActionKind.RepairFacility)
+        {
+            if (!Enum.TryParse(data.foundingTargetId, out FacilityType facility)) { reason = "修复目标配置无效"; return false; }
+            if (PlayerManager.Instance.GetFacilityLevel(facility) > 0) { reason = "该遗迹已经修复"; return false; }
+        }
+        if (data.foundingAction == FoundingActionKind.BuildRouteFacility)
+        {
+            FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
+            if (technique == null || technique.buildMissionId != data.id) { reason = "该设施不属于当前传承路线"; return false; }
+            if (state.techniqueUnderstanding < FoundingRules.MaxUnderstanding) { reason = "功法理解尚未达到100%"; return false; }
+            if (PlayerManager.Instance.GetFacilityLevel(technique.unlockFacility) > 0) { reason = "路线设施已经建成"; return false; }
+            if (state.village == null || state.village.totalLabor - state.village.reservedLabor < data.laborCost)
+            { reason = "可用劳动力不足"; return false; }
+        }
+        reason = null;
+        return true;
+    }
+
+    private void ApplyFoundingSuccess(MissionData data, NPCRuntime actor)
+    {
+        if (data == null || data.foundingAction == FoundingActionKind.None) return;
+        switch (data.foundingAction)
+        {
+            case FoundingActionKind.RepairFacility:
+                if (Enum.TryParse(data.foundingTargetId, out FacilityType repaired))
+                    PlayerManager.Instance.SetFacilityLevelForStory(repaired, 1);
+                break;
+            case FoundingActionKind.VillagePreach:
+                PlayerManager.Instance.AddVillageRelation(10, actor);
+                break;
+            case FoundingActionKind.VillageHelp:
+                PlayerManager.Instance.AddVillageRelation(20, actor);
+                ExternalThreatRules.RestoreLaborAfterVillageHelp();
+                break;
+            case FoundingActionKind.BuildRouteFacility:
+                if (Enum.TryParse(data.foundingTargetId, out FacilityType built))
+                    PlayerManager.Instance.SetFacilityLevelForStory(built, 1);
+                PlayerManager.Instance.ReleaseLabor(data.laborCost);
+                PlayerManager.Instance.EvaluateFoundingCompletion();
+                break;
+            case FoundingActionKind.LaborGather:
+            case FoundingActionKind.LaborBuild:
+            case FoundingActionKind.LaborCultivate:
+                PlayerManager.Instance.ReleaseLabor(data.laborCost);
+                break;
+            case FoundingActionKind.RouteFormation:
+                EventManager.Instance?.TryEnqueueEventById("founding_formation_action", actor);
+                break;
+        }
+    }
+
+    private static void TriggerMissionSource(MissionData data, NPCRuntime actor, bool completed)
+    {
+        if (EventManager.Instance == null || data == null) return;
+        if (data.requiredFacility == FacilityType.SecretRealm && data.isFacilityAction)
+            EventManager.Instance.TryTriggerSource(EventSource.SecretRealm, actor);
+        else if (data.requiredFacility == FacilityType.AlchemyRoom && data.isFacilityAction)
+            EventManager.Instance.TryTriggerSource(EventSource.Alchemy, actor);
+        else
+            EventManager.Instance.TryTriggerSource(completed ? EventSource.MissionComplete : EventSource.MissionStart, actor);
+    }
+
     private static bool IsKnownItem(string itemId)
     {
         if (ItemDatabase.Instance != null) return ItemDatabase.Instance.GetItem(itemId) != null;
@@ -593,22 +788,88 @@ public class MissionManager : MonoBehaviour
     {
         if (mission == null || mission.State != MissionState.AwaitingReward) { reason = "任务没有待领取奖励"; return false; }
         if (!RewardManager.Instance.CanGiveReward(mission.Reward)) { reason = "仓库容量不足"; return false; }
-        RewardManager.Instance.GiveReward(mission.AssignedNPC, mission.Reward);
+        if (IsLaborOnlyFoundingAction(mission.Data.foundingAction))
+        {
+            ApplyFoundingSuccess(mission.Data, null);
+            GiveSectReward(mission.Reward);
+        }
+        else
+        {
+            NPCRuntime npc = mission.AssignedNPC;
+            ApplyFoundingSuccess(mission.Data, npc);
+            RewardManager.Instance.GiveReward(npc, mission.Reward);
+            if (mission.Data.missionType == MissionType.Combat)
+                npc?.AddCombatExperience(mission.ResultTier == MissionResultTier.Excellent ? 5 : 3);
+            TriggerMissionSource(mission.Data, npc, true);
+        }
         mission.CompleteMission();
         RecordResult(mission, MissionState.Completed);
+        SaveManager.Instance?.AutoSave();
         reason = null;
         return true;
     }
 
+    private static void RecordMissionOutcome(NPCRuntime npc, MissionData data, MissionResultTier tier)
+    {
+        if (npc?.Character == null || data == null) return;
+        string result = tier == MissionResultTier.Excellent ? "优秀" :
+            tier == MissionResultTier.Insufficient ? "能力不足" : "达标";
+        npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            "Mission", $"{result}：{data.name}", data.id);
+    }
+
     private void RecordResult(Mission mission, MissionState state)
     {
-        dailyResults.Add(new MissionDayResult { missionId = mission.Data.id, missionName = mission.Data.name, state = state });
+        string tier = state == MissionState.Completed
+            ? (mission.ResultTier == MissionResultTier.Excellent ? "优秀" : "达标")
+            : state == MissionState.Failed ? "能力不足" : string.Empty;
+        dailyResults.Add(new MissionDayResult
+        {
+            missionId = mission.Data.id,
+            missionName = string.IsNullOrEmpty(tier) ? mission.Data.name : $"{mission.Data.name}（{tier}）",
+            state = state
+        });
     }
 
     public void NotifyMissionFailed(Mission mission)
     {
+        if (mission?.Data != null && mission.Data.laborCost > 0)
+            PlayerManager.Instance?.ReleaseLabor(mission.Data.laborCost);
         RecordResult(mission, MissionState.Failed);
         EventManager.Instance?.TryTriggerSource(EventSource.MissionFailed, mission.AssignedNPC);
+    }
+
+    public void NotifyVillageThreatCancellation(Mission mission)
+    {
+        if (mission?.Data == null) return;
+        if (mission.Data.laborCost > 0) PlayerManager.Instance?.ReleaseLabor(mission.Data.laborCost);
+        dailyResults.Add(new MissionDayResult
+        {
+            missionId = mission.Data.id,
+            missionName = $"{mission.Data.name}（青石村受袭中止）",
+            state = MissionState.Failed
+        });
+        TimeManager.Instance?.RecordThreatNotice($"青石村受袭中止任务：{mission.Data.name}");
+    }
+
+    public int CancelLaborMissionsUntilValid()
+    {
+        VillageState village = PlayerManager.Instance?.playerData?.founding?.village;
+        if (village == null) return 0;
+        int cancelled = 0;
+        while (village.reservedLabor > village.totalLabor)
+        {
+            Mission target = activeMissions
+                .Where(item => item?.Data != null && item.Data.laborCost > 0 &&
+                    (item.State == MissionState.Active || item.State == MissionState.WaitingNode))
+                .OrderByDescending(item => item.RemainingDays)
+                .ThenBy(item => item.Data.id, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (target == null) break;
+            target.CancelForVillageThreat();
+            cancelled++;
+        }
+        return cancelled;
     }
 
     public List<MissionDayResult> ConsumeDailyResults()
@@ -623,9 +884,15 @@ public class MissionManager : MonoBehaviour
         activeMissions.Clear();
         foreach (MissionSaveData saved in savedMissions ?? Enumerable.Empty<MissionSaveData>())
         {
+            if (saved == null || string.IsNullOrWhiteSpace(saved.missionId))
+            {
+                Debug.LogWarning("跳过缺少任务ID的存档任务");
+                continue;
+            }
             MissionData data = GetMissionData(saved.missionId);
             NPCRuntime npc = NPCManager.Instance?.GetRuntime(saved.assignedCharacterId);
-            if (data == null || npc == null || !npc.Character.IsAlive)
+            bool laborOnly = data != null && IsLaborOnlyFoundingAction(data.foundingAction);
+            if (data == null || (!laborOnly && (npc == null || !npc.Character.IsAlive)))
             {
                 Debug.LogWarning($"跳过无法恢复的任务: {saved.missionId}");
                 if (npc != null && npc.State == NPCState.Busy && npc.CurrentMission == null) npc.SetState(NPCState.Idle);
@@ -660,8 +927,12 @@ public class MissionManager : MonoBehaviour
         foreach (Mission mission in missions)
         {
             if (mission.Data.isFacilityAction && mission.Data.explorationKind == ExplorationMissionKind.None && mission.State == MissionState.Active)
-                EventManager.Instance?.TryTriggerSource(mission.Data.requiredFacility == FacilityType.SecretRealm
-                    ? EventSource.SecretRealm : EventSource.Alchemy, mission.AssignedNPC);
+            {
+                if (mission.Data.requiredFacility == FacilityType.SecretRealm)
+                    EventManager.Instance?.TryTriggerSource(EventSource.SecretRealm, mission.AssignedNPC);
+                else if (mission.Data.requiredFacility == FacilityType.AlchemyRoom)
+                    EventManager.Instance?.TryTriggerSource(EventSource.Alchemy, mission.AssignedNPC);
+            }
             mission.PassOneDay();
 
         }
@@ -674,31 +945,55 @@ public class MissionManager : MonoBehaviour
 
     public void RefreshDailyCandidates(int day, bool force = false)
     {
-        if (!force && missionCandidateDay == day && dailyMissionCandidateIds.Count > 0) return;
-        int hallLevel = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.MissionHall);
-        List<MissionData> pool = missionTemplates.Values
-            .Where(data => !data.isFacilityAction && data.missionType != MissionType.WorldEvent &&
-                           data.missionRank <= hallLevel && data.requiredMissionHallLevel <= hallLevel &&
-                           data.requiredFacilityLevel <= (PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)))
-            .OrderBy(data => data.id).ToList();
-        int seed = (EventManager.Instance == null ? 48621 : EventManager.Instance.RandomSeed) ^ day;
-        System.Random random = new System.Random(seed);
-        for (int i = pool.Count - 1; i > 0; i--)
-        {
-            int swap = random.Next(i + 1);
-            MissionData value = pool[i]; pool[i] = pool[swap]; pool[swap] = value;
-        }
         dailyMissionCandidateIds.Clear();
-        dailyMissionCandidateIds.AddRange(pool.Take(FacilityRules.MissionCandidateCount(hallLevel)).Select(data => data.id));
+        dailyMissionCandidateIds.AddRange(missionTemplates.Values
+            .Where(data => !data.isStoryAction && !data.isFacilityAction && data.explorationKind == ExplorationMissionKind.None && IsMissionVisible(data))
+            .OrderBy(data => data.id)
+            .Select(data => data.id));
         missionCandidateDay = day;
     }
 
     public void RestoreDailyCandidates(int day, IEnumerable<string> ids)
     {
-        missionCandidateDay = day;
-        dailyMissionCandidateIds.Clear();
-        dailyMissionCandidateIds.AddRange((ids ?? Enumerable.Empty<string>()).Where(id => missionTemplates.ContainsKey(id)));
-        if (dailyMissionCandidateIds.Count == 0) RefreshDailyCandidates(day, true);
+        RefreshDailyCandidates(day, true);
+    }
+
+    public IReadOnlyList<MissionData> GetVisibleMissions()
+    {
+        return missionTemplates.Values.Where(IsMissionVisible).OrderBy(data => data.missionType).ThenBy(data => data.id).ToList();
+    }
+
+    public bool IsMissionVisible(MissionData data)
+    {
+        if (data == null || data.missionType == MissionType.WorldEvent) return false;
+        if (data.threatMissionKind == ThreatMissionKind.Investigation)
+        {
+            ActiveThreatState threat = ExternalThreatRules.GetState();
+            return threat != null && threat.status == ExternalThreatStatus.Active && threat.intelligence < 100;
+        }
+        if (data.explorationKind != ExplorationMissionKind.None) return true;
+        FoundingState founding = PlayerManager.Instance?.playerData?.founding;
+        if (data.isStoryAction)
+        {
+            if (founding == null || founding.stage < FoundingStage.Cave) return false;
+            if (data.foundingAction == FoundingActionKind.RepairFacility &&
+                Enum.TryParse(data.foundingTargetId, out FacilityType repaired) &&
+                PlayerManager.Instance.GetFacilityLevel(repaired) > 0) return false;
+            if (data.foundingAction == FoundingActionKind.BuildRouteFacility ||
+                data.foundingAction == FoundingActionKind.RouteAlchemy ||
+                data.foundingAction == FoundingActionKind.RouteForge ||
+                data.foundingAction == FoundingActionKind.RouteFormation)
+            {
+                FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(founding.selectedTechniqueId);
+                return technique != null && (technique.buildMissionId == data.id || technique.actionMissionId == data.id);
+            }
+            return true;
+        }
+
+        if (founding == null || !founding.completed) return false;
+        int reputation = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation;
+        return data.missionRank <= FacilityRules.MaxMissionRankForReputation(reputation) &&
+               data.requiredFacilityLevel <= (PlayerManager.Instance == null ? 0 : PlayerManager.Instance.GetFacilityLevel(data.requiredFacility));
     }
 
     public int MissionCandidateDay => missionCandidateDay;
@@ -712,6 +1007,7 @@ public class MissionManager : MonoBehaviour
     public MissionData GetMissionData(
         string id)
     {
+        if (string.IsNullOrWhiteSpace(id)) return null;
 
         if (
             missionTemplates.TryGetValue(
@@ -750,6 +1046,26 @@ public class MissionManager : MonoBehaviour
             missionTemplates.Values
         );
 
+    }
+
+    private static bool IsLaborOnlyFoundingAction(FoundingActionKind action)
+    {
+        return action == FoundingActionKind.LaborGather ||
+               action == FoundingActionKind.LaborBuild ||
+               action == FoundingActionKind.LaborCultivate;
+    }
+
+    private static void GiveSectReward(Reward reward)
+    {
+        if (reward == null) return;
+        if (reward.Gold > 0) PlayerManager.Instance?.AddGold(reward.Gold);
+        foreach (ItemReward item in reward.Items ?? new List<ItemReward>())
+            if (item != null && item.count > 0) WarehouseManager.Instance?.AddItem(item.itemId, item.count);
+
+        int basicMaterialReward = (reward.Items ?? new List<ItemReward>())
+            .Where(item => item != null && item.itemId == FacilityRules.BasicMaterialId)
+            .Sum(item => Mathf.Max(0, item.count));
+        TimeManager.Instance?.RecordPreAdvanceResourceChange(reward.Gold, basicMaterialReward);
     }
 
 

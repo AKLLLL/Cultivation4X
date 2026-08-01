@@ -13,6 +13,7 @@ public enum HealthState
 
 public enum CultivationRealm
 {
+    Mortal = -1,
     QiRefining,
     Foundation,
     GoldenCore
@@ -70,6 +71,16 @@ public class CharacterState
     public HealthState health = HealthState.Healthy;
     public NPCState activityState = NPCState.Idle;
     public int stateRemainDays;
+    public bool hasGeneratedProfile;
+    public int baseAttack;
+    public int baseIntelligence;
+    public int baseAgility;
+    public int baseComprehension;
+    public int baseCombatComprehension;
+    public int basePhysique;
+    public int combatExperience;
+    public int aptitudeRank;
+    public string initialFeatureId;
     public List<string> traitIds = new List<string>();
     public List<RelationshipRecord> relationships = new List<RelationshipRecord>();
     public List<LifeRecord> lifeRecords = new List<LifeRecord>();

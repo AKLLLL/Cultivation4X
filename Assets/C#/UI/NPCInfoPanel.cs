@@ -20,29 +20,34 @@ public class NPCInfoPanel : MonoBehaviour
     public TMP_Text historyText;
 
     private NPCRuntime currentNPC;
-    private bool layoutCaptured;
-    private Vector2 traitsBasePosition;
-    private Vector2 relationshipsBasePosition;
-    private Vector2 historyBasePosition;
-    private float traitsBaseHeight;
-    private float relationshipsBaseHeight;
-
     public void Show(NPCRuntime npc)
     {
         currentNPC = npc;
         if (npc == null) return;
 
         if (nameText != null) nameText.text = npc.Data.npcName;
-        if (stateText != null) stateText.text = "状态：" + FormatNpcState(npc.State);
+        if (stateText != null)
+        {
+            stateText.text = "状态：" + FormatNpcState(npc.State);
+            if (npc.Character.hasGeneratedProfile)
+                stateText.text += $"\n战力：{npc.CombatPower}　资质：{FoundingRules.AptitudeName(npc.AptitudeRank)}";
+        }
         if (realmText != null) realmText.text = "境界：" + FormatRealm(npc.Realm);
         if (cultivationText != null) cultivationText.text = "修为：" + npc.Cultivation;
         if (healthText != null) healthText.text = "健康：" + FormatHealth(npc.Health);
         SplitTraitNames(npc.Character.traitIds, out string personality, out string experience);
-        if (traitsText != null) traitsText.text = "性格：" + personality;
-        if (experienceText != null) experienceText.text = "经历：" + experience;
+        if (traitsText != null)
+        {
+            traitsText.text = "性格：" + personality;
+            FoundingFeatureDefinition feature = FoundingRules.GetFeature(npc.Character.initialFeatureId);
+            if (npc.Character.hasGeneratedProfile)
+                traitsText.text += $"\n初始特点：{feature?.name ?? npc.Character.initialFeatureId}　{feature?.description}";
+        }
+        if (experienceText != null)
+            experienceText.text = $"力量：{npc.Attack}　敏捷：{npc.Agility}　体质：{npc.Physique}\n" +
+                                  $"战斗悟性：{npc.CombatComprehension}　战斗经验：{npc.CombatExperience}\n经历：{experience}";
         if (relationshipsText != null) relationshipsText.text = "关系：" + FormatRelationships(npc.Character.relationships);
         if (historyText != null) historyText.text = "履历：\n" + FormatLifeRecords(npc.Character.lifeRecords);
-        RefreshTextLayout();
     }
 
     public void Hide()
@@ -86,60 +91,6 @@ public class NPCInfoPanel : MonoBehaviour
         return string.Join("、", names);
     }
 
-    private void RefreshTextLayout()
-    {
-        RectTransform traitsRect = traitsText == null ? null : traitsText.rectTransform;
-        RectTransform experienceRect = experienceText == null ? null : experienceText.rectTransform;
-        RectTransform relationshipsRect = relationshipsText == null ? null : relationshipsText.rectTransform;
-        RectTransform historyRect = historyText == null ? null : historyText.rectTransform;
-        if (traitsRect == null || relationshipsRect == null || historyRect == null) return;
-        if (experienceRect != null && !experienceText.gameObject.activeSelf) experienceText.gameObject.SetActive(true);
-
-        if (!layoutCaptured)
-        {
-            layoutCaptured = true;
-            traitsBasePosition = traitsRect.anchoredPosition;
-            relationshipsBasePosition = relationshipsRect.anchoredPosition;
-            historyBasePosition = historyRect.anchoredPosition;
-            traitsBaseHeight = traitsRect.sizeDelta.y;
-            relationshipsBaseHeight = relationshipsRect.sizeDelta.y;
-        }
-
-        traitsRect.anchoredPosition = traitsBasePosition;
-        relationshipsRect.anchoredPosition = relationshipsBasePosition;
-        historyRect.anchoredPosition = historyBasePosition;
-
-        float traitsHeight = PreferredTextHeight(traitsText, traitsBaseHeight);
-        traitsRect.sizeDelta = new Vector2(traitsRect.sizeDelta.x, traitsHeight);
-
-        float traitsExtra = Mathf.Max(0f, traitsHeight - traitsBaseHeight);
-        float experienceExtra = 0f;
-        if (experienceRect != null)
-        {
-            experienceRect.anchoredPosition = relationshipsBasePosition - new Vector2(0f, traitsExtra);
-            float experienceHeight = PreferredTextHeight(experienceText, relationshipsBaseHeight);
-            experienceRect.sizeDelta = new Vector2(experienceRect.sizeDelta.x, experienceHeight);
-            experienceExtra = Mathf.Max(0f, experienceHeight - relationshipsBaseHeight);
-            relationshipsRect.anchoredPosition = relationshipsBasePosition - new Vector2(0f, traitsExtra + relationshipsBaseHeight + experienceExtra);
-        }
-        else
-        {
-            relationshipsRect.anchoredPosition = relationshipsBasePosition - new Vector2(0f, traitsExtra);
-        }
-
-        float relationshipHeight = PreferredTextHeight(relationshipsText, relationshipsBaseHeight);
-        relationshipsRect.sizeDelta = new Vector2(relationshipsRect.sizeDelta.x, relationshipHeight);
-
-        float relationshipExtra = Mathf.Max(0f, relationshipHeight - relationshipsBaseHeight);
-        historyRect.anchoredPosition = historyBasePosition - new Vector2(0f, traitsExtra + experienceExtra + (experienceRect == null ? 0f : relationshipsBaseHeight) + relationshipExtra);
-    }
-
-    private static float PreferredTextHeight(TMP_Text text, float minimumHeight)
-    {
-        text.ForceMeshUpdate();
-        return Mathf.Max(minimumHeight, text.preferredHeight + 8f);
-    }
-
     private static string FormatLifeRecords(List<LifeRecord> lifeRecords)
     {
         if (lifeRecords == null || lifeRecords.Count == 0) return "暂无";
@@ -167,6 +118,7 @@ public class NPCInfoPanel : MonoBehaviour
     {
         switch (realm)
         {
+            case CultivationRealm.Mortal: return "凡人";
             case CultivationRealm.QiRefining: return "炼气";
             case CultivationRealm.Foundation: return "筑基";
             case CultivationRealm.GoldenCore: return "金丹";

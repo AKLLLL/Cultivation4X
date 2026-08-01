@@ -8,6 +8,10 @@ using UnityEngine;
 public class SaveManager : MonoBehaviour
 {
     public static SaveManager Instance { get; private set; }
+    public bool IsInitializationComplete { get; private set; }
+    public bool LoadedExistingSave { get; private set; }
+    public bool InitializationFailed { get; private set; }
+    public event Action<bool> OnInitializationCompleted;
     private const string SaveFileName = "cultivation4x-save.json";
     private string SavePath => Path.Combine(Application.persistentDataPath, SaveFileName);
 
@@ -27,7 +31,24 @@ public class SaveManager : MonoBehaviour
     private IEnumerator Start()
     {
         yield return null;
-        Load();
+        if (File.Exists(SavePath))
+        {
+            LoadedExistingSave = Load();
+            InitializationFailed = !LoadedExistingSave;
+        }
+        else
+        {
+            int seed = unchecked(Environment.TickCount ^ DateTime.UtcNow.Millisecond);
+            PlayerManager.Instance?.InitializeNewFoundingGame(seed);
+            NPCManager.Instance?.ClearCharacters();
+            if (WarehouseManager.Instance != null) WarehouseManager.Instance.warehouseData = new WarehouseData();
+            MissionManager.Instance?.RestoreDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                new System.Collections.Generic.List<string>());
+            LoadedExistingSave = false;
+            Save();
+        }
+        IsInitializationComplete = true;
+        OnInitializationCompleted?.Invoke(LoadedExistingSave);
     }
 
     public GameState CaptureState()
@@ -88,6 +109,11 @@ public class SaveManager : MonoBehaviour
             GameState state = JsonConvert.DeserializeObject<GameState>(File.ReadAllText(SavePath));
             if (state == null || state.version > SaveDataVersion.Current)
                 throw new InvalidDataException("存档版本不受支持");
+            if (state.version < SaveDataVersion.Current)
+            {
+                string backupPath = SavePath + ".pre-v" + SaveDataVersion.Current;
+                if (!File.Exists(backupPath)) File.Copy(SavePath, backupPath);
+            }
 
             MigrateState(state);
             TimeManager.Instance?.RestoreDay(state.currentDay);
@@ -99,6 +125,7 @@ public class SaveManager : MonoBehaviour
             }
             NPCManager.Instance?.RestoreCharacters(state.characters);
             MissionManager.Instance?.RestoreMissions(state.activeMissions);
+            PlayerManager.Instance?.ReconcileReservedLabor(MissionManager.Instance?.GetActiveMissions());
             int candidateDay = state.missionCandidateDay < 0 ? state.currentDay : state.missionCandidateDay;
             MissionManager.Instance?.RestoreDailyCandidates(candidateDay, state.dailyMissionCandidateIds);
             EventManager.Instance?.RestoreState(state.eventHistory, state.pendingEvents, state.randomSeed, state.randomRollCount,
@@ -108,7 +135,7 @@ public class SaveManager : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogError($"读取存档失败: {exception.Message}");
+            Debug.LogError($"读取存档失败: {exception}");
             return false;
         }
     }
@@ -118,12 +145,61 @@ public class SaveManager : MonoBehaviour
 
     public static void MigrateState(GameState state)
     {
+        int sourceVersion = state.version;
         state.sect = state.sect ?? new PlayerData();
-        state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, 1, FacilityRules.MaxLevel);
-        state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, 1, FacilityRules.MaxLevel);
-        state.sect.warehouseLevel = Mathf.Clamp(state.sect.warehouseLevel, 1, FacilityRules.MaxLevel);
-        state.sect.secretRealmLevel = Mathf.Clamp(state.sect.secretRealmLevel, 1, FacilityRules.MaxLevel);
-        state.sect.alchemyRoomLevel = Mathf.Clamp(state.sect.alchemyRoomLevel, 1, FacilityRules.MaxLevel);
+        int minimumFacilityLevel = sourceVersion < 4 ? 1 : 0;
+        state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.warehouseLevel = Mathf.Clamp(state.sect.warehouseLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.secretRealmLevel = Mathf.Clamp(state.sect.secretRealmLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.alchemyRoomLevel = Mathf.Clamp(state.sect.alchemyRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.explorationHallLevel = Mathf.Clamp(state.sect.explorationHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
+        state.sect.protectionArrayLevel = Mathf.Clamp(state.sect.protectionArrayLevel, 0, FacilityRules.MaxLevel);
+        state.sect.inheritanceChamberLevel = Mathf.Clamp(state.sect.inheritanceChamberLevel, 0, FacilityRules.MaxLevel);
+        state.sect.forgeRoomLevel = Mathf.Clamp(state.sect.forgeRoomLevel, 0, FacilityRules.MaxLevel);
+        state.sect.formationPlatformLevel = Mathf.Clamp(state.sect.formationPlatformLevel, 0, FacilityRules.MaxLevel);
+        if (sourceVersion < 4)
+        {
+            state.sect.founding = new FoundingState
+            {
+                initialized = true,
+                completed = true,
+                stage = FoundingStage.Completed,
+                candidates = new System.Collections.Generic.List<FounderCandidateData>(),
+                selectedFounderIds = new System.Collections.Generic.List<string>(),
+                village = new VillageState(),
+                externalThreat = new ActiveThreatState()
+            };
+        }
+        else
+        {
+            state.sect.founding = state.sect.founding ?? new FoundingState();
+            state.sect.founding.candidates = state.sect.founding.candidates ?? new System.Collections.Generic.List<FounderCandidateData>();
+            state.sect.founding.selectedFounderIds = state.sect.founding.selectedFounderIds ?? new System.Collections.Generic.List<string>();
+            state.sect.founding.village = state.sect.founding.village ?? new VillageState();
+            state.sect.founding.externalThreat = NormalizeThreatState(state.sect.founding.externalThreat);
+            state.sect.founding.techniqueUnderstanding = Mathf.Clamp(state.sect.founding.techniqueUnderstanding, 0, FoundingRules.MaxUnderstanding);
+            state.sect.founding.village.relation = Mathf.Clamp(state.sect.founding.village.relation, 0, 100);
+            state.sect.founding.village.reservedLabor = Mathf.Clamp(state.sect.founding.village.reservedLabor, 0,
+                Mathf.Max(0, state.sect.founding.village.totalLabor));
+            foreach (FounderCandidateData candidate in state.sect.founding.candidates.Where(item => item != null))
+                if (candidate.combatComprehension <= 0)
+                    candidate.combatComprehension = Mathf.Max(0, candidate.comprehension);
+        }
+        state.sect.founding.externalThreat = NormalizeThreatState(state.sect.founding.externalThreat);
+        state.activeMissions = (state.activeMissions ?? new System.Collections.Generic.List<MissionSaveData>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.missionId))
+            .ToList();
+        state.pendingEvents = (state.pendingEvents ?? new System.Collections.Generic.List<PendingEvent>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.eventId))
+            .ToList();
+        foreach (PendingEvent item in state.pendingEvents)
+            item.participantIds = CleanParticipantIds(item.participantIds);
+        state.eventHistory = (state.eventHistory ?? new System.Collections.Generic.List<EventHistoryRecord>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.eventId))
+            .ToList();
+        foreach (EventHistoryRecord item in state.eventHistory)
+            item.participantIds = CleanParticipantIds(item.participantIds);
         state.sect.explorationRegions = (state.sect.explorationRegions ?? new System.Collections.Generic.List<ExplorationRegionState>())
             .Where(item => item != null && !string.IsNullOrWhiteSpace(item.regionId))
             .GroupBy(item => item.regionId)
@@ -133,7 +209,58 @@ public class SaveManager : MonoBehaviour
                 stage = Mathf.Clamp(group.Max(item => item.stage), 0, ExplorationRules.MaxStage)
             }).ToList();
         state.dailyMissionCandidateIds = state.dailyMissionCandidateIds ?? new System.Collections.Generic.List<string>();
-        state.eventInbox = state.eventInbox ?? new System.Collections.Generic.List<EventInboxEntry>();
+        state.eventInbox = (state.eventInbox ?? new System.Collections.Generic.List<EventInboxEntry>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.entryId) && !string.IsNullOrWhiteSpace(item.eventId))
+            .ToList();
+        foreach (EventInboxEntry item in state.eventInbox)
+            item.participantIds = CleanParticipantIds(item.participantIds);
+        state.characters = state.characters ?? new System.Collections.Generic.List<CharacterState>();
+        foreach (CharacterState character in state.characters.Where(item => item != null))
+        {
+            character.traitIds = character.traitIds ?? new System.Collections.Generic.List<string>();
+            character.relationships = character.relationships ?? new System.Collections.Generic.List<RelationshipRecord>();
+            character.lifeRecords = character.lifeRecords ?? new System.Collections.Generic.List<LifeRecord>();
+            character.combatExperience = Mathf.Max(0, character.combatExperience);
+            if (character.hasGeneratedProfile && character.baseCombatComprehension <= 0)
+                character.baseCombatComprehension = Mathf.Max(0, character.baseComprehension);
+        }
         state.version = SaveDataVersion.Current;
+    }
+
+    private static ActiveThreatState NormalizeThreatState(ActiveThreatState state)
+    {
+        if (state == null) state = new ActiveThreatState();
+        state.threatId = string.IsNullOrWhiteSpace(state.threatId) ? null : state.threatId;
+        if (state.status == ExternalThreatStatus.None)
+        {
+            state.scheduledDay = -1;
+            state.activatedDay = -1;
+            state.nextRaidDay = -1;
+            state.discoveryNotificationEnqueued = false;
+        }
+        state.intelligence = Mathf.Clamp(state.intelligence, 0, 100);
+        state.raidCount = Mathf.Max(0, state.raidCount);
+        state.selectedCharacterIds = (state.selectedCharacterIds ?? new System.Collections.Generic.List<string>())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct()
+            .ToList();
+        if (state.resolution != null)
+        {
+            state.resolution.participantIds = (state.resolution.participantIds ?? new System.Collections.Generic.List<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Distinct()
+                .ToList();
+        }
+        return state;
+    }
+
+    private static System.Collections.Generic.Dictionary<string, string> CleanParticipantIds(
+        System.Collections.Generic.Dictionary<string, string> participantIds)
+    {
+        if (participantIds == null) return new System.Collections.Generic.Dictionary<string, string>();
+        return participantIds
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
+            .GroupBy(pair => pair.Key)
+            .ToDictionary(group => group.Key, group => group.First().Value);
     }
 }

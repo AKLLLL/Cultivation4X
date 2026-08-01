@@ -22,6 +22,8 @@
 
      "requiredAttack": 15,
     "requiredIntelligence": 8,
+    "preferredTechniqueTags":["wood","herb","recovery"],
+    "preferredTraitIds":["diligent","cautious"],
     
     "nodes":
     [
