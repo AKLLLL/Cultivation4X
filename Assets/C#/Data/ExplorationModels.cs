@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using UnityEngine;
+using Cultivation4X.WorldMap;
 
 public enum ExplorationMissionKind
 {
@@ -77,6 +78,17 @@ public static class ExplorationRules
     {
         PlayerData data = PlayerManager.Instance?.playerData;
         return data?.explorationRegions?.FirstOrDefault(item => item.regionId == regionId);
+    }
+
+    public static int GetMapCellIndex(string regionId)
+    {
+        WorldMap map = WorldMapSession.Current;
+        if (map?.cells == null || map.pointsOfInterest == null || string.IsNullOrWhiteSpace(regionId))
+            return -1;
+        WorldPointOfInterest point = map.pointsOfInterest.FirstOrDefault(item => item?.id == regionId);
+        return point != null && point.cellIndex >= 0 && point.cellIndex < map.cells.Length
+            ? point.cellIndex
+            : -1;
     }
 
     public static ExplorationRegionState DiscoverNextRegion()

@@ -6,10 +6,12 @@ using UnityEngine;
 
 public enum FoundingStage
 {
-    CandidateSelection,
-    TechniqueSelection,
-    Cave,
-    Completed
+    WorldSelection = -1,
+    CandidateSelection = 0,
+    TechniqueSelection = 1,
+    Cave = 2,
+    Completed = 3,
+    SectConfirmation = 4
 }
 
 public enum FoundingActionKind
@@ -72,6 +74,8 @@ public class FoundingState
     public bool completed;
     public FoundingStage stage;
     public int candidateSeed;
+    public int worldSeed;
+    public int selectedWorldCellIndex = -1;
     public List<FounderCandidateData> candidates = new List<FounderCandidateData>();
     public List<string> selectedFounderIds = new List<string>();
     public string selectedTechniqueId;
@@ -144,6 +148,9 @@ public static class FoundingRules
     }
 
     public static void ResetCatalogForTests() => catalog = null;
+
+    public static bool HasReachedCave(FoundingState state) =>
+        state != null && (state.stage == FoundingStage.Cave || state.stage == FoundingStage.Completed);
 
     public static FoundingTechniqueDefinition GetTechnique(string id) =>
         Catalog.techniques.FirstOrDefault(item => item.id == id);
