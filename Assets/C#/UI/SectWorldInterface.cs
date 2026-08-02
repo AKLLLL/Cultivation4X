@@ -85,6 +85,13 @@ public sealed class SectWorldInterface : MonoBehaviour
         int known = progress.revealedCellIndices.Concat(progress.cellInfluences.Select(item => item.cellIndex))
             .Distinct().Count();
         int activeSources = progress.influenceSources.Count(item => item?.isActive == true);
+        int discoveredSites = progress.mapSites.Count(item => item != null &&
+            item.siteType != MapSiteType.SectBase && item.revealState == MapContentRevealState.Discovered);
+        int exploredCells = progress.exploredCellIndices?.Count ?? 0;
+        string developedEffects = string.Join("；", progress.mapSites
+            .Where(item => item != null && WorldMapContentEffects.IsSiteDeveloped(item))
+            .Select(item => WorldMapContentEffects.EffectSummary(item.siteType))
+            .Where(item => !string.IsNullOrEmpty(item)));
 
         RuntimeUIFactory.Text(briefPanel, sect.sectName, 32, 48);
         RuntimeUIFactory.Text(briefPanel,
@@ -94,7 +101,9 @@ public sealed class SectWorldInterface : MonoBehaviour
             $"灵气 {WorldMapCellDetailsFormatter.AuraBand(cell.totalAura)}（{cell.totalAura:0.000}）　" +
             $"弟子 {disciples}　功法 {technique?.name ?? "无"}\n" +
             $"灵材 {sect.gold}　基础材料 {materials}　声望 {sect.reputation}\n" +
-            $"影响力：核心 {core}　影响 {influence}　外缘 {outer}　认知并集 {known}　活跃来源 {activeSources}",
+            $"影响力：核心 {core}　影响 {influence}　外缘 {outer}　认知并集 {known}　活跃来源 {activeSources}\n" +
+            $"地图内容：已探索 {exploredCells}　已发现地点 {discoveredSites}" +
+            (string.IsNullOrEmpty(developedEffects) ? string.Empty : $"\n已生效后果：{developedEffects}"),
             19, 104);
         Button enter = RuntimeUIFactory.Button(briefPanel, "进入宗门", 46);
         enter.onClick.AddListener(OpenSectLayout);

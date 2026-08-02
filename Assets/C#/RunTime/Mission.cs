@@ -28,6 +28,7 @@ public class Mission
     public int CapabilityScore { get; private set; } = 100;
     public MissionResultTier ResultTier { get; private set; } = MissionResultTier.Qualified;
     private bool hasCapabilitySnapshot;
+    public Cultivation4X.WorldMap.MapMissionContext MapContext { get; private set; }
 
    
     public Mission(MissionData data, int facilityLevel = 1)
@@ -465,6 +466,7 @@ public class Mission
         hasCapabilitySnapshot = saved.hasCapabilitySnapshot;
         CapabilityScore = saved.capabilityScore;
         ResultTier = saved.resultTier;
+        MapContext = saved.mapContext;
         if (!hasCapabilitySnapshot && npc != null) CaptureCapabilitySnapshot();
         if (Data.nodes != null && CurrentNodeIndex < Data.nodes.Count && State == MissionState.WaitingNode)
             CurrentNode = Data.nodes[CurrentNodeIndex];
@@ -489,7 +491,28 @@ public class Mission
             hasCapabilitySnapshot = hasCapabilitySnapshot,
             capabilityScore = CapabilityScore,
             resultTier = ResultTier
+            ,mapContext = MapContext
         };
+    }
+
+    public bool CancelAwaitingMapReward()
+    {
+        if (State != MissionState.AwaitingReward || MapContext == null) return false;
+        State = MissionState.Failed;
+        CurrentNode = null;
+        return true;
+    }
+
+    public void ConfigureMapMission(Cultivation4X.WorldMap.MapMissionContext context, Reward mapReward)
+    {
+        if (State != MissionState.NotStarted || context == null) return;
+        MapContext = new Cultivation4X.WorldMap.MapMissionContext
+        {
+            actionType = context.actionType,
+            targetCellIndex = context.targetCellIndex,
+            targetSiteId = context.targetSiteId
+        };
+        reward = mapReward ?? new Reward();
     }
 
     public void CaptureCapabilitySnapshot()

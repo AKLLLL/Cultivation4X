@@ -28,12 +28,13 @@ public class SectDevelopmentPanel : MonoBehaviour
         panel = RuntimeUIFactory.Panel(transform, "Development", new Vector2(0.12f, 0.1f), new Vector2(0.88f, 0.9f));
         RuntimeUIFactory.Text(panel, "宗门建设", 30, 48);
         resources = RuntimeUIFactory.Text(panel, string.Empty, 20, 44);
-        FacilityType[] upgradeFacilities =
-        {
-            FacilityType.Warehouse,
-            FacilityType.TrainingRoom,
-            FacilityType.SecretRealm,
-            FacilityType.AlchemyRoom
+            FacilityType[] upgradeFacilities =
+            {
+                FacilityType.Warehouse,
+                FacilityType.TrainingRoom,
+                FacilityType.SecretRealm,
+                FacilityType.AlchemyRoom,
+                FacilityType.ExplorationHall
         };
         foreach (FacilityType facility in upgradeFacilities)
         {
@@ -80,6 +81,13 @@ public class SectDevelopmentPanel : MonoBehaviour
             if (level <= 0)
             {
                 pair.Value.GetComponentInChildren<TMP_Text>().text = $"{Name(pair.Key)}｜损坏或未建\n请通过立宗剧情修复或建设";
+                pair.Value.interactable = false;
+                continue;
+            }
+            if (pair.Key == FacilityType.ExplorationHall &&
+                !Cultivation4X.WorldMap.WorldMapContentEffects.IsExplorationHallUnlocked())
+            {
+                pair.Value.GetComponentInChildren<TMP_Text>().text = $"{Name(pair.Key)}\n需要先开发地图洞府地点";
                 pair.Value.interactable = false;
                 continue;
             }

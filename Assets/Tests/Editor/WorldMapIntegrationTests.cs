@@ -210,6 +210,7 @@ public class WorldMapIntegrationTests
                 }
             }
         };
+        WorldMapContentRules.EnsureCandidates(map, state.worldMapProgress);
         Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(state));
 
         state.worldMap.pointsOfInterest[0].cellIndex = map.cells.Length;

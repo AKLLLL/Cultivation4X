@@ -266,6 +266,7 @@ namespace Cultivation4X.WorldMap
 
     public static class WorldMapSession
     {
+        public static event Action ProgressChanged;
         public static WorldMap Current { get; private set; }
         public static WorldMapProgressState Progress { get; private set; }
         public static void Set(WorldMap map) => Set(map, new WorldMapProgressState());
@@ -278,6 +279,19 @@ namespace Cultivation4X.WorldMap
         {
             Current = null;
             Progress = null;
+        }
+        public static void NotifyProgressChanged()
+        {
+            Action listeners = ProgressChanged;
+            if (listeners == null) return;
+            foreach (Delegate callback in listeners.GetInvocationList())
+            {
+                try { ((Action)callback)(); }
+                catch (Exception exception)
+                {
+                    System.Diagnostics.Debug.WriteLine("WorldMap progress listener failed: " + exception);
+                }
+            }
         }
     }
 }

@@ -20,7 +20,6 @@ namespace Cultivation4X.WorldMap
         private Button observabilityToggle;
         private bool debugViewEnabled;
         private TMP_Text legendText;
-        private TMP_Text influenceLegendText;
         private TMP_Text statisticsText;
         private TMP_Text parametersText;
         private WorldMapIconDensityTier lastDensityTier = WorldMapIconDensityTier.Hidden;
@@ -59,6 +58,7 @@ namespace Cultivation4X.WorldMap
                 id = marker.id,
                 label = marker.label,
                 kind = marker.kind,
+                environmentHintKind = marker.environmentHintKind,
                 cellIndex = marker.cellIndex,
                 isDemo = false
             };
@@ -83,7 +83,15 @@ namespace Cultivation4X.WorldMap
         private void RefreshPresentationMarkers()
         {
             presentationMarkers = externalPresentationMarkers.Select(CloneMarker).ToList();
-            presentationMarkers.AddRange(WorldMapPresentationMarkerFactory.CreatePointOfInterestMarkers(map));
+            WorldMapContentRules.EnsureCandidates(map, WorldMapSession.Progress);
+            List<WorldMapPresentationMarker> contentMarkers =
+                WorldMapPresentationMarkerFactory.CreateContentMarkers(map, WorldMapSession.Progress);
+            presentationMarkers.AddRange(contentMarkers);
+            presentationMarkers.AddRange(WorldMapPresentationMarkerFactory.CreateEnvironmentHintMarkers(
+                map, WorldMapSession.Progress));
+            HashSet<int> contentCells = new HashSet<int>(contentMarkers.Select(item => item.cellIndex));
+            presentationMarkers.AddRange(WorldMapPresentationMarkerFactory.CreatePointOfInterestMarkers(map)
+                .Where(item => !contentCells.Contains(item.cellIndex)));
 
             int caveIndex = PlayerManager.Instance?.playerData?.founding?.selectedWorldCellIndex ?? -1;
             if (map?.cells != null && caveIndex >= 0 && caveIndex < map.cells.Length)
@@ -118,18 +126,23 @@ namespace Cultivation4X.WorldMap
                     bool landformBoundary = viewMode == WorldMapViewMode.Landform &&
                                              !cellWater && !neighborWater &&
                                              BoundaryClass(cell.landform) != BoundaryClass(neighbor.landform);
-                    if (!coastBoundary && !landformBoundary) continue;
+                    bool biomeBoundary = viewMode == WorldMapViewMode.Biome &&
+                                         cell.biome != neighbor.biome;
+                    if (!coastBoundary && !landformBoundary && !biomeBoundary) continue;
 
                     Vector2 center = Center(cell.coord);
                     float firstAngle = Mathf.Deg2Rad * (60f * direction - 30f);
                     float secondAngle = Mathf.Deg2Rad * (60f * (direction + 1) - 30f);
                     Color color = coastBoundary
                         ? new Color(0.92f, 0.88f, 0.68f, 0.85f)
-                        : new Color(0.08f, 0.08f, 0.07f, 0.34f);
+                        : landformBoundary
+                            ? new Color(0.08f, 0.08f, 0.07f, 0.46f)
+                            : new Color(0.48f, 0.40f, 0.64f, 0.42f);
+                    float width = coastBoundary ? 0.09f : landformBoundary ? 0.052f : 0.038f;
                     buffer.AddLine(
                         center + new Vector2(Mathf.Cos(firstAngle), Mathf.Sin(firstAngle)) * PresentationHexRadius,
                         center + new Vector2(Mathf.Cos(secondAngle), Mathf.Sin(secondAngle)) * PresentationHexRadius,
-                        coastBoundary ? 0.09f : 0.045f, color);
+                        width, color);
                 }
             }
             AddMeshObject("LandformBoundaries", buffer, Layer("Boundaries"), 1);
@@ -162,9 +175,14 @@ namespace Cultivation4X.WorldMap
                      WorldMapPresentationPolicy.BuildTerrainIconPlacements(
                          map, viewMode, projectedDiameter, presentationMarkers))
             {
-                if (!CanShowGameplayCell(placement.cellIndex)) continue;
+                bool known = CanShowGameplayCell(placement.cellIndex);
+                // 未知区域在全图缩放时保留低密度、低透明度的粗略地形符号，
+                // 但其它缩放层级仍遵守认知遮蔽。
+                if (!known && lastDensityTier != WorldMapIconDensityTier.Hidden) continue;
+                Color iconColor = TerrainIconColor(placement.kind);
+                if (!known) iconColor.a *= 0.28f;
                 WorldMapIconGeometry.AddTerrainIcon(terrain, placement.kind,
-                    Center(map.cells[placement.cellIndex].coord), 0.72f, TerrainIconColor(placement.kind));
+                    Center(map.cells[placement.cellIndex].coord), 0.72f, iconColor);
             }
             AddMeshObject("TerrainIcons", terrain, Layer("TerrainIcons"), 2);
 
@@ -173,6 +191,9 @@ namespace Cultivation4X.WorldMap
             float alpha = WorldMapPresentationPolicy.MarkerAlpha(viewMode);
             WorldMapGeometryBuffer factions = new WorldMapGeometryBuffer();
             WorldMapGeometryBuffer locations = new WorldMapGeometryBuffer();
+            WorldMapGeometryBuffer confirmedLocations = new WorldMapGeometryBuffer();
+            WorldMapGeometryBuffer contentHints = new WorldMapGeometryBuffer();
+            WorldMapGeometryBuffer environmentHints = new WorldMapGeometryBuffer();
             WorldMapGeometryBuffer caves = new WorldMapGeometryBuffer();
             foreach (WorldMapPresentationMarker marker in presentationMarkers)
             {
@@ -180,17 +201,40 @@ namespace Cultivation4X.WorldMap
                     !CanShowGameplayCell(marker.cellIndex) ||
                     !WorldMapPresentationPolicy.MarkerVisible(marker, viewMode, lastDensityTier, map.effectiveSeed))
                     continue;
-                WorldMapGeometryBuffer target = marker.kind == WorldMapMarkerKind.Cave
-                    ? caves
-                    : marker.kind == WorldMapMarkerKind.FactionSeat ? factions : locations;
+                WorldMapGeometryBuffer target;
+                switch (marker.kind)
+                {
+                    case WorldMapMarkerKind.FactionSeat: target = factions; break;
+                    case WorldMapMarkerKind.Cave: target = caves; break;
+                    case WorldMapMarkerKind.EnvironmentHint:
+                    case WorldMapMarkerKind.EnvironmentMoisture:
+                    case WorldMapMarkerKind.EnvironmentMineralVein:
+                    case WorldMapMarkerKind.EnvironmentBeastTracks:
+                    case WorldMapMarkerKind.EnvironmentRuinedWalls:
+                    case WorldMapMarkerKind.EnvironmentSettlementSigns:
+                    case WorldMapMarkerKind.EnvironmentCaveSigns: target = environmentHints; break;
+                    case WorldMapMarkerKind.ContentHint: target = contentHints; break;
+                    case WorldMapMarkerKind.Village:
+                    case WorldMapMarkerKind.SpiritSpring:
+                    case WorldMapMarkerKind.SpiritMine:
+                    case WorldMapMarkerKind.CaveResidence:
+                    case WorldMapMarkerKind.BeastLair:
+                    case WorldMapMarkerKind.Ruin: target = confirmedLocations; break;
+                    default: target = locations; break;
+                }
                 Color color = MarkerColor(marker.kind);
                 color.a *= alpha;
                 WorldMapIconGeometry.AddMarkerIcon(target, marker.kind,
                     Center(map.cells[marker.cellIndex].coord), markerSize, color);
             }
             AddMeshObject("LocationMarkers", locations, Layer("LocationMarkers"), 6);
-            AddMeshObject("FactionMarkers", factions, Layer("FactionMarkers"), 7);
-            AddMeshObject("CaveMarkers", caves, Layer("LocationMarkers"), 8);
+            AddMeshObject("EnvironmentHints", environmentHints, Layer("LocationMarkers"), 7);
+            AddMeshObject("ContentHints", contentHints, Layer("LocationMarkers"), 8);
+            // Keep the sect base above all confirmed/content markers.  Cave is
+            // a regular location marker and must not cover the faction seat.
+            AddMeshObject("ConfirmedLocations", confirmedLocations, Layer("LocationMarkers"), 9);
+            AddMeshObject("CaveMarkers", caves, Layer("LocationMarkers"), 9);
+            AddMeshObject("FactionMarkers", factions, Layer("FactionMarkers"), 10);
         }
 
         private void BuildInfluenceOverlay()
@@ -206,10 +250,23 @@ namespace Cultivation4X.WorldMap
             {
                 if (influence == null || influence.level == InfluenceLevel.None ||
                     influence.cellIndex < 0 || influence.cellIndex >= map.cells.Length) continue;
+                // 影响力是建宗后的战略地图信息，不依赖该格是否已被探索；
+                // 地点详情和行动权限仍由显式认知规则单独控制。
                 if (!WorldMapInfluencePresentation.TryGetOverlayStyle(
                         influence.level, out Color color, out float width)) continue;
                 WorldCell cell = map.cells[influence.cellIndex];
                 Vector2 center = Center(cell.coord);
+                Color fillColor = color;
+                fillColor.a *= InfluenceFillAlpha(influence.level);
+                for (int corner = 0; corner < 6; corner++)
+                {
+                    float a = Mathf.Deg2Rad * (corner * 60f - 30f);
+                    float b = Mathf.Deg2Rad * ((corner + 1) * 60f - 30f);
+                    buffer.AddTriangle(center,
+                        center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.96f,
+                        center + new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * 0.96f,
+                        fillColor);
+                }
                 for (int corner = 0; corner < 6; corner++)
                 {
                     float a = Mathf.Deg2Rad * (corner * 60f - 30f);
@@ -219,6 +276,17 @@ namespace Cultivation4X.WorldMap
                 }
             }
             AddMeshObject("SectInfluence", buffer, Layer("Influence"), 5);
+        }
+
+        private static float InfluenceFillAlpha(InfluenceLevel level)
+        {
+            switch (level)
+            {
+                case InfluenceLevel.Outer: return 0.18f;
+                case InfluenceLevel.Influence: return 0.24f;
+                case InfluenceLevel.Core: return 0.30f;
+                default: return 0f;
+            }
         }
 
         private void RefreshPresentationForZoom()
@@ -257,6 +325,19 @@ namespace Cultivation4X.WorldMap
                 case WorldMapMarkerKind.FactionSeat: return new Color(0.98f, 0.32f, 0.22f);
                 case WorldMapMarkerKind.Village: return new Color(0.98f, 0.82f, 0.32f);
                 case WorldMapMarkerKind.Cave: return new Color(1f, 0.72f, 0.08f);
+                case WorldMapMarkerKind.CaveResidence: return new Color(0.95f, 0.56f, 0.20f);
+                case WorldMapMarkerKind.ContentHint: return new Color(0.72f, 0.86f, 1f, 0.86f);
+                case WorldMapMarkerKind.SpiritSpring: return new Color(0.20f, 0.84f, 1f);
+                case WorldMapMarkerKind.SpiritMine: return new Color(0.68f, 0.78f, 0.96f);
+                case WorldMapMarkerKind.BeastLair: return new Color(0.92f, 0.34f, 0.18f);
+                case WorldMapMarkerKind.Ruin: return new Color(0.78f, 0.70f, 0.56f);
+                case WorldMapMarkerKind.EnvironmentHint: return new Color(0.72f, 0.90f, 0.78f, 0.58f);
+                case WorldMapMarkerKind.EnvironmentMoisture: return new Color(0.24f, 0.88f, 0.96f, 0.72f);
+                case WorldMapMarkerKind.EnvironmentMineralVein: return new Color(0.86f, 0.68f, 0.28f, 0.72f);
+                case WorldMapMarkerKind.EnvironmentBeastTracks: return new Color(0.92f, 0.40f, 0.28f, 0.72f);
+                case WorldMapMarkerKind.EnvironmentRuinedWalls: return new Color(0.70f, 0.64f, 0.72f, 0.72f);
+                case WorldMapMarkerKind.EnvironmentSettlementSigns: return new Color(0.42f, 0.84f, 0.46f, 0.72f);
+                case WorldMapMarkerKind.EnvironmentCaveSigns: return new Color(0.70f, 0.48f, 0.92f, 0.72f);
                 default: return new Color(0.38f, 0.88f, 1f);
             }
         }
@@ -282,7 +363,7 @@ namespace Cultivation4X.WorldMap
                     new Color(0.03f, 0.035f, 0.04f), 0.6f);
             switch (viewMode)
             {
-                case WorldMapViewMode.Landform: return LandformColor(cell.landform);
+                case WorldMapViewMode.Landform: return LandformFillColor(cell);
                 case WorldMapViewMode.Height:
                     return Color.Lerp(Color.black, Color.white, Mathf.Clamp01(cell.height));
                 case WorldMapViewMode.Temperature: return TemperatureColor(cell.temperature);
@@ -305,6 +386,27 @@ namespace Cultivation4X.WorldMap
                 case LandformType.Hill: return new Color(0.48f, 0.44f, 0.24f);
                 default: return new Color(0.48f, 0.49f, 0.51f);
             }
+        }
+
+        private static Color LandformFillColor(WorldCell cell)
+        {
+            Color baseColor = LandformColor(cell.landform);
+            Color biomeTint;
+            switch (cell.biome)
+            {
+                case BiomeType.Desert: biomeTint = new Color(0.95f, 0.70f, 0.28f); break;
+                case BiomeType.Wetland: biomeTint = new Color(0.20f, 0.68f, 0.62f); break;
+                case BiomeType.TemperateForest: biomeTint = new Color(0.12f, 0.42f, 0.18f); break;
+                case BiomeType.Rainforest: biomeTint = new Color(0.05f, 0.56f, 0.30f); break;
+                case BiomeType.Tundra: biomeTint = new Color(0.62f, 0.72f, 0.78f); break;
+                case BiomeType.Snowfield: biomeTint = new Color(0.90f, 0.94f, 1f); break;
+                case BiomeType.Alpine: biomeTint = new Color(0.56f, 0.60f, 0.72f); break;
+                case BiomeType.Coast: biomeTint = new Color(0.82f, 0.78f, 0.44f); break;
+                default: biomeTint = new Color(0.52f, 0.66f, 0.34f); break;
+            }
+            // Landform remains the dominant fill; biome tint supplies a second,
+            // low-contrast cue without exposing hidden-cell environmental data.
+            return Color.Lerp(baseColor, biomeTint, 0.18f);
         }
 
         private static Color TemperatureColor(float value)
@@ -397,7 +499,7 @@ namespace Cultivation4X.WorldMap
             GameObject legendGraphic = new GameObject("MapLegendSymbols", typeof(RectTransform),
                 typeof(CanvasRenderer), typeof(WorldMapLegendGraphic), typeof(LayoutElement));
             legendGraphic.transform.SetParent(viewPage, false);
-            legendGraphic.GetComponent<LayoutElement>().preferredHeight = 92f;
+            legendGraphic.GetComponent<LayoutElement>().preferredHeight = 164f;
             legendText = AddObservabilityText(viewPage, string.Empty, 15, 210);
 
             Transform statisticsPage = CreateObservabilityScrollPage("StatisticsPage");

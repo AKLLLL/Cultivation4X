@@ -7,12 +7,23 @@ using UnityEngine;
 namespace Cultivation4X.WorldMap
 {
     public enum WorldMapTerrainIconKind { Water, Plain, Hill, Mountain, Forest, Snow }
-    public enum WorldMapMarkerKind { FactionSeat, Village, Cave, PointOfInterest }
+    public enum WorldMapMarkerKind
+    {
+        FactionSeat, Village, Cave, CaveResidence, PointOfInterest, ContentHint,
+        SpiritSpring, SpiritMine, BeastLair, Ruin,
+        EnvironmentHint,
+        EnvironmentMoisture, EnvironmentMineralVein, EnvironmentBeastTracks,
+        EnvironmentRuinedWalls, EnvironmentSettlementSigns, EnvironmentCaveSigns
+    }
     public enum WorldMapIconDensityTier { Hidden, Sparse, Medium, Dense, Full }
 
     public static class WorldMapInfluencePresentation
     {
-        public const string LegendText = "影响力：外缘（冷色细边）　影响（蓝色）　核心（金色）";
+        public const string LegendText =
+            "地图表现：填充=地形色差；边界=海岸/地貌分界；纹理符号=低密度地形概览\n" +
+            "影响力：外缘（冷色细边）　影响（蓝色）　核心（金色）；影响范围无需探索即可显示\n" +
+            "地点图标顺序：宗门驻地/潜在线索/村庄/灵泉/灵矿/洞府/兽巢/遗迹（潜在线索为菱形线索环）\n" +
+            "环境暗示：水汽/矿脉/兽迹/残垣/聚落迹象/洞穴迹象（仅已知格）";
 
         public static bool TryGetOverlayStyle(InfluenceLevel level, out Color color, out float width)
         {
@@ -36,6 +47,7 @@ namespace Cultivation4X.WorldMap
         public string id;
         public string label;
         public WorldMapMarkerKind kind;
+        public WorldMapEnvironmentHintKind environmentHintKind;
         public int cellIndex = -1;
         public bool isDemo;
     }
@@ -65,8 +77,7 @@ namespace Cultivation4X.WorldMap
 
         public static bool TerrainIconsVisible(WorldMapViewMode mode, WorldMapIconDensityTier tier)
         {
-            if (tier == WorldMapIconDensityTier.Hidden ||
-                mode == WorldMapViewMode.AuraConcentration ||
+            if (mode == WorldMapViewMode.AuraConcentration ||
                 mode == WorldMapViewMode.DominantElement ||
                 mode == WorldMapViewMode.SpiritVeinPaths)
                 return false;
@@ -85,7 +96,8 @@ namespace Cultivation4X.WorldMap
                 case WorldMapIconDensityTier.Medium: return 4;
                 case WorldMapIconDensityTier.Dense: return 2;
                 case WorldMapIconDensityTier.Full: return 1;
-                default: return int.MaxValue;
+                // 全图缩放时保留一个低密度符号，避免地形完全变成无差异色块。
+                default: return 8;
             }
         }
 
@@ -101,6 +113,8 @@ namespace Cultivation4X.WorldMap
             if (marker == null) return false;
             if (mode == WorldMapViewMode.SpiritVeinPaths)
                 return marker.kind == WorldMapMarkerKind.Cave;
+            if (!string.IsNullOrEmpty(marker.id) && marker.id.StartsWith("map_site_", StringComparison.Ordinal))
+                return true;
             if (tier != WorldMapIconDensityTier.Hidden || marker.kind != WorldMapMarkerKind.Village)
                 return true;
             return (StableUnsigned(seed, "overview-village-" + marker.id) % 3u) == 0u;
@@ -134,7 +148,9 @@ namespace Cultivation4X.WorldMap
             foreach (WorldMapPresentationMarker marker in markers ?? Enumerable.Empty<WorldMapPresentationMarker>())
             {
                 if (marker == null || marker.cellIndex < 0 || marker.cellIndex >= map.cells.Length) continue;
-                int radius = marker.kind == WorldMapMarkerKind.FactionSeat || marker.kind == WorldMapMarkerKind.Cave ? 2 : 1;
+                int radius = marker.kind == WorldMapMarkerKind.FactionSeat ||
+                             marker.kind == WorldMapMarkerKind.Cave ||
+                             marker.kind == WorldMapMarkerKind.CaveResidence ? 2 : 1;
                 foreach (WorldCell cell in map.cells)
                     if (HexCoord.Distance(map.cells[marker.cellIndex].coord, cell.coord) <= radius)
                         protectedCells.Add(cell.index);
@@ -142,7 +158,8 @@ namespace Cultivation4X.WorldMap
 
             foreach (IGrouping<string, WorldCell> block in map.cells
                          .Where(cell => !protectedCells.Contains(cell.index))
-                         .GroupBy(cell => (cell.coord.col / stride) + ":" + (cell.coord.row / stride)))
+                         .GroupBy(cell => BlockCoordinate(cell.coord.col, stride) + ":" +
+                                          BlockCoordinate(cell.coord.row, stride)))
             {
                 WorldCell selected = block
                     .OrderByDescending(cell => TerrainPriority(GetTerrainIconKind(cell)))
@@ -166,6 +183,12 @@ namespace Cultivation4X.WorldMap
             }
         }
 
+        private static int BlockCoordinate(int coordinate, int stride)
+        {
+            if (coordinate >= 0) return coordinate / stride;
+            return -(((-coordinate) + stride - 1) / stride);
+        }
+
         internal static uint StableUnsigned(int seed, string label) => unchecked((uint)SeedDerivation.Derive(seed, label));
     }
 
@@ -186,6 +209,70 @@ namespace Cultivation4X.WorldMap
                 });
             }
             return result;
+        }
+
+        public static List<WorldMapPresentationMarker> CreateContentMarkers(WorldMap map,
+            WorldMapProgressState progress)
+        {
+            var result = new List<WorldMapPresentationMarker>();
+            if (map?.cells == null || progress?.mapSites == null) return result;
+            WorldMapContentRules.RefreshHints(map, progress);
+            foreach (MapSiteData site in progress.mapSites.Where(site => site != null &&
+                         site.siteType != MapSiteType.SectBase &&
+                         site.revealState != MapContentRevealState.Hidden))
+            {
+                result.Add(new WorldMapPresentationMarker
+                {
+                    id = site.siteId,
+                    label = site.revealState == MapContentRevealState.Hinted ? "可疑线索" : site.siteName,
+                    kind = site.revealState == MapContentRevealState.Hinted
+                        ? WorldMapMarkerKind.ContentHint : ContentMarkerKind(site.siteType),
+                    cellIndex = site.cellIndex
+                });
+            }
+            return result;
+        }
+
+        public static List<WorldMapPresentationMarker> CreateEnvironmentHintMarkers(WorldMap map,
+            WorldMapProgressState progress)
+        {
+            return WorldMapContentEnvironmentRules.BuildHints(map, progress)
+                .Select(hint => new WorldMapPresentationMarker
+                {
+                    id = hint.id,
+                    label = hint.label,
+                    kind = EnvironmentMarkerKind(hint.kind),
+                    environmentHintKind = hint.kind,
+                    cellIndex = hint.cellIndex
+                }).ToList();
+        }
+
+        private static WorldMapMarkerKind ContentMarkerKind(MapSiteType type)
+        {
+            switch (type)
+            {
+                case MapSiteType.Village: return WorldMapMarkerKind.Village;
+                case MapSiteType.SpiritSpring: return WorldMapMarkerKind.SpiritSpring;
+                case MapSiteType.SpiritMine: return WorldMapMarkerKind.SpiritMine;
+                case MapSiteType.CaveResidence: return WorldMapMarkerKind.CaveResidence;
+                case MapSiteType.BeastLair: return WorldMapMarkerKind.BeastLair;
+                case MapSiteType.Ruin: return WorldMapMarkerKind.Ruin;
+                default: return WorldMapMarkerKind.PointOfInterest;
+            }
+        }
+
+        private static WorldMapMarkerKind EnvironmentMarkerKind(WorldMapEnvironmentHintKind kind)
+        {
+            switch (kind)
+            {
+                case WorldMapEnvironmentHintKind.Moisture: return WorldMapMarkerKind.EnvironmentMoisture;
+                case WorldMapEnvironmentHintKind.MineralVein: return WorldMapMarkerKind.EnvironmentMineralVein;
+                case WorldMapEnvironmentHintKind.BeastTracks: return WorldMapMarkerKind.EnvironmentBeastTracks;
+                case WorldMapEnvironmentHintKind.RuinedWalls: return WorldMapMarkerKind.EnvironmentRuinedWalls;
+                case WorldMapEnvironmentHintKind.SettlementSigns: return WorldMapMarkerKind.EnvironmentSettlementSigns;
+                case WorldMapEnvironmentHintKind.CaveSigns: return WorldMapMarkerKind.EnvironmentCaveSigns;
+                default: return WorldMapMarkerKind.EnvironmentHint;
+            }
         }
 
         private static string PointLabel(string id)
@@ -223,14 +310,19 @@ namespace Cultivation4X.WorldMap
             string veinSummary = map.spiritVeins?.Any(vein =>
                 vein?.pathCellIndices?.Contains(cellIndex) == true) == true ? "有" : "无";
             string danger = DangerLabel(WorldMapProgressRules.GetDanger(cell));
+            string contentSummary = ContentSummary(progress, cellIndex);
+            string environmentSummary = string.Join("、", WorldMapContentEnvironmentRules.BuildHints(map, progress)
+                .Where(item => item.cellIndex == cellIndex).Select(item => item.label).Distinct());
+            if (!string.IsNullOrEmpty(environmentSummary))
+                contentSummary += $"\n环境暗示：{environmentSummary}（可作为探索价值参考）";
 
             string influenceSummary = $"认知：已知｜影响值：{influence.value}｜等级：{InfluenceLabel(influence.level)}｜" +
                                       $"控制宗门：{influence.controllerSectId ?? "无"}｜来源：" +
                                       (influence.sourceIds.Count == 0 ? "无" : string.Join("、", influence.sourceIds));
             if (influence.level != InfluenceLevel.Core)
                 return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n" +
-                       $"灵气：{AuraBand(cell.totalAura)}｜主五行：{DominantElementLabel(cell)}｜灵脉：{veinSummary}\n" +
-                       $"危险：{danger}｜地点：{markerText}\n{influenceSummary}";
+                       $"灵气：{AuraBand(cell.totalAura)}｜灵脉：{veinSummary}\n" +
+                       $"危险：{danger}｜地点：{markerText}\n{influenceSummary}{contentSummary}";
 
             string veins = string.Join("、", (map.spiritVeins ?? new List<SpiritVein>())
                 .Where(vein => vein?.pathCellIndices?.Contains(cellIndex) == true)
@@ -240,7 +332,34 @@ namespace Cultivation4X.WorldMap
                    $"高度 {cell.height:0.000}｜温度 {cell.temperature:0.000}｜湿度 {cell.moisture:0.000}\n" +
                    $"基础灵气 {cell.baseAura:0.000}｜总灵气 {cell.totalAura:0.000}\n" +
                    $"金 {cell.elementalAura.metal:0.000} 木 {cell.elementalAura.wood:0.000} 水 {cell.elementalAura.water:0.000} 火 {cell.elementalAura.fire:0.000} 土 {cell.elementalAura.earth:0.000}\n" +
-                   $"危险：{danger}｜地点：{markerText}｜灵脉：{veins}";
+                   $"危险：{danger}｜地点：{markerText}｜灵脉：{veins}{contentSummary}";
+        }
+
+        private static string ContentSummary(WorldMapProgressState progress, int cellIndex)
+        {
+            MapSiteData site = progress?.mapSites?.FirstOrDefault(item => item != null &&
+                item.cellIndex == cellIndex && item.siteType != MapSiteType.SectBase &&
+                item.revealState != MapContentRevealState.Hidden);
+            if (site == null)
+                return progress?.exploredCellIndices?.Contains(cellIndex) == true
+                    ? "\n地图内容：该格已探索" : "\n地图行动：可派遣探索";
+            if (site.revealState == MapContentRevealState.Hinted)
+                return "\n地图内容：发现可疑线索，可派遣探索确认";
+            string actions = site.availableActionIds == null || site.availableActionIds.Count == 0
+                ? "无" : string.Join("、", site.availableActionIds.Select(action =>
+                    action == WorldMapContentRules.InvestigateActionId ? "调查" :
+                    action == WorldMapContentRules.DevelopActionId ? "开发灵泉" :
+                    action == WorldMapContentRules.EstablishVillageRelationActionId ? "建立村庄关系" :
+                    action == WorldMapContentRules.DevelopSpiritMineActionId ? "开发灵矿" :
+                    action == WorldMapContentRules.BuildCaveResidenceOutpostActionId ? "建立洞府据点规则" :
+                    action == WorldMapContentRules.ClearBeastLairActionId ? "清理兽巢" :
+                    action == WorldMapContentRules.InvestigateRuinActionId ? "调查遗迹" : action));
+            string state = site.siteState == MapSiteState.Investigated ?
+                (site.siteType == MapSiteType.BeastLair ? "已清理" : "已调查") :
+                site.siteState == MapSiteState.Developed ? "已完成" : "未处理";
+            string consequence = WorldMapContentEffects.EffectSummary(site.siteType);
+            return $"\n地图内容：{site.siteName}｜状态：{state}｜可用行动：{actions}" +
+                   (string.IsNullOrEmpty(consequence) ? string.Empty : $"\n后果：{consequence}");
         }
 
         private static string InfluenceLabel(InfluenceLevel level)

@@ -248,10 +248,12 @@ public class NPCManager : MonoBehaviour
 
         npc.Character.health = HealthState.Dead;
         if (currentMission != null) currentMission.FailMission(false);
+        MissionManager.Instance?.CancelAwaitingMapMissionsForCharacter(npc.CharacterId);
         npc.Character.activityState = NPCState.Idle;
         npc.State = NPCState.Idle;
         npc.CurrentMission = null;
         npc.Character.AddLifeRecord(CurrentDay, "Death", cause);
+        SaveManager.Instance?.AutoSave();
         return true;
     }
 

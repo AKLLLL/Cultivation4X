@@ -127,6 +127,36 @@ public static class ExternalThreatRules
         }
     }
 
+    /// <summary>
+    /// 清理地图兽巢后的威胁后果：尚未排程时封存对应兽潮，已排程/激活时将下一节点顺延一天。
+    /// 状态直接复用现有外部威胁存档，不增加另一套抑制标记。
+    /// </summary>
+    public static bool ApplyBeastLairClearance(int currentDay)
+    {
+        ActiveThreatState state = GetState();
+        if (state == null) return false;
+        if (state.status == ExternalThreatStatus.None)
+        {
+            state.threatId = QingshiThreatId;
+            state.status = ExternalThreatStatus.Resolved;
+            state.scheduledDay = -1;
+            state.activatedDay = -1;
+            state.nextRaidDay = -1;
+        }
+        else if (state.status == ExternalThreatStatus.Scheduled)
+        {
+            state.scheduledDay = Math.Max(currentDay + 1, state.scheduledDay + 1);
+        }
+        else if (state.status == ExternalThreatStatus.Active)
+        {
+            state.nextRaidDay = Math.Max(currentDay + 1, state.nextRaidDay + 1);
+        }
+        else return false;
+        PlayerManager.Instance?.NotifyFoundingChanged();
+        TimeManager.Instance?.RecordThreatNotice("地图兽巢已处理，外部兽潮威胁被抑制或延后");
+        return true;
+    }
+
     private static bool TryEnqueueDiscoveryNotification(ActiveThreatState state,
         ExternalThreatDefinition definition)
     {

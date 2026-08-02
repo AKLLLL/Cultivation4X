@@ -14,6 +14,8 @@ public class DaySettlementPanel : MonoBehaviour
     }
 
     private RectTransform panel;
+    private RectTransform modalRoot;
+    private Image modalBackdrop;
     private RectTransform content;
     private Button confirmButton;
     private DaySettlementSummary currentSummary;
@@ -30,7 +32,16 @@ public class DaySettlementPanel : MonoBehaviour
     private void Awake()
     {
         RuntimeUIFactory.Canvas(gameObject, 950);
-        panel = RuntimeUIFactory.Panel(transform, "DaySettlement", new Vector2(0.16f, 0.08f), new Vector2(0.84f, 0.92f));
+        GameObject modalObject = new GameObject("SettlementModalRoot", typeof(RectTransform), typeof(Image));
+        modalObject.transform.SetParent(transform, false);
+        modalRoot = modalObject.GetComponent<RectTransform>();
+        modalRoot.anchorMin = Vector2.zero;
+        modalRoot.anchorMax = Vector2.one;
+        modalRoot.offsetMin = modalRoot.offsetMax = Vector2.zero;
+        modalBackdrop = modalObject.GetComponent<Image>();
+        modalBackdrop.color = new Color(0.015f, 0.018f, 0.022f, 0.94f);
+        modalBackdrop.raycastTarget = true;
+        panel = RuntimeUIFactory.Panel(modalRoot, "DaySettlement", new Vector2(0.10f, 0.06f), new Vector2(0.90f, 0.94f));
         RuntimeUIFactory.Text(panel, "每日结算", 30, 48);
         RectTransform tabs = RuntimeUIFactory.TabBar(panel, "SettlementTabs");
         AddPageTab(tabs, SettlementPage.Overview, "总览");
@@ -40,7 +51,7 @@ public class DaySettlementPanel : MonoBehaviour
         content = RuntimeUIFactory.ScrollContent(panel, "SettlementScroll");
         confirmButton = RuntimeUIFactory.Button(panel, "确认");
         confirmButton.onClick.AddListener(Close);
-        panel.gameObject.SetActive(false);
+        modalRoot.gameObject.SetActive(false);
     }
 
     private void Start()
@@ -61,8 +72,8 @@ public class DaySettlementPanel : MonoBehaviour
         currentSummary = summary;
         currentPage = SettlementPage.Overview;
         Refresh();
-        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject, CloseInternal);
-        else panel.gameObject.SetActive(true);
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(modalRoot.gameObject, CloseInternal);
+        else modalRoot.gameObject.SetActive(true);
         TimeManager.Instance?.SetSettlementOpen(true);
     }
 
@@ -182,13 +193,13 @@ public class DaySettlementPanel : MonoBehaviour
 
     private void Close()
     {
-        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(panel.gameObject);
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(modalRoot.gameObject);
         else CloseInternal();
     }
 
     private void CloseInternal()
     {
-        panel.gameObject.SetActive(false);
+        if (modalRoot != null) modalRoot.gameObject.SetActive(false);
         TimeManager.Instance?.SetSettlementOpen(false);
         TimeManager.Instance?.MarkSettlementRead();
         SaveManager.Instance?.AutoSave();

@@ -54,7 +54,9 @@ public class SaveManager : MonoBehaviour
 
     public GameState CaptureState()
     {
+        WorldMapContentRules.EnsureCandidates(WorldMapSession.Current, WorldMapSession.Progress);
         WorldMapInfluenceRules.EnsureCurrent(WorldMapSession.Current, WorldMapSession.Progress);
+        WorldMapContentRules.RefreshHints(WorldMapSession.Current, WorldMapSession.Progress);
         return new GameState
         {
             currentDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
@@ -116,6 +118,7 @@ public class SaveManager : MonoBehaviour
             if (state.version < SaveDataVersion.Current)
                 throw new InvalidDataException("世界地图生成版本更新不兼容旧档，请删除旧存档并开始新游戏");
 
+            NormalizeCurrentVersionCollections(state);
             PrepareInfluenceStateForValidation(state);
             ValidateWorldMapState(state);
             MigrateState(state);
@@ -154,6 +157,8 @@ public class SaveManager : MonoBehaviour
         state.worldMapProgress = state.worldMapProgress ?? new WorldMapProgressState();
         state.worldMapProgress.revealedCellIndices =
             state.worldMapProgress.revealedCellIndices ?? new System.Collections.Generic.List<int>();
+        state.worldMapProgress.exploredCellIndices =
+            state.worldMapProgress.exploredCellIndices ?? new System.Collections.Generic.List<int>();
         state.worldMapProgress.mapSites =
             state.worldMapProgress.mapSites ?? new System.Collections.Generic.List<MapSiteData>();
         state.worldMapProgress.influenceSources =
@@ -240,6 +245,30 @@ public class SaveManager : MonoBehaviour
         state.version = SaveDataVersion.Current;
     }
 
+    private static void NormalizeCurrentVersionCollections(GameState state)
+    {
+        if (state == null) return;
+        if (state.worldMapProgress != null)
+        {
+            state.worldMapProgress.revealedCellIndices = state.worldMapProgress.revealedCellIndices ??
+                new System.Collections.Generic.List<int>();
+            state.worldMapProgress.exploredCellIndices = state.worldMapProgress.exploredCellIndices ??
+                new System.Collections.Generic.List<int>();
+            state.worldMapProgress.mapSites = state.worldMapProgress.mapSites ??
+                new System.Collections.Generic.List<MapSiteData>();
+            state.worldMapProgress.influenceSources = state.worldMapProgress.influenceSources ??
+                new System.Collections.Generic.List<InfluenceSourceData>();
+            state.worldMapProgress.cellInfluences = state.worldMapProgress.cellInfluences ??
+                new System.Collections.Generic.List<CellInfluenceState>();
+            foreach (MapSiteData site in state.worldMapProgress.mapSites.Where(item => item != null))
+            {
+                site.tags = site.tags ?? new System.Collections.Generic.List<string>();
+                site.availableActionIds = site.availableActionIds ?? new System.Collections.Generic.List<string>();
+            }
+        }
+        state.activeMissions = state.activeMissions ?? new System.Collections.Generic.List<MissionSaveData>();
+    }
+
     public static void ValidateWorldMapState(GameState state)
     {
         if (state?.worldMap == null)
@@ -286,17 +315,36 @@ public class SaveManager : MonoBehaviour
             throw new InvalidDataException("世界地图探索地点映射无效");
 
         WorldMapProgressState progress = state.worldMapProgress;
-        if (progress?.revealedCellIndices == null || progress.mapSites == null ||
+        if (progress?.revealedCellIndices == null || progress.exploredCellIndices == null || progress.mapSites == null ||
             progress.influenceSources == null || progress.cellInfluences == null)
             throw new InvalidDataException("世界地图进度数据缺失");
         if (progress.revealedCellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
             progress.revealedCellIndices.Distinct().Count() != progress.revealedCellIndices.Count)
             throw new InvalidDataException("世界地图认知索引无效");
+        if (progress.exploredCellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
+            progress.exploredCellIndices.Distinct().Count() != progress.exploredCellIndices.Count ||
+            progress.exploredCellIndices.Any(index => !progress.revealedCellIndices.Contains(index)))
+            throw new InvalidDataException("世界地图探索索引无效");
         if (progress.mapSites.Any(site => site == null || string.IsNullOrWhiteSpace(site.siteId) ||
             site.cellIndex < 0 || site.cellIndex >= map.cells.Length ||
-            !Enum.IsDefined(typeof(MapSiteType), site.siteType)) ||
-            progress.mapSites.GroupBy(site => site.siteId).Any(group => group.Count() != 1))
+            !Enum.IsDefined(typeof(MapSiteType), site.siteType) ||
+            !Enum.IsDefined(typeof(MapContentRevealState), site.revealState) ||
+            !Enum.IsDefined(typeof(MapSiteState), site.siteState) ||
+            site.tags == null || site.availableActionIds == null ||
+            site.tags.Any(string.IsNullOrWhiteSpace) || site.availableActionIds.Any(string.IsNullOrWhiteSpace) ||
+            site.tags.Distinct(StringComparer.Ordinal).Count() != site.tags.Count ||
+            site.availableActionIds.Distinct(StringComparer.Ordinal).Count() != site.availableActionIds.Count ||
+            site.isRevealed != (site.siteType == MapSiteType.SectBase || site.revealState == MapContentRevealState.Discovered)) ||
+            progress.mapSites.GroupBy(site => site.siteId).Any(group => group.Count() != 1) ||
+            progress.mapSites.GroupBy(site => site.cellIndex).Any(group => group.Count() != 1))
             throw new InvalidDataException("世界地图地点数据无效");
+        MapSiteType[] candidateTypes = { MapSiteType.Village, MapSiteType.SpiritSpring, MapSiteType.SpiritMine,
+            MapSiteType.CaveResidence, MapSiteType.BeastLair, MapSiteType.Ruin };
+        if (candidateTypes.Any(type => progress.mapSites.Count(site => site.siteType == type) != 1) ||
+            progress.mapSites.Where(site => site.siteType != MapSiteType.SectBase)
+                .Any(site => IsInvalidContentSite(map, state.currentDay, site)))
+            throw new InvalidDataException("世界地图候选内容无效");
+        ValidateMapMissionContexts(state, map, progress);
         ValidateInfluenceCache(map, progress);
 
         FoundingState founding = state.sect?.founding;
@@ -383,6 +431,9 @@ public class SaveManager : MonoBehaviour
             sectBase.siteId != WorldMapProgressRules.PlayerSectBaseId ||
             sectBase.cellIndex != selected ||
             !sectBase.isRevealed || !sectBase.canInteract ||
+            sectBase.revealState != MapContentRevealState.Discovered ||
+            sectBase.siteState != MapSiteState.Developed ||
+            sectBase.ownerSectId != "player_sect" ||
             state.sect.sectId != "player_sect" ||
             string.IsNullOrWhiteSpace(state.sect.sectName) ||
             state.sect.sectName.Length < 2 || state.sect.sectName.Length > 12 ||
@@ -399,6 +450,110 @@ public class SaveManager : MonoBehaviour
             sectBaseSource.radius != WorldMapInfluenceRules.SectBaseRadius ||
             !sectBaseSource.isActive)
             throw new InvalidDataException("宗门驻地与宗门数据不一致");
+    }
+
+    private static bool IsInvalidContentSite(WorldMap map, int currentDay, MapSiteData site)
+    {
+        if (site.siteId != WorldMapContentRules.CandidateId(site.siteType) ||
+            site.siteName != WorldMapContentRules.SiteTypeLabel(site.siteType) ||
+            !site.tags.SequenceEqual(WorldMapContentRules.CandidateTags(site.siteType), StringComparer.Ordinal)) return true;
+        if (site.revealState != MapContentRevealState.Discovered &&
+            (site.siteState != MapSiteState.None || site.discoveredDay != -1 || site.lastUpdatedDay != -1 ||
+             !string.IsNullOrEmpty(site.ownerSectId))) return true;
+        if (site.revealState == MapContentRevealState.Discovered &&
+            (site.discoveredDay < 0 || site.discoveredDay > currentDay ||
+             site.lastUpdatedDay < site.discoveredDay || site.lastUpdatedDay > currentDay)) return true;
+        bool validState = site.siteState == MapSiteState.None ||
+            (site.siteType == MapSiteType.SpiritSpring &&
+             (site.siteState == MapSiteState.Investigated || site.siteState == MapSiteState.Developed)) ||
+            ((site.siteType == MapSiteType.Village || site.siteType == MapSiteType.SpiritMine ||
+              site.siteType == MapSiteType.CaveResidence) && site.siteState == MapSiteState.Developed) ||
+            ((site.siteType == MapSiteType.BeastLair || site.siteType == MapSiteType.Ruin) &&
+             site.siteState == MapSiteState.Investigated);
+        if (!validState) return true;
+        if ((site.siteState == MapSiteState.None || site.siteState == MapSiteState.Investigated) &&
+            !string.IsNullOrEmpty(site.ownerSectId)) return true;
+        if (site.siteState == MapSiteState.Developed && site.ownerSectId != "player_sect") return true;
+        string expectedAction = site.revealState == MapContentRevealState.Discovered && site.siteState == MapSiteState.None
+            ? WorldMapContentRules.ActionIdFor(WorldMapContentRules.ActionForSite(site)) :
+            site.revealState == MapContentRevealState.Discovered && site.siteType == MapSiteType.SpiritSpring &&
+              site.siteState == MapSiteState.Investigated ? WorldMapContentRules.DevelopActionId : null;
+        string[] expected = string.IsNullOrEmpty(expectedAction) ? Array.Empty<string>() : new[] { expectedAction };
+        if (!(site.availableActionIds ?? new System.Collections.Generic.List<string>()).SequenceEqual(expected, StringComparer.Ordinal) ||
+            site.canInteract != (expected.Length > 0)) return true;
+        return false;
+    }
+
+    private static void ValidateMapMissionContexts(GameState state, WorldMap map, WorldMapProgressState progress)
+    {
+        System.Collections.Generic.List<MissionSaveData> missions = state.activeMissions ??
+            new System.Collections.Generic.List<MissionSaveData>();
+        string[] mapMissionIds = { WorldMapContentRules.ExploreMissionId,
+            WorldMapContentRules.InvestigateSpiritSpringMissionId,
+            WorldMapContentRules.DevelopSpiritSpringMissionId,
+            WorldMapContentRules.EstablishVillageRelationMissionId,
+            WorldMapContentRules.DevelopSpiritMineMissionId,
+            WorldMapContentRules.BuildCaveResidenceOutpostMissionId,
+            WorldMapContentRules.ClearBeastLairMissionId,
+            WorldMapContentRules.InvestigateRuinMissionId };
+        if (missions.Any(mission => mission == null ||
+                (mapMissionIds.Contains(mission.missionId) != (mission.mapContext != null))))
+            throw new InvalidDataException("地图任务与上下文缺失或错配");
+        foreach (MissionSaveData mission in missions.Where(item => item.mapContext != null))
+        {
+            MapMissionContext context = mission.mapContext;
+            if (!Enum.IsDefined(typeof(MapActionType), context.actionType) || context.actionType == MapActionType.None ||
+                context.targetCellIndex < 0 || context.targetCellIndex >= map.cells.Length ||
+                !Enum.IsDefined(typeof(MissionState), mission.state) ||
+                (mission.state != MissionState.Active && mission.state != MissionState.AwaitingReward) ||
+                string.IsNullOrWhiteSpace(mission.assignedCharacterId) ||
+                state.characters == null || state.characters.Count(character => character != null &&
+                    character.characterId == mission.assignedCharacterId && character.IsAlive) != 1 ||
+                mission.reward == null || !mission.hasCapabilitySnapshot || mission.capabilityScore < 0 ||
+                !Enum.IsDefined(typeof(MissionResultTier), mission.resultTier) ||
+                mission.remainingDays < 0 || mission.elapsedDays < 0 || mission.currentNodeIndex != 0 ||
+                (mission.state == MissionState.AwaitingReward && mission.resultTier == MissionResultTier.Insufficient))
+                throw new InvalidDataException("地图任务上下文无效");
+            if ((context.actionType == MapActionType.Explore && !string.IsNullOrEmpty(context.targetSiteId)) ||
+                (context.actionType != MapActionType.Explore && string.IsNullOrWhiteSpace(context.targetSiteId)))
+                throw new InvalidDataException("地图任务目标引用无效");
+            string expectedMissionId = WorldMapContentRules.MissionIdFor(context.actionType);
+            if (context.actionType != MapActionType.Explore)
+            {
+                MapSiteData targetSite = WorldMapContentRules.FindSite(progress, context.targetSiteId);
+                if (targetSite == null || targetSite.siteType != WorldMapContentRules.SiteTypeForAction(context.actionType))
+                    throw new InvalidDataException("地图任务目标类型无效");
+            }
+            if (mission.missionId != expectedMissionId ||
+                !WorldMapContentRules.CanStartAction(map, progress, context, out _))
+                throw new InvalidDataException("地图任务目标与行动不一致");
+            Reward expectedReward = WorldMapContentRules.CreateReward(map, context);
+            if (mission.state == MissionState.AwaitingReward && mission.resultTier == MissionResultTier.Excellent)
+            {
+                expectedReward.Gold += Mathf.FloorToInt(expectedReward.Gold * 0.5f);
+                expectedReward.Exp += Mathf.FloorToInt(expectedReward.Exp * 0.5f);
+            }
+            if (!RewardsEqual(expectedReward, mission.reward))
+                throw new InvalidDataException("地图任务奖励快照无效");
+        }
+        if (missions.Where(item => item?.mapContext != null)
+            .GroupBy(item => $"{item.mapContext.actionType}:{item.mapContext.targetCellIndex}")
+            .Any(group => group.Count() != 1))
+            throw new InvalidDataException("地图任务重复");
+    }
+
+    private static bool RewardsEqual(Reward left, Reward right)
+    {
+        if (left == null || right == null || left.Gold != right.Gold || left.Exp != right.Exp ||
+            left.Items == null || right.Items == null || left.Items.Count != right.Items.Count) return false;
+        for (int index = 0; index < left.Items.Count; index++)
+        {
+            ItemReward expected = left.Items[index];
+            ItemReward actual = right.Items[index];
+            if (expected == null || actual == null || expected.itemId != actual.itemId || expected.count != actual.count)
+                return false;
+        }
+        return true;
     }
 
     private static void PrepareInfluenceStateForValidation(GameState state)

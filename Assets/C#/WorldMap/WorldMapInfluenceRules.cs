@@ -56,6 +56,8 @@ namespace Cultivation4X.WorldMap
             EnsureCurrent(map, progress);
             CellInfluenceState cached = progress?.cellInfluences?.FirstOrDefault(item =>
                 item != null && item.cellIndex == cellIndex);
+            // 已有影响缓存代表宗门已经掌握该范围；显式揭示仍可用于范围外探索认知。
+            // 影响缓存不写入 revealedCellIndices，避免把战略范围与探索记录混为一谈。
             bool known = cached != null || progress?.revealedCellIndices?.Contains(cellIndex) == true;
             return new CellInfluenceRuntimeState
             {

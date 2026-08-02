@@ -138,6 +138,65 @@ public class WorldMapProgressTests
     }
 
     [Test]
+    public void InfluenceCache_GrantsKnownWithoutExplicitReveal()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
+            { width = 16, height = 16, seed = 714 });
+        WorldMapProgressState progress = new WorldMapProgressState
+        {
+            cellInfluences = new List<CellInfluenceState>
+            {
+                new CellInfluenceState
+                {
+                    cellIndex = 5, value = 100, level = InfluenceLevel.Core,
+                    controllerSectId = "player_sect", sourceIds = new List<string> { "base" }
+                }
+            }
+        };
+        CellInfluenceRuntimeState cachedState = WorldMapInfluenceRules.GetCellState(map, progress, 5);
+        Assert.AreEqual(KnowledgeState.Known, cachedState.knowledge);
+        Assert.AreEqual(InfluenceLevel.Core, cachedState.level);
+        Assert.IsFalse(progress.revealedCellIndices.Contains(5));
+
+        WorldMapProgressState calculated = ProgressWithSources(Source("base", 5));
+        WorldMapInfluenceRules.Recalculate(map, calculated);
+        Assert.IsTrue(calculated.cellInfluences.All(state =>
+            WorldMapInfluenceRules.GetCellState(map, calculated, state.cellIndex).knowledge ==
+            KnowledgeState.Known));
+        Assert.IsEmpty(calculated.revealedCellIndices);
+    }
+
+    [Test]
+    public void InfluenceRange_DisclosesByLevelBeforeExploration()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
+            { width = 16, height = 16, seed = 7132 });
+        int home = map.GetIndex(new HexCoord(8, 8));
+        int edge = map.GetNeighborIndices(home).First();
+        WorldMapProgressState progress = ProgressWithSources(Source("base", home));
+        WorldMapInfluenceRules.Recalculate(map, progress);
+        PlayerData sect = new PlayerData
+        {
+            sectId = "player_sect",
+            founding = new FoundingState { initialized = true, stage = FoundingStage.Cave }
+        };
+
+        string coreText = WorldMapCellDetailsFormatter.Format(map, home,
+            WorldMapViewMode.Landform, false, null, progress, sect);
+        string edgeText = WorldMapCellDetailsFormatter.Format(map, edge,
+            WorldMapViewMode.Landform, false, null, progress, sect);
+        int outside = map.cells.First(cell => HexCoord.Distance(cell.coord, map.cells[home].coord) > 2).index;
+        string unknownText = WorldMapCellDetailsFormatter.Format(map, outside,
+            WorldMapViewMode.Landform, false, null, progress, sect);
+
+        StringAssert.Contains("认知：已知", coreText);
+        StringAssert.Contains("基础灵气", coreText);
+        StringAssert.Contains("认知：已知", edgeText);
+        StringAssert.Contains("影响值：60", edgeText);
+        StringAssert.Contains("认知：未知", unknownText);
+    }
+
+    [Test]
     public void KnowledgeAndDetails_RespectUnknownInfluenceAndCoreLevels()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
@@ -198,7 +257,7 @@ public class WorldMapProgressTests
     }
 
     [Test]
-    public void PermissionMatrix_InheritsByLevelAndRevealDoesNotGrantPermissions()
+    public void PermissionMatrix_InheritsByCachedInfluenceLevel()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
             { width = 16, height = 16, seed = 716 });
@@ -208,6 +267,14 @@ public class WorldMapProgressTests
         int none = map.cells.First(cell => HexCoord.Distance(cell.coord, map.cells[home].coord) > 2).index;
         WorldMapProgressState progress = ProgressWithSources(Source("base", home));
         WorldMapInfluenceRules.Recalculate(map, progress);
+
+        // Cached influence grants strategic knowledge and permissions without
+        // mutating the explicit exploration record.
+        Assert.AreEqual(KnowledgeState.Known,
+            WorldMapInfluenceRules.GetCellState(map, progress, outer).knowledge);
+        Assert.AreEqual(KnowledgeState.Known,
+            WorldMapInfluenceRules.GetCellState(map, progress, influence).knowledge);
+        Assert.IsEmpty(progress.revealedCellIndices);
 
         Assert.IsTrue(WorldMapInfluenceRules.CanInvestigate(map, progress, outer));
         Assert.IsTrue(WorldMapInfluenceRules.CanClear(map, progress, outer));
@@ -260,6 +327,7 @@ public class WorldMapProgressTests
         StringAssert.Contains("外缘", WorldMapInfluencePresentation.LegendText);
         StringAssert.Contains("影响", WorldMapInfluencePresentation.LegendText);
         StringAssert.Contains("核心", WorldMapInfluencePresentation.LegendText);
+        StringAssert.Contains("\n", WorldMapInfluencePresentation.LegendText);
     }
 
     [Test]

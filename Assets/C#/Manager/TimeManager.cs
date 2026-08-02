@@ -60,6 +60,7 @@ public class TimeManager : MonoBehaviour
 
         // 固定顺序：角色恢复/修炼 -> 任务推进 -> 外部威胁 -> 事件抽取 -> 结算 -> 自动保存。
         NPCManager.Instance?.OnDayPassed();
+        Cultivation4X.WorldMap.WorldMapContentEffects.ApplyDaily(CurrentDay);
         OnDayPassed?.Invoke(CurrentDay);
         ExternalThreatRules.ProcessDay(CurrentDay);
         EventManager.Instance?.ProcessDay(CurrentDay);

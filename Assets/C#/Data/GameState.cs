@@ -4,7 +4,7 @@ using Cultivation4X.WorldMap;
 
 public static class SaveDataVersion
 {
-    public const int Current = 10;
+    public const int Current = 12;
 }
 
 [Serializable]
@@ -45,4 +45,5 @@ public class MissionSaveData
     public bool hasCapabilitySnapshot;
     public int capabilityScore;
     public MissionResultTier resultTier;
+    public MapMissionContext mapContext;
 }

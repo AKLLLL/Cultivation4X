@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -61,6 +62,36 @@ public class UIPaginationTests
         Assert.AreEqual(new Vector2(0f, -44f), tabs.offsetMin);
         Assert.AreEqual(Vector2.zero, tabs.offsetMax);
         Assert.AreEqual(44f, tabs.rect.height, 0.01f);
+    }
+
+    [Test]
+    public void WorldMapControls_StretchVerticallyBetweenHudSafeMargins()
+    {
+        GameObject owner = Track(new GameObject("WorldMapControlsLayoutTest",
+            typeof(RectTransform), typeof(VerticalLayoutGroup)));
+        RectTransform controls = owner.GetComponent<RectTransform>();
+        typeof(Cultivation4X.WorldMap.WorldMapPresenter)
+            .GetMethod("ConfigureHudControlsLayout", StaticFlags)
+            .Invoke(null, new object[] { controls });
+
+        Assert.AreEqual(new Vector2(0.70f, 0f), controls.anchorMin);
+        Assert.AreEqual(new Vector2(0.99f, 1f), controls.anchorMax);
+        Assert.LessOrEqual(controls.offsetMin.y, 12f);
+        Assert.AreEqual(-64f, controls.offsetMax.y);
+        Assert.AreEqual(4f, controls.GetComponent<VerticalLayoutGroup>().spacing);
+    }
+
+    [Test]
+    public void WorldMapLegend_StaysInsideLeftMapRegion()
+    {
+        GameObject owner = Track(new GameObject("WorldMapLegendLayoutTest", typeof(RectTransform)));
+        RectTransform legend = owner.GetComponent<RectTransform>();
+        typeof(Cultivation4X.WorldMap.WorldMapPresenter)
+            .GetMethod("ConfigureInfluenceLegendLayout", StaticFlags)
+            .Invoke(null, new object[] { legend });
+
+        Assert.Less(legend.anchorMax.x, 0.70f);
+        Assert.AreEqual(154f, legend.offsetMin.x);
     }
 
     [Test]
@@ -254,6 +285,27 @@ public class UIPaginationTests
         Button confirm = (Button)typeof(DaySettlementPanel)
             .GetField("confirmButton", InstanceFlags).GetValue(panel);
         Assert.AreSame(root, confirm.transform.parent);
+        Image backdrop = (Image)typeof(DaySettlementPanel)
+            .GetField("modalBackdrop", InstanceFlags).GetValue(panel);
+        Assert.IsTrue(backdrop.gameObject.activeSelf);
+        Assert.AreEqual(Vector2.zero, backdrop.rectTransform.anchorMin);
+        Assert.AreEqual(Vector2.one, backdrop.rectTransform.anchorMax);
+        Assert.IsTrue(backdrop.raycastTarget);
+    }
+
+    [Test]
+    public void MapMissionContext_ClearlyIdentifiesActionAndHidesOrdinaryAffairs()
+    {
+        MethodInfo format = typeof(MissionPanel).GetMethod("FormatMapActionContext", StaticFlags);
+        string text = (string)format.Invoke(null, new object[]
+        {
+            new Cultivation4X.WorldMap.MapMissionContext
+                { actionType = Cultivation4X.WorldMap.MapActionType.InvestigateSpiritSpring, targetCellIndex = 27 }
+        });
+
+        StringAssert.Contains("调查灵泉", text);
+        StringAssert.Contains("格 27", text);
+        StringAssert.Contains("普通宗门事务已暂时隐藏", text);
     }
 
     [Test]
@@ -280,6 +332,12 @@ public class UIPaginationTests
         RectTransform scrollRoot = bodyContent.parent.parent as RectTransform;
         Assert.IsNotNull(scrollRoot);
         Assert.AreEqual(1f, scrollRoot.GetComponent<LayoutElement>().flexibleHeight);
+
+        TMP_Text bodyText = (TMP_Text)typeof(CharacterEventPanel)
+            .GetField("bodyText", InstanceFlags).GetValue(panel);
+        Assert.IsTrue(bodyText.enableWordWrapping);
+        Assert.AreEqual(TextAlignmentOptions.TopLeft, bodyText.alignment);
+        Assert.AreEqual(TextOverflowModes.Overflow, bodyText.overflowMode);
     }
 
     private static void AssertMissionPage(MissionData data, string expected)

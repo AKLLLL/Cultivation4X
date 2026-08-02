@@ -25,7 +25,40 @@ namespace Cultivation4X.WorldMap
 
     public enum MapSiteType
     {
-        SectBase
+        SectBase = 0,
+        Village = 1,
+        SpiritSpring = 2,
+        SpiritMine = 3,
+        CaveResidence = 4,
+        BeastLair = 5,
+        Ruin = 6
+    }
+
+    public enum MapContentRevealState
+    {
+        Hidden = 0,
+        Hinted = 1,
+        Discovered = 2
+    }
+
+    public enum MapSiteState
+    {
+        None = 0,
+        Investigated = 1,
+        Developed = 2
+    }
+
+    public enum MapActionType
+    {
+        None = 0,
+        Explore = 1,
+        InvestigateSpiritSpring = 2,
+        DevelopSpiritSpring = 3,
+        EstablishVillageRelation = 4,
+        DevelopSpiritMine = 5,
+        BuildCaveResidenceOutpost = 6,
+        ClearBeastLair = 7,
+        InvestigateRuin = 8
     }
 
     public enum WorldDangerLevel
@@ -44,12 +77,20 @@ namespace Cultivation4X.WorldMap
         public string siteName;
         public bool isRevealed;
         public bool canInteract;
+        public MapContentRevealState revealState;
+        public MapSiteState siteState;
+        public string ownerSectId;
+        public int discoveredDay = -1;
+        public int lastUpdatedDay = -1;
+        public List<string> tags = new List<string>();
+        public List<string> availableActionIds = new List<string>();
     }
 
     [Serializable]
     public sealed class WorldMapProgressState
     {
         public List<int> revealedCellIndices = new List<int>();
+        public List<int> exploredCellIndices = new List<int>();
         public List<MapSiteData> mapSites = new List<MapSiteData>();
         public List<InfluenceSourceData> influenceSources = new List<InfluenceSourceData>();
         public List<CellInfluenceState> cellInfluences = new List<CellInfluenceState>();

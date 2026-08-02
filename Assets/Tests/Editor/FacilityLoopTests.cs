@@ -41,6 +41,31 @@ public class FacilityLoopTests
     }
 
     [Test]
+    public void WarehouseJsonRoundTrip_ReplacesStarterItemsInsteadOfAddingThem()
+    {
+        GameState state = new GameState
+        {
+            warehouse = new WarehouseData
+            {
+                items = new List<ItemStack>
+                {
+                    new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 12 },
+                    new ItemStack { itemId = "roundtrip_item", count = 3 }
+                }
+            }
+        };
+
+        string json = JsonConvert.SerializeObject(state);
+        GameState first = JsonConvert.DeserializeObject<GameState>(json);
+        GameState second = JsonConvert.DeserializeObject<GameState>(JsonConvert.SerializeObject(first));
+
+        Assert.AreEqual(12, first.warehouse.items.Single(item => item.itemId == FacilityRules.BasicMaterialId).count);
+        Assert.AreEqual(2, first.warehouse.items.Count);
+        Assert.AreEqual(12, second.warehouse.items.Single(item => item.itemId == FacilityRules.BasicMaterialId).count);
+        Assert.AreEqual(2, second.warehouse.items.Count);
+    }
+
+    [Test]
     public void FacilityUpgrade_IsAtomicAndUsesSharedResources()
     {
         PlayerManager player = Add<PlayerManager>("Player");

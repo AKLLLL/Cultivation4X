@@ -3,6 +3,7 @@ using UnityEngine;
 using Newtonsoft.Json;
 using System;
 using System.Linq;
+using Cultivation4X.WorldMap;
 
 /// <summary>
 /// 任务管理器
@@ -163,6 +164,8 @@ public class MissionManager : MonoBehaviour
             $"任务模板数量:{missionTemplates.Count}"
         );
 
+        RegisterMapMissionTemplates();
+
     }
 
 
@@ -318,12 +321,40 @@ public class MissionManager : MonoBehaviour
         SaveManager.Instance?.AutoSave();
     }
 
+    public bool TryStartMapMission(MapMissionContext context, NPCRuntime npc, out string reason)
+    {
+        if (npc == null || !npc.CanDispatch()) { reason = "弟子当前无法执行地图任务"; return false; }
+        if (!WorldMapContentRules.CanStartAction(WorldMapSession.Current, WorldMapSession.Progress, context, out reason))
+            return false;
+        if (activeMissions.Any(item => item?.MapContext != null &&
+            (item.State == MissionState.Active || item.State == MissionState.WaitingNode || item.State == MissionState.AwaitingReward) &&
+            item.MapContext.actionType == context.actionType &&
+            item.MapContext.targetCellIndex == context.targetCellIndex &&
+            string.Equals(item.MapContext.targetSiteId, context.targetSiteId, StringComparison.Ordinal)))
+        { reason = "该地图行动已经在进行"; return false; }
+        string templateId = TemplateIdFor(context.actionType);
+        Mission mission = CreateMission(templateId);
+        if (mission == null) { reason = "地图任务模板不存在"; return false; }
+        mission.ConfigureMapMission(context, WorldMapContentRules.CreateReward(WorldMapSession.Current, context));
+        mission.StartMission(npc);
+        activeMissions.Add(mission);
+        EventManager.Instance?.TryTriggerSource(EventSource.MissionStart, npc);
+        SaveManager.Instance?.AutoSave();
+        reason = null;
+        return true;
+    }
+
 
     /// <summary>
     /// 任务完成判断
     /// </summary>
     public void EvaluateMission(Mission mission)
     {
+        if (mission.MapContext != null)
+        {
+            EvaluateMapMission(mission);
+            return;
+        }
         if (mission.Data.threatMissionKind == ThreatMissionKind.Investigation)
         {
             EvaluateThreatInvestigation(mission);
@@ -455,6 +486,42 @@ public class MissionManager : MonoBehaviour
         mission.CompleteMission();
         RecordResult(mission, MissionState.Completed);
         SaveManager.Instance?.AutoSave();
+    }
+
+    private void EvaluateMapMission(Mission mission)
+    {
+        NPCRuntime npc = mission.AssignedNPC;
+        if (npc == null || !npc.Character.IsAlive || mission.ResultTier == MissionResultTier.Insufficient)
+        {
+            mission.FailMission(npc != null && npc.Character.IsAlive);
+            return;
+        }
+        if (!WorldMapContentRules.CanStartAction(WorldMapSession.Current, WorldMapSession.Progress,
+                mission.MapContext, out string reason))
+        {
+            Debug.LogWarning($"地图任务目标状态已变化：{reason}");
+            mission.FailMission(false);
+            return;
+        }
+        if (mission.ResultTier == MissionResultTier.Excellent) mission.ApplyExcellentRewardBonus();
+        if (RewardManager.Instance == null || !RewardManager.Instance.CanGiveReward(mission.Reward))
+        {
+            mission.WaitForReward();
+            NPCManager.Instance?.Recover(npc);
+            RecordResult(mission, MissionState.AwaitingReward);
+            return;
+        }
+        RewardManager.Instance.GiveReward(npc, mission.Reward);
+        WorldMapContentRules.CompleteSuccessfulAction(WorldMapSession.Current, WorldMapSession.Progress,
+            mission.MapContext, mission.ResultTier, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            out _);
+        RecordMissionOutcome(npc, mission.Data, mission.ResultTier);
+        mission.CompleteMission();
+        NPCManager.Instance?.Recover(npc);
+        RecordResult(mission, MissionState.Completed);
+        EventManager.Instance?.TryTriggerSource(EventSource.Exploration, npc);
+        SaveManager.Instance?.AutoSave();
+        WorldMapSession.NotifyProgressChanged();
     }
 
 
@@ -788,7 +855,19 @@ public class MissionManager : MonoBehaviour
     {
         if (mission == null || mission.State != MissionState.AwaitingReward) { reason = "任务没有待领取奖励"; return false; }
         if (!RewardManager.Instance.CanGiveReward(mission.Reward)) { reason = "仓库容量不足"; return false; }
-        if (IsLaborOnlyFoundingAction(mission.Data.foundingAction))
+        bool mapProgressChanged = mission.MapContext != null;
+        if (mapProgressChanged)
+        {
+            if (!WorldMapContentRules.CanStartAction(WorldMapSession.Current, WorldMapSession.Progress,
+                    mission.MapContext, out reason)) return false;
+            NPCRuntime actor = mission.AssignedNPC;
+            RewardManager.Instance.GiveReward(actor, mission.Reward);
+            WorldMapContentRules.CompleteSuccessfulAction(WorldMapSession.Current, WorldMapSession.Progress,
+                mission.MapContext, mission.ResultTier, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                out _);
+            EventManager.Instance?.TryTriggerSource(EventSource.Exploration, actor);
+        }
+        else if (IsLaborOnlyFoundingAction(mission.Data.foundingAction))
         {
             ApplyFoundingSuccess(mission.Data, null);
             GiveSectReward(mission.Reward);
@@ -805,8 +884,64 @@ public class MissionManager : MonoBehaviour
         mission.CompleteMission();
         RecordResult(mission, MissionState.Completed);
         SaveManager.Instance?.AutoSave();
+        if (mapProgressChanged) WorldMapSession.NotifyProgressChanged();
         reason = null;
         return true;
+    }
+
+    public int CancelAwaitingMapMissionsForCharacter(string characterId)
+    {
+        if (string.IsNullOrWhiteSpace(characterId)) return 0;
+        List<Mission> cancelled = activeMissions.Where(mission => mission?.AssignedNPC?.CharacterId == characterId &&
+            mission.State == MissionState.AwaitingReward && mission.MapContext != null).ToList();
+        foreach (Mission mission in cancelled)
+        {
+            if (!mission.CancelAwaitingMapReward()) continue;
+            RecordResult(mission, MissionState.Failed);
+            RemoveMission(mission);
+        }
+        return cancelled.Count;
+    }
+
+    private void RegisterMapMissionTemplates()
+    {
+        RegisterMapTemplate(WorldMapContentRules.ExploreMissionId, "派遣探索", 2, 8, 8, 55);
+        RegisterMapTemplate(WorldMapContentRules.InvestigateSpiritSpringMissionId, "调查灵泉", 2, 6, 10, 50);
+        RegisterMapTemplate(WorldMapContentRules.DevelopSpiritSpringMissionId, "开发灵泉", 3, 8, 12, 60);
+        RegisterMapTemplate(WorldMapContentRules.EstablishVillageRelationMissionId, "建立村庄关系", 3, 7, 11, 55);
+        RegisterMapTemplate(WorldMapContentRules.DevelopSpiritMineMissionId, "开发灵矿", 3, 8, 12, 60);
+        RegisterMapTemplate(WorldMapContentRules.BuildCaveResidenceOutpostMissionId, "建立洞府据点规则", 3, 9, 10, 62);
+        RegisterMapTemplate(WorldMapContentRules.ClearBeastLairMissionId, "清理兽巢", 2, 11, 7, 65);
+        RegisterMapTemplate(WorldMapContentRules.InvestigateRuinMissionId, "调查遗迹", 2, 6, 12, 58);
+    }
+
+    private void RegisterMapTemplate(string id, string name, int days,
+        int requiredAttack, int requiredIntelligence, int requiredCombatPower)
+    {
+        missionTemplates[id] = new MissionData
+        {
+            id = id, name = name, description = name, missionType = MissionType.Exploration,
+            generatedByMap = true,
+            needDays = days, itemRewards = new List<ItemReward>(), nodes = new List<MissionNodeData>(),
+            requiredAttack = requiredAttack, requiredIntelligence = requiredIntelligence,
+            requiredCombatPower = requiredCombatPower, excellentScore = 135
+        };
+    }
+
+    private static string TemplateIdFor(MapActionType action)
+    {
+        switch (action)
+        {
+            case MapActionType.Explore: return WorldMapContentRules.ExploreMissionId;
+            case MapActionType.InvestigateSpiritSpring: return WorldMapContentRules.InvestigateSpiritSpringMissionId;
+            case MapActionType.DevelopSpiritSpring: return WorldMapContentRules.DevelopSpiritSpringMissionId;
+            case MapActionType.EstablishVillageRelation: return WorldMapContentRules.EstablishVillageRelationMissionId;
+            case MapActionType.DevelopSpiritMine: return WorldMapContentRules.DevelopSpiritMineMissionId;
+            case MapActionType.BuildCaveResidenceOutpost: return WorldMapContentRules.BuildCaveResidenceOutpostMissionId;
+            case MapActionType.ClearBeastLair: return WorldMapContentRules.ClearBeastLairMissionId;
+            case MapActionType.InvestigateRuin: return WorldMapContentRules.InvestigateRuinMissionId;
+            default: return null;
+        }
     }
 
     private static void RecordMissionOutcome(NPCRuntime npc, MissionData data, MissionResultTier tier)
@@ -966,6 +1101,7 @@ public class MissionManager : MonoBehaviour
     public bool IsMissionVisible(MissionData data)
     {
         if (data == null || data.missionType == MissionType.WorldEvent) return false;
+        if (data.generatedByMap) return false;
         if (data.threatMissionKind == ThreatMissionKind.Investigation)
         {
             ActiveThreatState threat = ExternalThreatRules.GetState();

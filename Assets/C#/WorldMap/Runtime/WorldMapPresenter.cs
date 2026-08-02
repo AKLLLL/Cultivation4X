@@ -32,9 +32,14 @@ namespace Cultivation4X.WorldMap
         private bool showGrid;
         private int selectedCellIndex = -1;
         private TMP_Text details;
+        private RectTransform detailsScrollRoot;
+        private LayoutElement detailsTextLayout;
         private Button auraButton;
         private Button confirmButton;
         private Button sectBriefButton;
+        private Button exploreCellButton;
+        private Button investigateSpringButton;
+        private Button developSpringButton;
         private Canvas hudCanvas;
         private RectTransform hudControls;
         private GameObject selectionBlocker;
@@ -69,6 +74,7 @@ namespace Cultivation4X.WorldMap
         {
             while (SaveManager.Instance == null || !SaveManager.Instance.IsInitializationComplete) yield return null;
             if (PlayerManager.Instance != null) PlayerManager.Instance.OnFoundingChanged += RefreshSelectionMode;
+            WorldMapSession.ProgressChanged += RefreshMapProgress;
             SetMap(WorldMapSession.Current);
             RefreshSelectionMode();
         }
@@ -76,6 +82,7 @@ namespace Cultivation4X.WorldMap
         private void OnDestroy()
         {
             if (PlayerManager.Instance != null) PlayerManager.Instance.OnFoundingChanged -= RefreshSelectionMode;
+            WorldMapSession.ProgressChanged -= RefreshMapProgress;
             if (material != null) Destroy(material);
         }
 
@@ -277,10 +284,8 @@ namespace Cultivation4X.WorldMap
             blockerRect.offsetMin = blockerRect.offsetMax = Vector2.zero;
             selectionBlocker.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.001f);
             hudControls = RuntimeUIFactory.Panel(hud.transform, "MapControls",
-                new Vector2(0.79f, 1f), new Vector2(0.99f, 1f));
-            hudControls.pivot = new Vector2(0.5f, 1f);
-            hudControls.anchoredPosition = new Vector2(0f, -64f);
-            hudControls.sizeDelta = new Vector2(0f, 380f);
+                new Vector2(0.70f, 0f), new Vector2(0.99f, 1f));
+            ConfigureHudControlsLayout(hudControls);
             RectTransform panel = hudControls;
             RuntimeUIFactory.Text(panel, "世界地图", 25, 38);
             auraButton = RuntimeUIFactory.Button(panel, "普通 / 灵气视图", 38);
@@ -292,18 +297,27 @@ namespace Cultivation4X.WorldMap
             grid.onClick.AddListener(() => { showGrid = !showGrid; Rebuild(); });
             Button fit = RuntimeUIFactory.Button(panel, "回到全图", 38);
             fit.onClick.AddListener(FitCamera);
-            details = RuntimeUIFactory.Text(panel, "点击地图格查看详情。", 16, 95);
+            RectTransform detailsContent = RuntimeUIFactory.ScrollContent(panel, "MapDetailsScroll");
+            detailsScrollRoot = detailsContent.parent.parent as RectTransform;
+            LayoutElement detailsAreaLayout = detailsScrollRoot.GetComponent<LayoutElement>();
+            detailsAreaLayout.minHeight = 32f;
+            detailsAreaLayout.preferredHeight = 190f;
+            detailsAreaLayout.flexibleHeight = 1f;
+            details = RuntimeUIFactory.Text(detailsContent, "点击地图格查看详情。", 16, 40);
+            details.alignment = TextAlignmentOptions.TopLeft;
+            detailsTextLayout = details.GetComponent<LayoutElement>();
+            detailsTextLayout.minHeight = 40f;
+            detailsTextLayout.preferredHeight = 40f;
             confirmButton = RuntimeUIFactory.Button(panel, "建立宗门", 42);
             confirmButton.onClick.AddListener(ConfirmSite);
             confirmButton.gameObject.SetActive(false);
+            exploreCellButton = RuntimeUIFactory.Button(panel, "派遣探索", 38);
+            exploreCellButton.onClick.AddListener(() => OpenSelectedMapAction(MapActionType.Explore));
+            investigateSpringButton = RuntimeUIFactory.Button(panel, "调查灵泉", 38);
+            investigateSpringButton.onClick.AddListener(() => OpenSelectedMapAction(MapActionType.InvestigateSpiritSpring));
+            developSpringButton = RuntimeUIFactory.Button(panel, "开发灵泉", 38);
+            developSpringButton.onClick.AddListener(() => OpenSelectedMapAction(MapActionType.DevelopSpiritSpring));
             CreateObservabilityHud(hud.transform);
-            influenceLegendText = RuntimeUIFactory.Text(hud.transform,
-                WorldMapInfluencePresentation.LegendText, 14, 30);
-            RectTransform legendRect = influenceLegendText.rectTransform;
-            legendRect.anchorMin = legendRect.anchorMax = new Vector2(0.5f, 0f);
-            legendRect.pivot = new Vector2(0.5f, 0f);
-            legendRect.anchoredPosition = new Vector2(0f, 12f);
-            legendRect.sizeDelta = new Vector2(560f, 30f);
             // 宗门简报按钮固定在界面左下角，面板本身仍居中弹出。
             sectBriefButton = RuntimeUIFactory.Button(hud.transform, "宗门简报", 38);
             RectTransform briefRect = sectBriefButton.GetComponent<RectTransform>();
@@ -313,6 +327,22 @@ namespace Cultivation4X.WorldMap
             briefRect.sizeDelta = new Vector2(130f, 38f);
             sectBriefButton.onClick.AddListener(() => SectWorldInterface.Instance?.OpenSectBrief());
             sectBriefButton.gameObject.SetActive(false);
+        }
+
+        private static void ConfigureHudControlsLayout(RectTransform controls)
+        {
+            if (controls == null) return;
+            controls.anchorMin = new Vector2(0.70f, 0f);
+            controls.anchorMax = new Vector2(0.99f, 1f);
+            controls.pivot = new Vector2(0.5f, 0.5f);
+            controls.offsetMin = new Vector2(0f, 12f);
+            controls.offsetMax = new Vector2(0f, -64f);
+            VerticalLayoutGroup layout = controls.GetComponent<VerticalLayoutGroup>();
+            if (layout != null)
+            {
+                layout.padding = new RectOffset(12, 12, 8, 8);
+                layout.spacing = 4f;
+            }
         }
 
         private void ConfirmSite()
@@ -335,7 +365,6 @@ namespace Cultivation4X.WorldMap
             if (auraButton != null) auraButton.gameObject.SetActive(false);
             if (confirmButton != null) confirmButton.gameObject.SetActive(selecting);
             if (sectBriefButton != null) sectBriefButton.gameObject.SetActive(false);
-            if (influenceLegendText != null) influenceLegendText.gameObject.SetActive(!selecting && hasSectBase);
             SetDebugToggleVisible(!selecting && hasSectBase);
             if (selecting) SetDebugViewEnabled(false);
             if (map != null) Rebuild();
@@ -346,20 +375,107 @@ namespace Cultivation4X.WorldMap
         {
             bool selecting = PlayerManager.Instance?.playerData?.founding?.stage == FoundingStage.WorldSelection;
             if (details != null)
+            {
                 details.text = selectedCellIndex < 0 && selecting
                     ? "请在地图上选择可建设格作为洞府。"
                     : WorldMapCellDetailsFormatter.Format(map, selectedCellIndex, viewMode, selecting,
                         VisibleMarkersForDetails(), WorldMapSession.Progress, PlayerManager.Instance?.playerData);
+                float availableWidth = details.rectTransform.rect.width;
+                if (availableWidth <= 1f)
+                    availableWidth = Mathf.Max(120f, (hudControls == null ? 240f : hudControls.rect.width) - 64f);
+                detailsTextLayout.preferredHeight = Mathf.Max(40f,
+                    details.GetPreferredValues(details.text, availableWidth, 0f).y + 8f);
+                if (detailsScrollRoot != null) LayoutRebuilder.MarkLayoutForRebuild(detailsScrollRoot);
+            }
             if (confirmButton != null)
                 confirmButton.interactable = selecting && map?.cells != null &&
                                              selectedCellIndex >= 0 && selectedCellIndex < map.cells.Length &&
                                              map.cells[selectedCellIndex].isBuildable;
+            RefreshMapActionButtons(selecting);
             if (sectBriefButton != null)
             {
                 MapSiteData sectBase = WorldMapProgressRules.GetSectBase(WorldMapSession.Progress);
                 sectBriefButton.gameObject.SetActive(!selecting && sectBase != null &&
                                                       sectBase.cellIndex == selectedCellIndex);
             }
+        }
+
+        private void RefreshMapProgress()
+        {
+            RefreshPresentationMarkers();
+            Rebuild();
+            RefreshDetails();
+        }
+
+        private void RefreshMapActionButtons(bool selecting)
+        {
+            bool established = !selecting && WorldMapProgressRules.GetSectBase(WorldMapSession.Progress) != null &&
+                               selectedCellIndex >= 0;
+            MapSiteData site = established ? WorldMapSession.Progress?.mapSites?.FirstOrDefault(item =>
+                item != null && item.cellIndex == selectedCellIndex && item.siteType != MapSiteType.SectBase) : null;
+            SetButtonLabel(investigateSpringButton, site == null ? "调查" : WorldMapContentRules.SiteTypeLabel(site.siteType));
+            SetButtonLabel(developSpringButton, "开发灵泉");
+            SetActionButton(exploreCellButton, established && site?.revealState != MapContentRevealState.Discovered,
+                new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = selectedCellIndex });
+            MapActionType action = WorldMapContentRules.ActionForSite(site);
+            MapMissionContext actionContext = new MapMissionContext
+            {
+                actionType = action, targetCellIndex = selectedCellIndex, targetSiteId = site?.siteId
+            };
+            bool discovered = established && site?.revealState == MapContentRevealState.Discovered && action != MapActionType.None;
+            bool isSpringDevelop = action == MapActionType.DevelopSpiritSpring;
+            SetButtonLabel(isSpringDevelop ? developSpringButton : investigateSpringButton,
+                action == MapActionType.None ? "调查" : ActionLabel(action));
+            SetActionButton(investigateSpringButton, discovered && !isSpringDevelop, actionContext);
+            SetActionButton(developSpringButton, discovered && isSpringDevelop, actionContext);
+        }
+
+        private static string ActionLabel(MapActionType action)
+        {
+            switch (action)
+            {
+                case MapActionType.InvestigateSpiritSpring: return "调查灵泉";
+                case MapActionType.DevelopSpiritSpring: return "开发灵泉";
+                case MapActionType.EstablishVillageRelation: return "建立村庄关系";
+                case MapActionType.DevelopSpiritMine: return "开发灵矿";
+                case MapActionType.BuildCaveResidenceOutpost: return "建立洞府据点规则";
+                case MapActionType.ClearBeastLair: return "清理兽巢";
+                case MapActionType.InvestigateRuin: return "调查遗迹";
+                default: return "调查";
+            }
+        }
+
+        private static void SetButtonLabel(Button button, string label)
+        {
+            if (button == null) return;
+            TMPro.TMP_Text text = button.GetComponentInChildren<TMPro.TMP_Text>();
+            if (text != null) text.text = label;
+        }
+
+        private void SetActionButton(Button button, bool visible, MapMissionContext context)
+        {
+            if (button == null) return;
+            button.gameObject.SetActive(visible);
+            if (!visible) return;
+            button.interactable = WorldMapContentRules.CanStartAction(map, WorldMapSession.Progress, context, out _);
+        }
+
+        private void OpenSelectedMapAction(MapActionType actionType)
+        {
+            if (selectedCellIndex < 0) return;
+            MapSiteData site = WorldMapSession.Progress?.mapSites?.FirstOrDefault(item => item != null &&
+                item.cellIndex == selectedCellIndex && item.siteType != MapSiteType.SectBase);
+            if (actionType != MapActionType.Explore && site != null && site.siteType != MapSiteType.SpiritSpring)
+                actionType = WorldMapContentRules.ActionForSite(site);
+            MapMissionContext context = new MapMissionContext
+            {
+                actionType = actionType,
+                targetCellIndex = selectedCellIndex,
+                targetSiteId = actionType == MapActionType.Explore ? null : site?.siteId
+            };
+            MissionPanel panel = FindObjectOfType<MissionPanel>(true);
+            if (panel == null) { Debug.LogWarning("找不到任务面板"); return; }
+            if (!panel.OpenMapMission(context, out string reason)) Debug.LogWarning(reason);
         }
 
         private IEnumerable<WorldMapPresentationMarker> VisibleMarkersForDetails() =>

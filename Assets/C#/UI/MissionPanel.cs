@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using System.Linq;
+using Cultivation4X.WorldMap;
 
 public class MissionPanel : MonoBehaviour
 {
@@ -28,18 +29,24 @@ public class MissionPanel : MonoBehaviour
 
     public Button selectNPCButton;
     private RectTransform dynamicList;
+    private RectTransform dynamicScrollRoot;
     private RectTransform rewardArea;
+    private RectTransform missionTabs;
     private TMP_Text statusText;
+    private TMP_Text mapContextText;
     private string dynamicFeedback;
     private MissionPage currentPage;
     private readonly Dictionary<MissionPage, Button> pageButtons = new Dictionary<MissionPage, Button>();
+    private MapMissionContext selectedMapContext;
     private void Start()
     {
         EnsureDynamicUI();
     }
 
-  public  void SelectMission(string id)
+    public  void SelectMission(string id)
     {
+        selectedMapContext = null;
+        RefreshMissionMode();
         // 根据任务ID获取Mission对象
         selectedMissionData = MissionManager.Instance.GetMissionData(id);
 
@@ -94,9 +101,17 @@ public class MissionPanel : MonoBehaviour
             Debug.Log("请选择NPC");
             return;
         }
-        if (!MissionManager.Instance.CanTriggerMission(selectedMissionData.id, selectedNPC, out string reason))
-        { if (statusText != null) statusText.text = reason; return; }
-        MissionManager.Instance.TriggerMission(selectedMissionData.id, selectedNPC);
+        if (selectedMapContext != null)
+        {
+            if (!MissionManager.Instance.TryStartMapMission(selectedMapContext, selectedNPC, out string mapReason))
+            { if (statusText != null) statusText.text = mapReason; return; }
+        }
+        else
+        {
+            if (!MissionManager.Instance.CanTriggerMission(selectedMissionData.id, selectedNPC, out string reason))
+            { if (statusText != null) statusText.text = reason; return; }
+            MissionManager.Instance.TriggerMission(selectedMissionData.id, selectedNPC);
+        }
 
         // 关闭任务面板
         UIManager.Instance.ClosePanel(missionPanel);
@@ -118,11 +133,38 @@ public class MissionPanel : MonoBehaviour
     private void OnEnable()
     {
         transform.SetAsLastSibling();
-        EnsureDynamicUI();
-        RefreshDynamicList();
         selectedMissionData = null;
+        selectedMapContext = null;
+        EnsureDynamicUI();
+        RefreshMissionMode();
+        RefreshDynamicList();
         SetSelectedNPC(null);
        
+    }
+
+    public bool OpenMapMission(MapMissionContext context, out string reason)
+    {
+        if (context == null || MissionManager.Instance == null)
+        { reason = "地图任务系统尚未初始化"; return false; }
+        if (!WorldMapContentRules.CanStartAction(WorldMapSession.Current, WorldMapSession.Progress,
+                context, out reason)) return false;
+        string missionId = WorldMapContentRules.MissionIdFor(context.actionType);
+        MissionData data = MissionManager.Instance.GetMissionData(missionId);
+        if (data == null) { reason = "地图任务模板不存在"; return false; }
+        if (UIManager.Instance == null) { reason = "界面系统尚未初始化"; return false; }
+        UIManager.Instance.OpenPanel(missionPanel == null ? gameObject : missionPanel);
+        selectedMapContext = new MapMissionContext
+        {
+            actionType = context.actionType,
+            targetCellIndex = context.targetCellIndex,
+            targetSiteId = context.targetSiteId
+        };
+        selectedMissionData = data;
+        RefreshMissionMode();
+        SetSelectedNPC(null);
+        RefreshSelectionStatus();
+        reason = null;
+        return true;
     }
 
     private void EnsureDynamicUI()
@@ -130,13 +172,45 @@ public class MissionPanel : MonoBehaviour
         if (dynamicList != null || missionPanel == null) return;
         RectTransform container = RuntimeUIFactory.Panel(missionPanel.transform, "SectAffairs", new Vector2(0.52f, 0.08f), new Vector2(0.97f, 0.92f));
         statusText = RuntimeUIFactory.Text(container, string.Empty, 17, 52);
+        mapContextText = RuntimeUIFactory.Text(container, string.Empty, 18, 84);
+        mapContextText.gameObject.SetActive(false);
         rewardArea = CreateFixedArea(container, "AwaitingRewards");
-        RectTransform tabs = RuntimeUIFactory.TabBar(container, "MissionTabs");
-        AddPageTab(tabs, MissionPage.Repair, "洞府修复");
-        AddPageTab(tabs, MissionPage.Labor, "劳动力任务");
-        AddPageTab(tabs, MissionPage.VillageThreat, "村庄与威胁");
-        AddPageTab(tabs, MissionPage.Other, "其他任务");
+        missionTabs = RuntimeUIFactory.TabBar(container, "MissionTabs");
+        AddPageTab(missionTabs, MissionPage.Repair, "洞府修复");
+        AddPageTab(missionTabs, MissionPage.Labor, "劳动力任务");
+        AddPageTab(missionTabs, MissionPage.VillageThreat, "村庄与威胁");
+        AddPageTab(missionTabs, MissionPage.Other, "其他任务");
         dynamicList = RuntimeUIFactory.ScrollContent(container, "MissionScroll");
+        dynamicScrollRoot = dynamicList.parent.parent as RectTransform;
+    }
+
+    private void RefreshMissionMode()
+    {
+        bool mapMode = selectedMapContext != null;
+        if (missionTabs != null) missionTabs.gameObject.SetActive(!mapMode);
+        if (dynamicScrollRoot != null) dynamicScrollRoot.gameObject.SetActive(!mapMode);
+        if (rewardArea != null) rewardArea.gameObject.SetActive(!mapMode);
+        if (mapContextText == null) return;
+        mapContextText.gameObject.SetActive(mapMode);
+        mapContextText.text = mapMode ? FormatMapActionContext(selectedMapContext) : string.Empty;
+    }
+
+    private static string FormatMapActionContext(MapMissionContext context)
+    {
+        if (context == null) return string.Empty;
+        string action = context.actionType == MapActionType.Explore ? "派遣探索" :
+            context.actionType == MapActionType.InvestigateSpiritSpring ? "调查灵泉" :
+            context.actionType == MapActionType.DevelopSpiritSpring ? "开发灵泉" :
+            context.actionType == MapActionType.EstablishVillageRelation ? "建立村庄关系" :
+            context.actionType == MapActionType.DevelopSpiritMine ? "开发灵矿" :
+            context.actionType == MapActionType.BuildCaveResidenceOutpost ? "建立洞府据点规则" :
+            context.actionType == MapActionType.ClearBeastLair ? "清理兽巢" :
+            context.actionType == MapActionType.InvestigateRuin ? "调查遗迹" : "地图行动";
+        WorldMap map = WorldMapSession.Current;
+        string target = map?.cells != null && context.targetCellIndex >= 0 && context.targetCellIndex < map.cells.Length
+            ? $"{map.cells[context.targetCellIndex].coord.col},{map.cells[context.targetCellIndex].coord.row}（格 {context.targetCellIndex}）"
+            : $"格 {context.targetCellIndex}";
+        return $"地图行动：{action}\n目标：{target}\n请选择执行弟子；普通宗门事务已暂时隐藏。";
     }
 
     private void RefreshDynamicList()

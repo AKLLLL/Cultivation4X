@@ -28,6 +28,7 @@ public class MissionData
     public ExplorationMissionKind explorationKind;
     public string explorationRegionId;
     public ThreatMissionKind threatMissionKind;
+    public bool generatedByMap;
 
     // 完成所需天数
     public int needDays;

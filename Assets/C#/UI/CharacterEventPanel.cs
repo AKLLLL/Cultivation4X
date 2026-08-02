@@ -111,7 +111,13 @@ public class CharacterEventPanel : MonoBehaviour
         titleText = CreateText(panel, 32, FontStyles.Bold);
         bodyContent = RuntimeUIFactory.ScrollContent(panel, "EventBodyScroll");
         bodyText = CreateText(bodyContent, 22, FontStyles.Normal);
-        bodyText.GetComponent<LayoutElement>().preferredHeight = 90;
+        bodyText.alignment = TextAlignmentOptions.TopLeft;
+        bodyText.enableWordWrapping = true;
+        bodyText.overflowMode = TextOverflowModes.Overflow;
+        LayoutElement bodyLayout = bodyText.GetComponent<LayoutElement>();
+        bodyLayout.minHeight = 90f;
+        bodyLayout.preferredHeight = 90f;
+        bodyLayout.flexibleHeight = 0f;
         optionsContainer = CreateOptionsContainer(panel);
     }
 
@@ -171,9 +177,14 @@ public class CharacterEventPanel : MonoBehaviour
     private void RefreshBodyLayout()
     {
         if (bodyText == null || bodyContent == null) return;
-        bodyText.ForceMeshUpdate();
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(panel);
+        float availableWidth = bodyContent.rect.width;
+        if (availableWidth <= 1f)
+            availableWidth = Mathf.Max(160f, panel.rect.width - 60f);
+        float preferredHeight = bodyText.GetPreferredValues(bodyText.text, availableWidth, 0f).y;
         LayoutElement bodyLayout = bodyText.GetComponent<LayoutElement>();
-        float height = Mathf.Max(90f, bodyText.preferredHeight + 24f);
+        float height = Mathf.Max(90f, preferredHeight + 24f);
         bodyLayout.minHeight = height;
         bodyLayout.preferredHeight = height;
         LayoutRebuilder.ForceRebuildLayoutImmediate(bodyContent);

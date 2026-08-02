@@ -59,6 +59,9 @@ public class SectFoundingIntegrationTests
         MapSiteData sectBase = WorldMapProgressRules.GetSectBase(WorldMapSession.Progress);
         Assert.NotNull(sectBase);
         Assert.AreEqual(buildable, sectBase.cellIndex);
+        Assert.AreEqual(KnowledgeState.Known,
+            WorldMapInfluenceRules.GetCellState(map, WorldMapSession.Progress, sectBase.cellIndex).knowledge);
+        Assert.IsFalse(WorldMapSession.Progress.revealedCellIndices.Contains(sectBase.cellIndex));
         Assert.AreEqual("青云宗", sectBase.siteName);
         Assert.AreEqual(1, WorldMapSession.Progress.influenceSources.Count);
         Assert.AreEqual(sectBase.siteId, WorldMapSession.Progress.influenceSources.Single().sourceId);
@@ -105,11 +108,11 @@ public class SectFoundingIntegrationTests
 
         Assert.IsFalse(player.ConfirmSectFounding("宗门\n坏名", out _));
         Assert.AreEqual(FoundingStage.SectConfirmation, founding.stage);
-        Assert.IsEmpty(WorldMapSession.Progress.mapSites);
+        Assert.IsFalse(WorldMapSession.Progress.mapSites.Any(site => site.siteType == MapSiteType.SectBase));
     }
 
     [Test]
-    public void VersionTenSnapshot_RoundTripsSectProgressAndRejectsInconsistentBase()
+    public void VersionElevenSnapshot_RoundTripsSectProgressAndRejectsInconsistentBase()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         NPCManager npcs = Add<NPCManager>("NPCs");
@@ -126,14 +129,14 @@ public class SectFoundingIntegrationTests
                 .Select(npc => npc.Character).ToList()
         };
 
-        Assert.AreEqual(10, state.version);
+        Assert.AreEqual(SaveDataVersion.Current, state.version);
         Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(state));
         GameState restored = JsonConvert.DeserializeObject<GameState>(
             JsonConvert.SerializeObject(state));
         Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(restored));
         Assert.AreEqual("玄霄宗", restored.sect.sectName);
         Assert.AreEqual(player.playerData.founding.selectedWorldCellIndex,
-            restored.worldMapProgress.mapSites.Single().cellIndex);
+            restored.worldMapProgress.mapSites.Single(site => site.siteType == MapSiteType.SectBase).cellIndex);
         Assert.AreEqual(state.worldMap.pointsOfInterest.Select(point => point.cellIndex),
             restored.worldMap.pointsOfInterest.Select(point => point.cellIndex));
 
@@ -168,7 +171,7 @@ public class SectFoundingIntegrationTests
         Assert.Throws<InvalidDataException>(() =>
             SaveManager.ValidateWorldMapState(missingTechnique));
 
-        restored.worldMapProgress.mapSites.Single().cellIndex =
+        restored.worldMapProgress.mapSites.Single(site => site.siteType == MapSiteType.SectBase).cellIndex =
             restored.worldMap.cells.Length - 1;
         Assert.Throws<InvalidDataException>(() =>
             SaveManager.ValidateWorldMapState(restored));

@@ -26,7 +26,9 @@ public class PlayerManager : MonoBehaviour
     public void InitializeNewFoundingGame(int seed)
     {
         WorldMap generatedMap = WorldGenerator.Generate(new MapGenerationSettings { seed = seed });
-        WorldMapSession.Set(generatedMap, new WorldMapProgressState());
+        WorldMapProgressState initialProgress = new WorldMapProgressState();
+        WorldMapContentRules.EnsureCandidates(generatedMap, initialProgress);
+        WorldMapSession.Set(generatedMap, initialProgress);
         playerData = new PlayerData
         {
             gold = 100,
@@ -121,8 +123,15 @@ public class PlayerManager : MonoBehaviour
             siteType = MapSiteType.SectBase,
             siteName = sectName,
             isRevealed = true,
-            canInteract = true
+            canInteract = true,
+            revealState = MapContentRevealState.Discovered,
+            siteState = MapSiteState.Developed,
+            ownerSectId = "player_sect",
+            discoveredDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            lastUpdatedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay
         };
+        if (!WorldMapContentRules.TryPrepareSectBasePlacement(map, progress,
+                state.selectedWorldCellIndex, out reason)) return false;
         InfluenceSourceData sectBaseSource = new InfluenceSourceData
         {
             sourceId = sectBase.siteId,
@@ -136,6 +145,7 @@ public class PlayerManager : MonoBehaviour
         WorldMapProgressState updatedProgress = new WorldMapProgressState
         {
             revealedCellIndices = new List<int>(progress?.revealedCellIndices ?? new List<int>()),
+            exploredCellIndices = new List<int>(progress?.exploredCellIndices ?? new List<int>()),
             mapSites = new List<MapSiteData>(progress?.mapSites ?? new List<MapSiteData>()) { sectBase },
             influenceSources = new List<InfluenceSourceData>(progress?.influenceSources ?? new List<InfluenceSourceData>())
                 { sectBaseSource },
@@ -143,6 +153,7 @@ public class PlayerManager : MonoBehaviour
             isInfluenceDirty = true
         };
         WorldMapInfluenceRules.Recalculate(map, updatedProgress);
+        WorldMapContentRules.RefreshHints(map, updatedProgress);
 
         playerData.sectId = "player_sect";
         playerData.sectName = sectName;
@@ -150,6 +161,8 @@ public class PlayerManager : MonoBehaviour
         playerData.influenceRadius = 2;
         state.stage = FoundingStage.Cave;
         WorldMapSession.Set(map, updatedProgress);
+        // 建宗同时替换地图进度；显式通知地图表现层立即重绘影响力覆盖。
+        WorldMapSession.NotifyProgressChanged();
         reason = null;
         OnFoundingChanged?.Invoke();
         SaveManager.Instance?.AutoSave();
@@ -203,7 +216,9 @@ public class PlayerManager : MonoBehaviour
         }
         int level = GetFacilityLevel(facility);
         if (level <= 0) { reason = "设施尚未修复或建成"; return false; }
-        if (facility == FacilityType.ExplorationHall || facility == FacilityType.ProtectionArray ||
+        if (facility == FacilityType.ExplorationHall && !Cultivation4X.WorldMap.WorldMapContentEffects.IsExplorationHallUnlocked())
+        { reason = "需要先开发地图洞府地点"; return false; }
+        if (facility == FacilityType.ProtectionArray ||
             facility == FacilityType.InheritanceChamber || facility == FacilityType.ForgeRoom ||
             facility == FacilityType.FormationPlatform)
         { reason = "该设施当前不可升级"; return false; }
