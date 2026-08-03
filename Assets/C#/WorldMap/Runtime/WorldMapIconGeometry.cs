@@ -265,6 +265,48 @@ namespace Cultivation4X.WorldMap
             buffer.AddLine(peak, right, line, color);
         }
 
+        public static void AddRegionAmbientIcon(WorldMapGeometryBuffer buffer, MapInternalPositionTag tag,
+            Vector2 center, float size, Color color)
+        {
+            switch (tag)
+            {
+                case MapInternalPositionTag.BeastTrail:
+                    AddMarkerIcon(buffer, WorldMapMarkerKind.EnvironmentBeastTracks, center, size, color);
+                    break;
+                case MapInternalPositionTag.CaveMouth:
+                    AddMarkerIcon(buffer, WorldMapMarkerKind.EnvironmentCaveSigns, center, size, color);
+                    break;
+                case MapInternalPositionTag.Lakeshore:
+                case MapInternalPositionTag.Shallows:
+                case MapInternalPositionTag.LakeCenter:
+                case MapInternalPositionTag.ReedShore:
+                case MapInternalPositionTag.WaterInlet:
+                case MapInternalPositionTag.WaterOutlet:
+                case MapInternalPositionTag.Coastline:
+                case MapInternalPositionTag.DeepWater:
+                    AddTerrainIcon(buffer, WorldMapTerrainIconKind.Water, center, size, color);
+                    break;
+                case MapInternalPositionTag.ForestEdge:
+                case MapInternalPositionTag.DeepForest:
+                case MapInternalPositionTag.ForestClearing:
+                case MapInternalPositionTag.AncientGrove:
+                case MapInternalPositionTag.HerbSlope:
+                    AddTerrainIcon(buffer, WorldMapTerrainIconKind.Forest, center, size, color);
+                    break;
+                case MapInternalPositionTag.MountainFoot:
+                case MapInternalPositionTag.Mountainside:
+                case MapInternalPositionTag.Ridge:
+                case MapInternalPositionTag.Summit:
+                case MapInternalPositionTag.MountainPass:
+                case MapInternalPositionTag.Cliff:
+                    AddTerrainIcon(buffer, WorldMapTerrainIconKind.Mountain, center, size, color);
+                    break;
+                default:
+                    AddTerrainIcon(buffer, WorldMapTerrainIconKind.Plain, center, size, color);
+                    break;
+            }
+        }
+
         private static void AddZigZag(WorldMapGeometryBuffer buffer, Vector2 center, float size,
             float line, Color color)
         {

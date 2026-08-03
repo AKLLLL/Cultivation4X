@@ -83,7 +83,24 @@ namespace Cultivation4X.WorldMap
         {
             if (PlayerManager.Instance != null) PlayerManager.Instance.OnFoundingChanged -= RefreshSelectionMode;
             WorldMapSession.ProgressChanged -= RefreshMapProgress;
-            if (material != null) Destroy(material);
+            ClearGenerated();
+            if (material != null)
+            {
+                if (Application.isPlaying) Destroy(material);
+                else DestroyImmediate(material);
+                material = null;
+            }
+            GameObject ownedHud = hudCanvas == null ? null : hudCanvas.gameObject;
+            hudCanvas = null;
+            regionLabelRoot = null;
+            nearDetailLabelRoot = null;
+            regionLabelPool.Clear();
+            nearDetailLabelPool.Clear();
+            if (ownedHud != null)
+            {
+                if (Application.isPlaying) Destroy(ownedHud);
+                else DestroyImmediate(ownedHud);
+            }
         }
 
         private void Update()
@@ -104,7 +121,9 @@ namespace Cultivation4X.WorldMap
                 Vector3 delta = dragOrigin - current;
                 mapCamera.transform.position += new Vector3(delta.x, delta.y, 0f);
                 dragOrigin = mapCamera.ScreenToWorldPoint(Input.mousePosition);
+                RefreshRegionLabels();
             }
+            if (Input.GetMouseButtonUp(1) && !panelOpen) RefreshRegionLabels();
             if (Input.GetMouseButtonDown(0))
             {
                 bool selecting = PlayerManager.Instance?.playerData?.founding?.stage == FoundingStage.WorldSelection;
@@ -177,7 +196,9 @@ namespace Cultivation4X.WorldMap
         private void Rebuild()
         {
             ClearGenerated();
+            RefreshPresentationCaches();
             if (map == null) return;
+            lastZoomLevel = WorldMapRegionPresentationPolicy.GetZoomLevel(ProjectedHexDiameter());
             for (int row = 0; row < map.height; row += ChunkSize)
             for (int col = 0; col < map.width; col += ChunkSize)
                 BuildChunk(col, row);
@@ -187,6 +208,7 @@ namespace Cultivation4X.WorldMap
             BuildPresentationLayers();
             BuildInfluenceOverlay();
             RebuildSelection();
+            RefreshRegionLabels();
         }
 
         private void BuildChunk(int startCol, int startRow)
@@ -194,7 +216,9 @@ namespace Cultivation4X.WorldMap
             List<Vector3> vertices = new List<Vector3>();
             List<int> triangles = new List<int>();
             List<Color> colors = new List<Color>();
-            float radius = showGrid ? 0.88f : 0.96f;
+            float radius = lastZoomLevel == WorldMapZoomLevel.Far ? 0.92f :
+                lastZoomLevel == WorldMapZoomLevel.Mid ? 0.88f : 0.84f;
+            if (showGrid) radius -= 0.03f;
             for (int row = startRow; row < Mathf.Min(startRow + ChunkSize, map.height); row++)
             for (int col = startCol; col < Mathf.Min(startCol + ChunkSize, map.width); col++)
             {
@@ -276,6 +300,7 @@ namespace Cultivation4X.WorldMap
                 new GameObject("WorldMapEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             GameObject hud = new GameObject("WorldMapHUD");
             hudCanvas = RuntimeUIFactory.Canvas(hud, 100);
+            CreateRegionLabelHud(hud.transform);
             selectionBlocker = new GameObject("WorldSelectionBlocker", typeof(RectTransform), typeof(Image));
             selectionBlocker.transform.SetParent(hud.transform, false);
             RectTransform blockerRect = selectionBlocker.GetComponent<RectTransform>();
@@ -380,6 +405,7 @@ namespace Cultivation4X.WorldMap
                     ? "请在地图上选择可建设格作为洞府。"
                     : WorldMapCellDetailsFormatter.Format(map, selectedCellIndex, viewMode, selecting,
                         VisibleMarkersForDetails(), WorldMapSession.Progress, PlayerManager.Instance?.playerData);
+                details.text += DebugRegionSummary();
                 float availableWidth = details.rectTransform.rect.width;
                 if (availableWidth <= 1f)
                     availableWidth = Mathf.Max(120f, (hudControls == null ? 240f : hudControls.rect.width) - 64f);
@@ -387,6 +413,7 @@ namespace Cultivation4X.WorldMap
                     details.GetPreferredValues(details.text, availableWidth, 0f).y + 8f);
                 if (detailsScrollRoot != null) LayoutRebuilder.MarkLayoutForRebuild(detailsScrollRoot);
             }
+            RefreshRegionLabels();
             if (confirmButton != null)
                 confirmButton.interactable = selecting && map?.cells != null &&
                                              selectedCellIndex >= 0 && selectedCellIndex < map.cells.Length &&
@@ -483,11 +510,8 @@ namespace Cultivation4X.WorldMap
 
         private bool CanShowGameplayCell(int cellIndex)
         {
-            if (debugViewEnabled) return true;
-            FoundingState founding = PlayerManager.Instance?.playerData?.founding;
-            if (founding == null || !FoundingRules.HasReachedCave(founding)) return true;
-            return WorldMapInfluenceRules.GetCellState(map, WorldMapSession.Progress, cellIndex).knowledge ==
-                   KnowledgeState.Known;
+            return map?.cells != null && cellIndex >= 0 && cellIndex < map.cells.Length &&
+                   presentationKnownCellIndices.Contains(cellIndex);
         }
 
         private void FitCamera()
@@ -507,10 +531,17 @@ namespace Cultivation4X.WorldMap
             {
                 if (obj == null) continue;
                 MeshFilter filter = obj.GetComponent<MeshFilter>();
-                if (filter != null && filter.sharedMesh != null) Destroy(filter.sharedMesh);
-                Destroy(obj);
+                if (filter != null && filter.sharedMesh != null) DestroyOwnedObject(filter.sharedMesh);
+                DestroyOwnedObject(obj);
             }
             generatedObjects.Clear();
+        }
+
+        private static void DestroyOwnedObject(Object value)
+        {
+            if (value == null) return;
+            if (Application.isPlaying) Destroy(value);
+            else DestroyImmediate(value);
         }
 
         private static Vector2 Center(HexCoord coord) =>

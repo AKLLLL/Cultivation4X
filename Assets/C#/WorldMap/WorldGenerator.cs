@@ -120,6 +120,7 @@ namespace Cultivation4X.WorldMap
                 SpiritVeinGenerator.Generate(map, SeedDerivation.Derive(effectiveSeed, "spirit-veins"),
                     snapshot.spiritVeins);
                 SpiritCalculator.Calculate(map);
+                WorldMapRegionRules.Assign(map);
                 ExplorationRegionMapper.Assign(map);
                 if (map.cells.Any(cell => cell.isBuildable)) return map;
             }
@@ -157,16 +158,18 @@ namespace Cultivation4X.WorldMap
             {
                 float x = cell.coord.col / (float)(map.width - 1);
                 float y = cell.coord.row / (float)(map.height - 1);
-                float warpX = Noise.Fractal(x * 2.1f + 13.7f, y * 2.1f - 4.2f, seed, 3) - 0.5f;
-                float warpY = Noise.Fractal(x * 2.1f - 7.1f, y * 2.1f + 8.9f, seed ^ 0x45d9f3b, 3) - 0.5f;
-                float nx = x + warpX * 0.12f;
-                float ny = y + warpY * 0.12f;
-                float broad = Noise.Fractal(nx * 3.2f, ny * 3.2f, seed ^ 0x632be59b, 5);
-                float ridged = 1f - Math.Abs(Noise.Fractal(nx * 7.5f, ny * 7.5f, seed ^ 0x1b873593, 4) * 2f - 1f);
+                float warpX = Noise.Fractal(x * 2.8f + 13.7f, y * 2.8f - 4.2f, seed, 3) - 0.5f;
+                float warpY = Noise.Fractal(x * 2.8f - 7.1f, y * 2.8f + 8.9f, seed ^ 0x45d9f3b, 3) - 0.5f;
+                float nx = x + warpX * 0.14f;
+                float ny = y + warpY * 0.14f;
+                float broad = Noise.Fractal(nx * 5.2f, ny * 5.2f, seed ^ 0x632be59b, 5);
+                float ridged = 1f - Math.Abs(Noise.Fractal(nx * 9.5f, ny * 9.5f, seed ^ 0x1b873593, 4) * 2f - 1f);
+                float localDetail = Noise.Fractal(nx * 14f, ny * 14f, seed ^ 0x4cf5ad2, 3) - 0.5f;
                 float dx = (x - 0.5f) / 0.72f;
                 float dy = (y - 0.5f) / 0.66f;
                 float edge = Math.Max(0f, 1f - (float)Math.Sqrt(dx * dx + dy * dy));
-                cell.height = Clamp01(broad * 0.58f + ridged * 0.18f + edge * 0.42f - 0.17f);
+                cell.height = Clamp01(broad * 0.50f + ridged * 0.18f + localDetail * 0.18f +
+                                      edge * 0.40f - 0.13f);
             }
             foreach (WorldCell cell in map.cells)
             {
@@ -188,12 +191,12 @@ namespace Cultivation4X.WorldMap
             foreach (WorldCell cell in map.cells)
             {
                 float latitude = Math.Abs(cell.coord.row / (float)(map.height - 1) * 2f - 1f);
-                float temperatureNoise = Noise.Fractal(cell.coord.col * 0.035f, cell.coord.row * 0.035f,
+                float temperatureNoise = Noise.Fractal(cell.coord.col * 0.085f, cell.coord.row * 0.085f,
                     seed ^ 0x27d4eb2d, 3) - 0.5f;
                 cell.temperature = Clamp01(1f - latitude * climate.latitudeCoolingStrength +
                                            temperatureNoise * climate.temperatureNoiseStrength -
                                            Math.Max(0f, cell.height - 0.55f) * climate.elevationCoolingStrength);
-                float moistureNoise = Noise.Fractal(cell.coord.col * 0.045f, cell.coord.row * 0.045f,
+                float moistureNoise = Noise.Fractal(cell.coord.col * 0.095f, cell.coord.row * 0.095f,
                     seed ^ 0x165667b1, 4);
                 float coastalMoisture = 1f - Math.Min(waterDistance[cell.index], 6) / 6f;
                 cell.moisture = Clamp01(moistureNoise * climate.moistureNoiseStrength +

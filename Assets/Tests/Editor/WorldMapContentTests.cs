@@ -4,6 +4,7 @@ using Cultivation4X.WorldMap;
 using Newtonsoft.Json;
 using NUnit.Framework;
 using System.Collections.Generic;
+using System.Reflection;
 
 public class WorldMapContentTests
 {
@@ -295,9 +296,9 @@ public class WorldMapContentTests
     }
 
     [Test]
-    public void VersionTwelve_RoundTripsAndRejectsIllegalContentState()
+    public void VersionThirteen_RoundTripsAndRejectsIllegalContentState()
     {
-        Assert.AreEqual(12, SaveDataVersion.Current);
+        Assert.AreEqual(13, SaveDataVersion.Current);
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5105 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
@@ -355,14 +356,20 @@ public class WorldMapContentTests
     }
 
     [Test]
-    public void SectPlacement_Seed805_DoesNotRejectLegalFoundingCellForDiscoveryHash()
+    public void SectPlacement_NoBuildableNeighbor_StillPlacesSpiritSpringNearBase()
     {
-        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { seed = 805 });
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 16, height = 16, seed = 805 });
+        int home = map.cells.First(cell => cell.isBuildable).index;
+        foreach (int neighbor in map.GetNeighborIndices(home))
+        {
+            map.cells[neighbor].landform = LandformType.Mountain;
+            map.cells[neighbor].biome = BiomeType.Alpine;
+            map.cells[neighbor].isBuildable = false;
+        }
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
-        int home = map.cells.First(cell => cell.isBuildable).index;
         Assert.IsFalse(map.GetNeighborIndices(home).Any(index => map.cells[index].isBuildable),
-            "该回归种子应覆盖驻地周围没有可建设邻格的情况");
+            "该边界场景应覆盖驻地周围没有可建设邻格的情况");
 
         Assert.IsTrue(WorldMapContentRules.TryPrepareSectBasePlacement(map, progress, home, out string reason), reason);
         MapSiteData spring = progress.mapSites.Single(site => site.siteType == MapSiteType.SpiritSpring);
@@ -427,6 +434,67 @@ public class WorldMapContentTests
         Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(villageMission));
         villageMission.activeMissions[0].mapContext.actionType = MapActionType.DevelopSpiritMine;
         Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(villageMission));
+    }
+
+    [Test]
+    public void VersionThirteen_RejectsTamperedRegionSnapshots()
+    {
+        GameState valid = EstablishedStateWithMapMission(MissionState.AwaitingReward);
+        Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(valid));
+
+        GameState duplicateCell = Clone(valid);
+        duplicateCell.worldMap.regions[1].cellIndices.Add(duplicateCell.worldMap.regions[0].cellIndices[0]);
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(duplicateCell));
+
+        GameState missingCell = Clone(valid);
+        missingCell.worldMap.regions[0].cellIndices.RemoveAt(0);
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(missingCell));
+
+        GameState wrongCenter = Clone(valid);
+        wrongCenter.worldMap.regions[0].centerCellIndex = wrongCenter.worldMap.regions[1].centerCellIndex;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(wrongCenter));
+
+        GameState illegalTag = Clone(valid);
+        illegalTag.worldMap.cells[0].internalPositionTag = (MapInternalPositionTag)999;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(illegalTag));
+
+        GameState renamed = Clone(valid);
+        renamed.worldMap.regions[0].regionName = "篡改区域";
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(renamed));
+    }
+
+    [Test]
+    public void VersionThirteen_RejectsUnsafeStaticRegionInputs()
+    {
+        GameState nullAura = EstablishedStateWithMapMission(MissionState.AwaitingReward);
+        nullAura.worldMap.cells[0].elementalAura = null;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(nullAura));
+
+        GameState nanHeight = EstablishedStateWithMapMission(MissionState.AwaitingReward);
+        nanHeight.worldMap.cells[0].height = float.NaN;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(nanHeight));
+
+        GameState nullRiver = EstablishedStateWithMapMission(MissionState.AwaitingReward);
+        nullRiver.worldMap.rivers.Add(null);
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(nullRiver));
+
+        GameState nullVein = EstablishedStateWithMapMission(MissionState.AwaitingReward);
+        nullVein.worldMap.spiritVeins[0] = null;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(nullVein));
+    }
+
+    [Test]
+    public void SaveVersionGate_ExplicitlyRejectsVersionTwelve()
+    {
+        MethodInfo deserialize = typeof(SaveManager).GetMethod("DeserializeCurrentVersion",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(deserialize);
+        string current = JsonConvert.SerializeObject(new GameState { version = 13 });
+        Assert.DoesNotThrow(() => deserialize.Invoke(null, new object[] { current }));
+        string legacy = JsonConvert.SerializeObject(new GameState { version = 12 });
+        TargetInvocationException failure = Assert.Throws<TargetInvocationException>(() =>
+            deserialize.Invoke(null, new object[] { legacy }));
+        Assert.IsInstanceOf<InvalidDataException>(failure.InnerException);
     }
 
     [Test]

@@ -67,6 +67,8 @@ namespace Cultivation4X.WorldMap
         public float baseAura;
         public float totalAura;
         public ElementalAura elementalAura = new ElementalAura();
+        public string regionId;
+        public MapInternalPositionTag internalPositionTag;
     }
 
     [Serializable]
@@ -188,7 +190,7 @@ namespace Cultivation4X.WorldMap
         public int width = 128;
         public int height = 96;
         public int seed = 48621;
-        public int generationVersion = 3;
+        public int generationVersion = 4;
         public TerrainGenerationParameters terrain = new TerrainGenerationParameters();
         public ClimateGenerationParameters climate = new ClimateGenerationParameters();
         public RiverGenerationParameters rivers = new RiverGenerationParameters();
@@ -220,6 +222,7 @@ namespace Cultivation4X.WorldMap
         public List<RiverSegment> rivers = new List<RiverSegment>();
         public List<SpiritVein> spiritVeins = new List<SpiritVein>();
         public List<WorldPointOfInterest> pointsOfInterest = new List<WorldPointOfInterest>();
+        public List<MapRegionData> regions = new List<MapRegionData>();
         private static readonly int[,] EvenRowDirections =
         {
             { 1, 0 }, { 0, 1 }, { -1, 1 }, { -1, 0 }, { -1, -1 }, { 0, -1 }

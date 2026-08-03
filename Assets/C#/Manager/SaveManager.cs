@@ -112,11 +112,7 @@ public class SaveManager : MonoBehaviour
         if (!File.Exists(SavePath)) return false;
         try
         {
-            GameState state = JsonConvert.DeserializeObject<GameState>(File.ReadAllText(SavePath));
-            if (state == null || state.version > SaveDataVersion.Current)
-                throw new InvalidDataException("存档版本不受支持");
-            if (state.version < SaveDataVersion.Current)
-                throw new InvalidDataException("世界地图生成版本更新不兼容旧档，请删除旧存档并开始新游戏");
+            GameState state = DeserializeCurrentVersion(File.ReadAllText(SavePath));
 
             NormalizeCurrentVersionCollections(state);
             PrepareInfluenceStateForValidation(state);
@@ -149,6 +145,17 @@ public class SaveManager : MonoBehaviour
 
     public void AutoSave() => Save();
     public string GetSavePath() => SavePath;
+
+    private static GameState DeserializeCurrentVersion(string json)
+    {
+        GameState state = JsonConvert.DeserializeObject<GameState>(json);
+        int version = state?.version ?? -1;
+        if (version > SaveDataVersion.Current || version < 0)
+            throw new InvalidDataException("存档版本不受支持");
+        if (version < SaveDataVersion.Current)
+            throw new InvalidDataException("世界地图生成版本更新不兼容旧档，请删除旧存档并开始新游戏");
+        return state;
+    }
 
     public static void MigrateState(GameState state)
     {
@@ -248,6 +255,12 @@ public class SaveManager : MonoBehaviour
     private static void NormalizeCurrentVersionCollections(GameState state)
     {
         if (state == null) return;
+        if (state.worldMap != null)
+        {
+            state.worldMap.regions = state.worldMap.regions ?? new System.Collections.Generic.List<MapRegionData>();
+            foreach (MapRegionData region in state.worldMap.regions.Where(item => item != null))
+                region.cellIndices = region.cellIndices ?? new System.Collections.Generic.List<int>();
+        }
         if (state.worldMapProgress != null)
         {
             state.worldMapProgress.revealedCellIndices = state.worldMapProgress.revealedCellIndices ??
@@ -279,7 +292,7 @@ public class SaveManager : MonoBehaviour
         if (map.width < 8 || map.height < 8 || expectedCellCount > int.MaxValue ||
             map.cells == null || map.cells.Length != expectedCellCount)
             throw new InvalidDataException("世界地图尺寸或格子数量无效");
-        if (map.generationVersion != 3 || map.generationSettings == null)
+        if (map.generationVersion != 4 || map.generationSettings == null)
             throw new InvalidDataException("世界地图生成版本或参数快照无效");
         if (MapGenerationSettingsValidator.Validate(map.generationSettings).Count > 0 ||
             map.generationSettings.width != map.width ||
@@ -295,6 +308,9 @@ public class SaveManager : MonoBehaviour
                 cell.coord.col != index % map.width || cell.coord.row != index / map.width)
                 throw new InvalidDataException($"世界地图格子 {index} 无效");
         }
+
+        ValidateStaticMapInputs(map);
+        ValidateMapRegions(map);
 
         if (map.rivers == null || map.spiritVeins == null || map.pointsOfInterest == null)
             throw new InvalidDataException("世界地图覆盖层数据缺失");
@@ -450,6 +466,120 @@ public class SaveManager : MonoBehaviour
             sectBaseSource.radius != WorldMapInfluenceRules.SectBaseRadius ||
             !sectBaseSource.isActive)
             throw new InvalidDataException("宗门驻地与宗门数据不一致");
+    }
+
+    private static void ValidateStaticMapInputs(WorldMap map)
+    {
+        if (map.rivers == null || map.spiritVeins == null || map.pointsOfInterest == null)
+            throw new InvalidDataException("世界地图静态图层数据缺失");
+        foreach (WorldCell cell in map.cells)
+        {
+            if (!Enum.IsDefined(typeof(LandformType), cell.landform) ||
+                !Enum.IsDefined(typeof(BiomeType), cell.biome) || cell.elementalAura == null ||
+                !FiniteUnit(cell.height) || !FiniteUnit(cell.temperature) || !FiniteUnit(cell.moisture) ||
+                !FiniteUnit(cell.baseAura) || !FiniteUnit(cell.totalAura) ||
+                !FiniteNonNegative(cell.elementalAura.metal) || !FiniteNonNegative(cell.elementalAura.wood) ||
+                !FiniteNonNegative(cell.elementalAura.water) || !FiniteNonNegative(cell.elementalAura.fire) ||
+                !FiniteNonNegative(cell.elementalAura.earth) ||
+                Math.Abs(cell.totalAura - cell.elementalAura.Total) > 0.0001f)
+                throw new InvalidDataException($"世界地图格子 {cell.index} 的静态环境数据无效");
+        }
+        if (map.rivers.Any(segment => segment == null ||
+                segment.fromCellIndex < 0 || segment.fromCellIndex >= map.cells.Length ||
+                segment.toCellIndex < 0 || segment.toCellIndex >= map.cells.Length ||
+                segment.edgeDirection < 0 || segment.edgeDirection >= 6 ||
+                map.GetDirection(segment.fromCellIndex, segment.toCellIndex) != segment.edgeDirection ||
+                !FiniteNonNegative(segment.flow)))
+            throw new InvalidDataException("世界地图河流数据无效");
+        if (map.spiritVeins.Any(vein => vein == null || string.IsNullOrWhiteSpace(vein.id) ||
+                !Enum.IsDefined(typeof(SpiritVeinSize), vein.size) ||
+                !Enum.IsDefined(typeof(SpiritElement), vein.primaryElement) ||
+                vein.pathCellIndices == null || vein.pathCellIndices.Count == 0 ||
+                vein.pathCellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
+                vein.pathCellIndices.Zip(vein.pathCellIndices.Skip(1), (left, right) => map.GetDirection(left, right))
+                    .Any(direction => direction < 0) || !FiniteNonNegative(vein.strength) || vein.influenceRadius < 0) ||
+            map.spiritVeins.GroupBy(vein => vein.id, StringComparer.Ordinal).Any(group => group.Count() != 1))
+            throw new InvalidDataException("世界地图灵脉数据无效");
+    }
+
+    private static bool FiniteUnit(float value) => !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0f && value <= 1f;
+    private static bool FiniteNonNegative(float value) => !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0f;
+
+    private static void ValidateMapRegions(WorldMap map)
+    {
+        if (map.regions == null || map.regions.Count == 0)
+            throw new InvalidDataException("世界地图区域数据缺失");
+        if (map.regions.Any(region => region == null || string.IsNullOrWhiteSpace(region.regionId) ||
+                string.IsNullOrWhiteSpace(region.regionName) || region.regionName.Any(char.IsDigit) || region.regionName.Any(char.IsControl) ||
+                region.cellIndices == null || region.cellIndices.Count == 0 ||
+                !Enum.IsDefined(typeof(MapRegionType), region.regionType) ||
+                !Enum.IsDefined(typeof(LandformType), region.dominantLandform) ||
+                !Enum.IsDefined(typeof(BiomeType), region.dominantBiome) ||
+                !Enum.IsDefined(typeof(SpiritElement), region.hiddenElementBias) ||
+                !Enum.IsDefined(typeof(MapRegionTrend), region.auraTrend) ||
+                !Enum.IsDefined(typeof(MapRegionTrend), region.dangerTrend) ||
+                float.IsNaN(region.averageAura) || float.IsInfinity(region.averageAura) || region.averageAura < 0f || region.averageAura > 1f ||
+                float.IsNaN(region.averageDanger) || float.IsInfinity(region.averageDanger) || region.averageDanger < 0f ||
+                region.averageDanger > (float)WorldDangerLevel.High || region.displayPriority < 0 || region.displayPriority > 100 ||
+                region.centerCellIndex < 0 || region.centerCellIndex >= map.cells.Length ||
+                !region.cellIndices.Contains(region.centerCellIndex) ||
+                region.cellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
+                region.cellIndices.Distinct().Count() != region.cellIndices.Count ||
+                !region.cellIndices.SequenceEqual(region.cellIndices.OrderBy(index => index)) ||
+                !IsConnectedRegion(map, region.cellIndices)) ||
+            map.regions.GroupBy(region => region.regionId, StringComparer.Ordinal).Any(group => group.Count() != 1) ||
+            map.regions.GroupBy(region => region.regionName, StringComparer.Ordinal).Any(group => group.Count() != 1))
+            throw new InvalidDataException("世界地图区域数据无效");
+
+        int[] assigned = new int[map.cells.Length];
+        foreach (MapRegionData region in map.regions)
+            foreach (int index in region.cellIndices)
+            {
+                assigned[index]++;
+                WorldCell cell = map.cells[index];
+                if (cell.regionId != region.regionId || !Enum.IsDefined(typeof(MapInternalPositionTag), cell.internalPositionTag))
+                    throw new InvalidDataException("世界地图格子区域引用无效");
+            }
+        if (assigned.Any(count => count != 1))
+            throw new InvalidDataException("世界地图区域未唯一覆盖全部格子");
+
+        MapRegionBuildResult expected = WorldMapRegionRules.Build(map);
+        if (expected.regions.Count != map.regions.Count || expected.regionIds.Length != map.cells.Length)
+            throw new InvalidDataException("世界地图区域与确定性生成结果不一致");
+        for (int index = 0; index < map.cells.Length; index++)
+            if (expected.regionIds[index] != map.cells[index].regionId ||
+                expected.internalPositionTags[index] != map.cells[index].internalPositionTag)
+                throw new InvalidDataException("世界地图区域格子快照遭到篡改");
+        for (int index = 0; index < expected.regions.Count; index++)
+            if (!RegionsEqual(expected.regions[index], map.regions[index]))
+                throw new InvalidDataException("世界地图区域快照遭到篡改");
+    }
+
+    private static bool IsConnectedRegion(WorldMap map, System.Collections.Generic.List<int> indices)
+    {
+        var allowed = new System.Collections.Generic.HashSet<int>(indices);
+        var visited = new System.Collections.Generic.HashSet<int>();
+        var queue = new System.Collections.Generic.Queue<int>();
+        queue.Enqueue(indices[0]); visited.Add(indices[0]);
+        while (queue.Count > 0)
+        {
+            int current = queue.Dequeue();
+            foreach (int neighbor in map.GetNeighborIndices(current))
+                if (allowed.Contains(neighbor) && visited.Add(neighbor)) queue.Enqueue(neighbor);
+        }
+        return visited.Count == allowed.Count;
+    }
+
+    private static bool RegionsEqual(MapRegionData left, MapRegionData right)
+    {
+        return left.regionId == right.regionId && left.regionName == right.regionName &&
+            left.regionType == right.regionType && left.centerCellIndex == right.centerCellIndex &&
+            left.dominantLandform == right.dominantLandform && left.dominantBiome == right.dominantBiome &&
+            left.hiddenElementBias == right.hiddenElementBias && left.auraTrend == right.auraTrend &&
+            left.dangerTrend == right.dangerTrend && Math.Abs(left.averageAura - right.averageAura) < 0.00001f &&
+            Math.Abs(left.averageDanger - right.averageDanger) < 0.00001f &&
+            left.displayPriority == right.displayPriority &&
+            left.cellIndices.SequenceEqual(right.cellIndices);
     }
 
     private static bool IsInvalidContentSite(WorldMap map, int currentDay, MapSiteData site)

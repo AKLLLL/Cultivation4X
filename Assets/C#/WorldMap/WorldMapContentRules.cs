@@ -47,6 +47,7 @@ namespace Cultivation4X.WorldMap
             QiRevivalStage stage = QiRevivalStage.Early)
         {
             if (map?.cells == null || progress == null) return;
+            CandidateRankingContext ranking = BuildRankingContext(map);
             if (progress.mapSites == null) progress.mapSites = new List<MapSiteData>();
             HashSet<int> occupied = new HashSet<int>(progress.mapSites
                 .Where(site => site != null && WorldMapProgressRules.IsValidCell(map, site.cellIndex))
@@ -54,7 +55,7 @@ namespace Cultivation4X.WorldMap
             foreach (MapSiteType type in CandidateTypes)
             {
                 if (progress.mapSites.Any(site => site != null && site.siteType == type)) continue;
-                int selected = FirstAvailable(RankedCells(map, type, stage), index => !occupied.Contains(index));
+                int selected = FirstAvailable(RankedCells(map, ranking, type, stage), index => !occupied.Contains(index));
                 if (selected < 0) continue;
                 occupied.Add(selected);
                 progress.mapSites.Add(CreateCandidate(type, selected));
@@ -72,12 +73,13 @@ namespace Cultivation4X.WorldMap
             HashSet<int> occupied = new HashSet<int>(progress.mapSites
                 .Where(site => site != null && site.cellIndex != baseCellIndex)
                 .Select(site => site.cellIndex));
+            CandidateRankingContext ranking = BuildRankingContext(map);
             var replacements = new Dictionary<MapSiteData, int>();
             foreach (MapSiteData site in progress.mapSites
                 .Where(site => site != null && site.siteType != MapSiteType.SectBase && site.cellIndex == baseCellIndex)
                 .OrderBy(site => site.siteId, StringComparer.Ordinal))
             {
-                int replacement = FirstAvailable(RankedCells(map, site.siteType, QiRevivalStage.Early),
+                int replacement = FirstAvailable(RankedCells(map, ranking, site.siteType, QiRevivalStage.Early),
                     index => index != baseCellIndex && !occupied.Contains(index));
                 if (replacement < 0) { reason = "没有可用于顺延地图内容的合法格子"; return false; }
                 replacements[site] = replacement;
@@ -93,7 +95,7 @@ namespace Cultivation4X.WorldMap
             {
                 List<int> neighbors = map.GetNeighborIndices(baseCellIndex)
                     .OrderByDescending(index => IsPreferredContentCell(map.cells[index]))
-                    .ThenByDescending(index => Suitability(map, map.cells[index], MapSiteType.SpiritSpring,
+                    .ThenByDescending(index => ScoreSuitability(map, ranking, map.cells[index], MapSiteType.SpiritSpring,
                         QiRevivalStage.Early))
                     .ThenBy(index => StableUnsigned(map.effectiveSeed,
                         "spirit-spring-near-base-" + baseCellIndex + "-" + index))
@@ -107,7 +109,7 @@ namespace Cultivation4X.WorldMap
                     if (blocker != null)
                     {
                         occupied.Remove(near);
-                        int relocated = FirstAvailable(RankedCells(map, blocker.siteType, QiRevivalStage.Early),
+                        int relocated = FirstAvailable(RankedCells(map, ranking, blocker.siteType, QiRevivalStage.Early),
                             index => index != baseCellIndex && index != near && !occupied.Contains(index));
                         if (relocated < 0) { reason = "没有可用于腾挪相邻地图内容的合法格子"; return false; }
                         replacements[blocker] = relocated;
@@ -211,9 +213,9 @@ namespace Cultivation4X.WorldMap
                     candidate.discoveredDay = currentDay;
                     candidate.lastUpdatedDay = currentDay;
                     SynchronizeLegacyFlags(candidate);
-                    summary = $"探索完成，发现{candidate.siteName}";
+                    summary = ExplorationSummary(map, context.targetCellIndex) + $"，发现{candidate.siteName}";
                 }
-                else summary = "探索完成";
+                else summary = ExplorationSummary(map, context.targetCellIndex);
                 return true;
             }
             MapSiteData site = FindSite(progress, context.targetSiteId);
@@ -321,10 +323,11 @@ namespace Cultivation4X.WorldMap
             return site;
         }
 
-        private static IEnumerable<int> RankedCells(WorldMap map, MapSiteType type, QiRevivalStage stage) =>
+        private static IEnumerable<int> RankedCells(WorldMap map, CandidateRankingContext ranking,
+            MapSiteType type, QiRevivalStage stage) =>
             map.cells.Where(cell => cell != null)
                 .OrderByDescending(IsPreferredContentCell)
-                .ThenByDescending(cell => Suitability(map, cell, type, stage))
+                .ThenByDescending(cell => ScoreSuitability(map, ranking, cell, type, stage))
                 .ThenBy(cell => StableUnsigned(map.effectiveSeed,
                     "map-content-" + type + "-" + cell.index))
                 .ThenBy(cell => cell.index).Select(cell => cell.index);
@@ -333,31 +336,99 @@ namespace Cultivation4X.WorldMap
             cell.landform != LandformType.DeepWater && cell.landform != LandformType.ShallowWater;
 
         private static int Suitability(WorldMap map, WorldCell cell, MapSiteType type, QiRevivalStage stage)
+            => ScoreSuitability(map, BuildRankingContext(map), cell, type, stage);
+
+        private static int ScoreSuitability(WorldMap map, CandidateRankingContext ranking,
+            WorldCell cell, MapSiteType type, QiRevivalStage stage)
         {
             int score = (int)(cell.totalAura * 100f) + (int)stage * 5;
-            bool vein = map.spiritVeins?.Any(item => item?.pathCellIndices?.Contains(cell.index) == true) == true;
+            bool vein = ranking.veinCells.Contains(cell.index);
+            ranking.regionById.TryGetValue(cell.regionId ?? string.Empty, out MapRegionData region);
+            MapRegionType? regionType = region?.regionType;
             switch (type)
             {
                 case MapSiteType.Village:
                     score += cell.landform == LandformType.Plain ? 180 : 0;
+                    score += regionType == MapRegionType.Plain || regionType == MapRegionType.Valley ? 120 : 0;
+                    score += IsRegionEdge(map, cell) ? 35 : 0;
                     score += (int)((cell.elementalAura.earth + cell.elementalAura.wood) * 70f); break;
                 case MapSiteType.SpiritSpring:
                     score += cell.biome == BiomeType.Wetland ? 220 : 0; score += vein ? 120 : 0;
+                    score += regionType == MapRegionType.Valley || regionType == MapRegionType.Forest || regionType == MapRegionType.Swamp ? 120 : 0;
+                    score += ranking.nearRiverCells.Contains(cell.index) ? 45 : 0;
                     score += (int)(cell.elementalAura.water * 140f); break;
                 case MapSiteType.SpiritMine:
                     score += cell.landform == LandformType.Mountain ? 220 : 0; score += vein ? 150 : 0;
+                    score += regionType == MapRegionType.MountainRange || regionType == MapRegionType.Hills || regionType == MapRegionType.SmallHill ? 120 : 0;
+                    score += cell.internalPositionTag == MapInternalPositionTag.Ridge ? 45 : 0;
                     score += (int)(cell.elementalAura.metal * 140f); break;
                 case MapSiteType.CaveResidence:
                     score += cell.landform == LandformType.Hill ? 200 : 0;
+                    score += regionType == MapRegionType.MountainRange || regionType == MapRegionType.SmallHill ? 120 : 0;
+                    score += cell.internalPositionTag == MapInternalPositionTag.Mountainside ? 45 : 0;
                     score += (int)(cell.elementalAura.earth * 120f); break;
                 case MapSiteType.BeastLair:
                     score += cell.biome == BiomeType.TemperateForest || cell.biome == BiomeType.Rainforest ? 210 : 0;
+                    score += regionType == MapRegionType.Forest || regionType == MapRegionType.MountainRange || regionType == MapRegionType.Swamp ? 120 : 0;
                     score += (int)((cell.elementalAura.wood + cell.elementalAura.fire) * 70f); break;
                 case MapSiteType.Ruin:
                     score += cell.biome == BiomeType.Desert || cell.biome == BiomeType.Alpine ? 210 : 0;
+                    score += regionType == MapRegionType.Desert || regionType == MapRegionType.Hills || regionType == MapRegionType.Valley ? 120 : 0;
                     score += (int)((cell.elementalAura.earth + cell.elementalAura.metal) * 70f); break;
             }
             return score;
+        }
+
+        private static string ExplorationSummary(WorldMap map, int cellIndex)
+        {
+            WorldCell cell = map?.cells != null && cellIndex >= 0 && cellIndex < map.cells.Length
+                ? map.cells[cellIndex] : null;
+            MapRegionData region = cell == null ? null : map.regions?.FirstOrDefault(item => item?.regionId == cell.regionId);
+            if (cell == null || region == null) return "探索完成";
+            return $"探索完成：{region.regionName}·{WorldMapRegionRules.PositionLabel(cell.internalPositionTag)}，{EnvironmentPhrase(cell)}";
+        }
+
+        private static string EnvironmentPhrase(WorldCell cell)
+        {
+            if (cell.landform == LandformType.Mountain) return "山势险峻";
+            if (cell.landform == LandformType.Hill) return "丘势起伏";
+            if (cell.biome == BiomeType.TemperateForest || cell.biome == BiomeType.Rainforest) return "林木繁茂";
+            if (cell.biome == BiomeType.Wetland) return "水泽丰沛";
+            if (cell.biome == BiomeType.Desert) return "地貌荒旷";
+            if (cell.landform == LandformType.DeepWater || cell.landform == LandformType.ShallowWater) return "水域浩渺";
+            return "地势开阔";
+        }
+
+        private static bool IsRegionEdge(WorldMap map, WorldCell cell) =>
+            map.GetNeighborIndices(cell.index).Any(index => map.cells[index].regionId != cell.regionId);
+
+        private static CandidateRankingContext BuildRankingContext(WorldMap map)
+        {
+            var context = new CandidateRankingContext();
+            foreach (MapRegionData region in map?.regions ?? new List<MapRegionData>())
+                if (region != null && !string.IsNullOrEmpty(region.regionId)) context.regionById[region.regionId] = region;
+            foreach (SpiritVein vein in map?.spiritVeins ?? new List<SpiritVein>())
+                if (vein?.pathCellIndices != null) foreach (int index in vein.pathCellIndices) context.veinCells.Add(index);
+            foreach (RiverSegment segment in map?.rivers ?? new List<RiverSegment>())
+            {
+                if (segment == null) continue;
+                context.riverCells.Add(segment.fromCellIndex);
+                context.riverCells.Add(segment.toCellIndex);
+            }
+            foreach (int riverCell in context.riverCells)
+            {
+                context.nearRiverCells.Add(riverCell);
+                foreach (int neighbor in map.GetNeighborIndices(riverCell)) context.nearRiverCells.Add(neighbor);
+            }
+            return context;
+        }
+
+        private sealed class CandidateRankingContext
+        {
+            public readonly Dictionary<string, MapRegionData> regionById = new Dictionary<string, MapRegionData>(StringComparer.Ordinal);
+            public readonly HashSet<int> veinCells = new HashSet<int>();
+            public readonly HashSet<int> riverCells = new HashSet<int>();
+            public readonly HashSet<int> nearRiverCells = new HashSet<int>();
         }
 
         private static List<string> TagsFor(MapSiteType type)

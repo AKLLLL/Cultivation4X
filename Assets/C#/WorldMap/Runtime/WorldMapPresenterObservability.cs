@@ -23,7 +23,19 @@ namespace Cultivation4X.WorldMap
         private TMP_Text statisticsText;
         private TMP_Text parametersText;
         private WorldMapIconDensityTier lastDensityTier = WorldMapIconDensityTier.Hidden;
+        private WorldMapZoomLevel lastZoomLevel = WorldMapZoomLevel.Far;
         private float lastPresentationOrthographicSize = -1f;
+        private RectTransform regionLabelRoot;
+        private RectTransform nearDetailLabelRoot;
+        private readonly List<TMP_Text> regionLabelPool = new List<TMP_Text>();
+        private readonly List<TMP_Text> nearDetailLabelPool = new List<TMP_Text>();
+        private TMP_Text labelMeasure;
+        private readonly Dictionary<string, MapRegionData> presentationRegionById =
+            new Dictionary<string, MapRegionData>();
+        private readonly Dictionary<int, CellInfluenceState> presentationInfluenceByCell =
+            new Dictionary<int, CellInfluenceState>();
+        private readonly HashSet<int> presentationKnownCellIndices = new HashSet<int>();
+        private readonly HashSet<string> presentationKnownRegionIds = new HashSet<string>();
 
         public WorldMapViewMode ViewMode => viewMode;
         public int SelectedCellIndex => selectedCellIndex;
@@ -68,7 +80,7 @@ namespace Cultivation4X.WorldMap
             foreach (string layerName in new[]
             {
                 "Terrain", "Boundaries", "TerrainIcons", "Rivers", "SpiritVeins",
-                "FactionMarkers", "LocationMarkers", "Influence", "Selection"
+                "FactionMarkers", "LocationMarkers", "RegionAmbience", "Influence", "Selection"
             })
             {
                 GameObject root = new GameObject(layerName);
@@ -79,6 +91,52 @@ namespace Cultivation4X.WorldMap
 
         private Transform Layer(string name) =>
             layerRoots.TryGetValue(name, out Transform root) ? root : transform;
+
+        private void RefreshPresentationCaches()
+        {
+            presentationRegionById.Clear();
+            presentationInfluenceByCell.Clear();
+            presentationKnownCellIndices.Clear();
+            presentationKnownRegionIds.Clear();
+            if (map?.cells == null) return;
+
+            foreach (MapRegionData region in map.regions ?? new List<MapRegionData>())
+                if (region != null && !string.IsNullOrEmpty(region.regionId) &&
+                    !presentationRegionById.ContainsKey(region.regionId))
+                    presentationRegionById.Add(region.regionId, region);
+
+            FoundingState founding = PlayerManager.Instance?.playerData?.founding;
+            bool showAll = debugViewEnabled || founding == null || !FoundingRules.HasReachedCave(founding);
+            WorldMapProgressState progress = WorldMapSession.Progress;
+            if (!showAll) WorldMapInfluenceRules.EnsureCurrent(map, progress);
+            foreach (CellInfluenceState influence in progress?.cellInfluences ?? new List<CellInfluenceState>())
+            {
+                if (influence == null || influence.cellIndex < 0 || influence.cellIndex >= map.cells.Length ||
+                    influence.value <= 0 || influence.value > 100 ||
+                    influence.level != WorldMapInfluenceRules.LevelForValue(influence.value) ||
+                    string.IsNullOrWhiteSpace(influence.controllerSectId) ||
+                    influence.sourceIds == null || influence.sourceIds.Count == 0 ||
+                    presentationInfluenceByCell.ContainsKey(influence.cellIndex)) continue;
+                presentationInfluenceByCell.Add(influence.cellIndex, influence);
+            }
+
+            if (showAll)
+            {
+                foreach (WorldCell cell in map.cells) presentationKnownCellIndices.Add(cell.index);
+            }
+            else
+            {
+                foreach (int index in progress?.revealedCellIndices ?? new List<int>())
+                    if (index >= 0 && index < map.cells.Length) presentationKnownCellIndices.Add(index);
+                foreach (int index in presentationInfluenceByCell.Keys)
+                    presentationKnownCellIndices.Add(index);
+            }
+            foreach (int index in presentationKnownCellIndices)
+            {
+                string regionId = map.cells[index].regionId;
+                if (!string.IsNullOrEmpty(regionId)) presentationKnownRegionIds.Add(regionId);
+            }
+        }
 
         private void RefreshPresentationMarkers()
         {
@@ -109,17 +167,30 @@ namespace Cultivation4X.WorldMap
 
         private void BuildBoundaries()
         {
-            if (viewMode != WorldMapViewMode.Landform && viewMode != WorldMapViewMode.Biome) return;
             WorldMapGeometryBuffer buffer = new WorldMapGeometryBuffer();
             foreach (WorldCell cell in map.cells)
             {
-                if (!CanShowGameplayCell(cell.index)) continue;
+                bool cellKnown = CanShowGameplayCell(cell.index);
                 for (int direction = 0; direction < 6; direction++)
                 {
                     int neighborIndex = map.GetIndex(map.GetNeighbor(cell.coord, direction));
                     if (neighborIndex <= cell.index) continue;
-                    if (!CanShowGameplayCell(neighborIndex)) continue;
+                    bool neighborKnown = CanShowGameplayCell(neighborIndex);
                     WorldCell neighbor = map.cells[neighborIndex];
+                    if (cell.regionId != neighbor.regionId &&
+                        WorldMapRegionPresentationPolicy.ShowRegionBoundary(lastZoomLevel, cellKnown, neighborKnown))
+                    {
+                        Vector2 regionCenter = Center(cell.coord);
+                        float regionFirst = Mathf.Deg2Rad * (60f * direction - 30f);
+                        float regionSecond = Mathf.Deg2Rad * (60f * (direction + 1) - 30f);
+                        float regionWidth = lastZoomLevel == WorldMapZoomLevel.Far ? 0.10f :
+                            lastZoomLevel == WorldMapZoomLevel.Mid ? 0.065f : 0.045f;
+                        buffer.AddLine(regionCenter + new Vector2(Mathf.Cos(regionFirst), Mathf.Sin(regionFirst)) * PresentationHexRadius,
+                            regionCenter + new Vector2(Mathf.Cos(regionSecond), Mathf.Sin(regionSecond)) * PresentationHexRadius,
+                            regionWidth, new Color(0.88f, 0.82f, 0.62f,
+                                lastZoomLevel == WorldMapZoomLevel.Far ? 0.58f : 0.38f));
+                    }
+                    if (!cellKnown || !neighborKnown) continue;
                     bool cellWater = IsWater(cell.landform);
                     bool neighborWater = IsWater(neighbor.landform);
                     bool coastBoundary = cellWater != neighborWater;
@@ -168,12 +239,14 @@ namespace Cultivation4X.WorldMap
             if (mapCamera == null || map?.cells == null) return;
             float projectedDiameter = ProjectedHexDiameter();
             lastDensityTier = WorldMapPresentationPolicy.GetDensityTier(projectedDiameter);
+            lastZoomLevel = WorldMapRegionPresentationPolicy.GetZoomLevel(projectedDiameter);
             lastPresentationOrthographicSize = mapCamera.orthographicSize;
 
             WorldMapGeometryBuffer terrain = new WorldMapGeometryBuffer();
             foreach (WorldMapTerrainIconPlacement placement in
                      WorldMapPresentationPolicy.BuildTerrainIconPlacements(
-                         map, viewMode, projectedDiameter, presentationMarkers))
+                         map, viewMode, projectedDiameter, presentationMarkers.Where(marker =>
+                             WorldMapRegionPresentationPolicy.ShowMarker(marker.kind, lastZoomLevel))))
             {
                 bool known = CanShowGameplayCell(placement.cellIndex);
                 // 未知区域在全图缩放时保留低密度、低透明度的粗略地形符号，
@@ -199,6 +272,7 @@ namespace Cultivation4X.WorldMap
             {
                 if (marker.cellIndex < 0 || marker.cellIndex >= map.cells.Length ||
                     !CanShowGameplayCell(marker.cellIndex) ||
+                    !WorldMapRegionPresentationPolicy.ShowMarker(marker.kind, lastZoomLevel) ||
                     !WorldMapPresentationPolicy.MarkerVisible(marker, viewMode, lastDensityTier, map.effectiveSeed))
                     continue;
                 WorldMapGeometryBuffer target;
@@ -235,6 +309,21 @@ namespace Cultivation4X.WorldMap
             AddMeshObject("ConfirmedLocations", confirmedLocations, Layer("LocationMarkers"), 9);
             AddMeshObject("CaveMarkers", caves, Layer("LocationMarkers"), 9);
             AddMeshObject("FactionMarkers", factions, Layer("FactionMarkers"), 10);
+            if (lastZoomLevel == WorldMapZoomLevel.Near)
+            {
+                WorldMapGeometryBuffer ambience = new WorldMapGeometryBuffer();
+                foreach (WorldCell cell in map.cells)
+                {
+                    presentationInfluenceByCell.TryGetValue(cell.index, out CellInfluenceState cached);
+                    KnowledgeState knowledge = presentationKnownCellIndices.Contains(cell.index)
+                        ? KnowledgeState.Known : KnowledgeState.Unknown;
+                    if (!WorldMapRegionPresentationPolicy.ShowNearDetail(map.effectiveSeed, cell.index,
+                            knowledge, cached?.level ?? InfluenceLevel.None)) continue;
+                    WorldMapIconGeometry.AddRegionAmbientIcon(ambience, cell.internalPositionTag,
+                        Center(cell.coord), 0.42f, new Color(0.82f, 0.90f, 0.72f, 0.42f));
+                }
+                AddMeshObject("RegionAmbience", ambience, Layer("RegionAmbience"), 4);
+            }
         }
 
         private void BuildInfluenceOverlay()
@@ -251,7 +340,7 @@ namespace Cultivation4X.WorldMap
                 if (influence == null || influence.level == InfluenceLevel.None ||
                     influence.cellIndex < 0 || influence.cellIndex >= map.cells.Length) continue;
                 // 影响力是建宗后的战略地图信息，不依赖该格是否已被探索；
-                // 地点详情和行动权限仍由显式认知规则单独控制。
+                // 地点详情和行动权限继续通过统一格状态判定，不在表现层改写认知规则。
                 if (!WorldMapInfluencePresentation.TryGetOverlayStyle(
                         influence.level, out Color color, out float width)) continue;
                 WorldCell cell = map.cells[influence.cellIndex];
@@ -294,10 +383,13 @@ namespace Cultivation4X.WorldMap
             if (map == null || mapCamera == null) return;
             WorldMapIconDensityTier tier =
                 WorldMapPresentationPolicy.GetDensityTier(ProjectedHexDiameter());
+            WorldMapZoomLevel zoom =
+                WorldMapRegionPresentationPolicy.GetZoomLevel(ProjectedHexDiameter());
             bool markerScaleChanged = lastPresentationOrthographicSize <= 0f ||
                                       Mathf.Abs(mapCamera.orthographicSize /
                                                 lastPresentationOrthographicSize - 1f) >= 0.12f;
-            if (tier != lastDensityTier || markerScaleChanged) Rebuild();
+            if (tier != lastDensityTier || zoom != lastZoomLevel || markerScaleChanged) Rebuild();
+            else RefreshRegionLabels();
         }
 
         private float ProjectedHexDiameter() =>
@@ -357,22 +449,44 @@ namespace Cultivation4X.WorldMap
 
         private Color CellColor(WorldCell cell)
         {
+            Color color;
             if (!CanShowGameplayCell(cell.index))
                 // 未认知格显示压暗的地形色，只保留大概的地形轮廓。
-                return Color.Lerp(LandformColor(cell.landform),
-                    new Color(0.03f, 0.035f, 0.04f), 0.6f);
-            switch (viewMode)
             {
-                case WorldMapViewMode.Landform: return LandformFillColor(cell);
-                case WorldMapViewMode.Height:
-                    return Color.Lerp(Color.black, Color.white, Mathf.Clamp01(cell.height));
-                case WorldMapViewMode.Temperature: return TemperatureColor(cell.temperature);
-                case WorldMapViewMode.Moisture: return MoistureColor(cell.moisture);
-                case WorldMapViewMode.Biome: return TerrainColor(cell);
-                case WorldMapViewMode.AuraConcentration: return AuraColor(cell.totalAura);
-                case WorldMapViewMode.DominantElement: return DominantElementColor(cell);
-                default: return new Color(0.12f, 0.13f, 0.14f);
+                Color hidden = Color.Lerp(LandformColor(cell.landform),
+                    new Color(0.03f, 0.035f, 0.04f), 0.6f);
+                color = lastZoomLevel == WorldMapZoomLevel.Far
+                    ? Color.Lerp(hidden, RegionColor(cell.regionId), 0.12f) : hidden;
+                return ApplyCellVariation(color, cell, 0.02f);
             }
+            if (lastZoomLevel == WorldMapZoomLevel.Far && viewMode == WorldMapViewMode.Landform)
+                color = Color.Lerp(LandformFillColor(cell), RegionColor(cell.regionId), 0.12f);
+            else
+            {
+                switch (viewMode)
+                {
+                    case WorldMapViewMode.Landform: color = LandformFillColor(cell); break;
+                    case WorldMapViewMode.Height:
+                        color = Color.Lerp(Color.black, Color.white, Mathf.Clamp01(cell.height)); break;
+                    case WorldMapViewMode.Temperature: color = TemperatureColor(cell.temperature); break;
+                    case WorldMapViewMode.Moisture: color = MoistureColor(cell.moisture); break;
+                    case WorldMapViewMode.Biome: color = TerrainColor(cell); break;
+                    case WorldMapViewMode.AuraConcentration: color = AuraColor(cell.totalAura); break;
+                    case WorldMapViewMode.DominantElement: color = DominantElementColor(cell); break;
+                    default: color = new Color(0.12f, 0.13f, 0.14f); break;
+                }
+            }
+            return ApplyCellVariation(color, cell, 0.07f);
+        }
+
+        private Color ApplyCellVariation(Color color, WorldCell cell, float strength)
+        {
+            if (cell == null || strength <= 0f) return color;
+            int variation = SeedDerivation.Derive(map?.effectiveSeed ?? 0, "cell-tint-" + cell.index) & 0xff;
+            float delta = (variation / 255f - 0.5f) * 2f * strength;
+            return delta >= 0f
+                ? Color.Lerp(color, Color.white, delta)
+                : Color.Lerp(color, Color.black, -delta);
         }
 
         private static Color LandformColor(LandformType landform)
@@ -386,6 +500,212 @@ namespace Cultivation4X.WorldMap
                 case LandformType.Hill: return new Color(0.48f, 0.44f, 0.24f);
                 default: return new Color(0.48f, 0.49f, 0.51f);
             }
+        }
+
+        private Color RegionColor(string regionId)
+        {
+            presentationRegionById.TryGetValue(regionId ?? string.Empty, out MapRegionData region);
+            if (region == null) return new Color(0.32f, 0.36f, 0.34f);
+            switch (region.regionType)
+            {
+                case MapRegionType.MountainRange: return new Color(0.52f, 0.54f, 0.62f);
+                case MapRegionType.SmallHill:
+                case MapRegionType.Hills: return new Color(0.50f, 0.46f, 0.31f);
+                case MapRegionType.Forest: return new Color(0.16f, 0.42f, 0.22f);
+                case MapRegionType.Valley: return new Color(0.42f, 0.58f, 0.30f);
+                case MapRegionType.Desert: return new Color(0.72f, 0.58f, 0.30f);
+                case MapRegionType.Swamp: return new Color(0.24f, 0.48f, 0.42f);
+                case MapRegionType.Lake: return new Color(0.16f, 0.44f, 0.66f);
+                case MapRegionType.OpenWater: return new Color(0.08f, 0.26f, 0.48f);
+                default: return new Color(0.46f, 0.58f, 0.32f);
+            }
+        }
+
+        private void CreateRegionLabelHud(Transform canvas)
+        {
+            regionLabelRoot = CreateFullscreenLabelRoot(canvas, "RegionLabels");
+            nearDetailLabelRoot = CreateFullscreenLabelRoot(canvas, "RegionDetailLabels");
+        }
+
+        private static RectTransform CreateFullscreenLabelRoot(Transform parent, string name)
+        {
+            GameObject root = new GameObject(name, typeof(RectTransform));
+            root.transform.SetParent(parent, false);
+            RectTransform rect = root.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            return rect;
+        }
+
+        private void RefreshRegionLabels()
+        {
+            HideLabelPool(regionLabelPool);
+            HideLabelPool(nearDetailLabelPool);
+            if (map?.regions == null || mapCamera == null || regionLabelRoot == null) return;
+            WorldMapLabelSafeArea safeArea = WorldMapRegionPresentationPolicy.CreateGameplaySafeArea(
+                Screen.width, Screen.height);
+            float canvasScale = GetLabelCanvasScale();
+            if (lastZoomLevel == WorldMapZoomLevel.Near)
+            {
+                List<WorldMapDetailLabelCandidate> detailCandidates = new List<WorldMapDetailLabelCandidate>();
+                foreach (WorldCell cell in map.cells)
+                {
+                    presentationInfluenceByCell.TryGetValue(cell.index, out CellInfluenceState cached);
+                    KnowledgeState knowledge = presentationKnownCellIndices.Contains(cell.index)
+                        ? KnowledgeState.Known : KnowledgeState.Unknown;
+                    if (!WorldMapRegionPresentationPolicy.ShowNearDetail(map.effectiveSeed, cell.index,
+                            knowledge, cached?.level ?? InfluenceLevel.None)) continue;
+                    Vector3 screen = mapCamera.WorldToScreenPoint(Center(cell.coord));
+                    Vector2 preferred = MeasureLabel(
+                        WorldMapRegionRules.PositionLabel(cell.internalPositionTag), 12f);
+                    Vector2 size = WorldMapRegionPresentationPolicy.LabelScreenSize(
+                        preferred, canvasScale, 10f, 6f, 56f, 22f);
+                    float width = size.x;
+                    float height = size.y;
+                    float labelY = screen.y - height * 0.5f - 4f;
+                    detailCandidates.Add(new WorldMapDetailLabelCandidate
+                    {
+                        cellIndex = cell.index,
+                        influenceLevel = cached?.level ?? InfluenceLevel.None,
+                        isSelected = cell.index == selectedCellIndex,
+                        isInViewport = screen.z > 0f && screen.x >= 0f && screen.x <= Screen.width &&
+                                       labelY >= 0f && labelY <= Screen.height,
+                        isInSafeArea = safeArea.Contains(screen.x, labelY, width, height),
+                        screenX = screen.x,
+                        screenY = labelY,
+                        width = width,
+                        height = height
+                    });
+                }
+                List<WorldMapDetailLabelCandidate> detailLabels =
+                    WorldMapRegionPresentationPolicy.SelectNearDetailLabels(detailCandidates, map.effectiveSeed);
+                for (int index = 0; index < detailLabels.Count; index++)
+                {
+                    WorldMapDetailLabelCandidate candidate = detailLabels[index];
+                    WorldCell cell = map.cells[candidate.cellIndex];
+                    TMP_Text label = GetPooledLabel(nearDetailLabelPool, nearDetailLabelRoot, index, 12f);
+                    label.text = WorldMapRegionRules.PositionLabel(cell.internalPositionTag);
+                    label.rectTransform.anchoredPosition = ScreenToCanvas(nearDetailLabelRoot,
+                        candidate.screenX, candidate.screenY);
+                    label.rectTransform.sizeDelta = new Vector2(
+                        candidate.width / canvasScale,
+                        candidate.height / canvasScale);
+                    label.color = new Color(0.84f, 0.92f, 0.76f, 0.78f);
+                }
+                return;
+            }
+
+            string selectedRegionId = selectedCellIndex >= 0 && selectedCellIndex < map.cells.Length
+                ? map.cells[selectedCellIndex].regionId : null;
+            List<WorldMapRegionLabelCandidate> candidates = new List<WorldMapRegionLabelCandidate>();
+            foreach (MapRegionData region in map.regions.Where(item => item != null &&
+                         item.centerCellIndex >= 0 && item.centerCellIndex < map.cells.Length))
+            {
+                bool selected = region.regionId == selectedRegionId;
+                int anchorCellIndex = selected ? selectedCellIndex : region.centerCellIndex;
+                Vector3 screen = mapCamera.WorldToScreenPoint(Center(map.cells[anchorCellIndex].coord));
+                bool visible = screen.z > 0f && screen.x >= 0f && screen.x <= Screen.width &&
+                               screen.y >= 0f && screen.y <= Screen.height;
+                bool known = presentationKnownRegionIds.Contains(region.regionId);
+                string label = region.regionName + "·" + WorldMapRegionRules.RegionTypeLabel(region.regionType);
+                Vector2 preferred = MeasureLabel(label, 16f);
+                Vector2 size = WorldMapRegionPresentationPolicy.LabelScreenSize(
+                    preferred, canvasScale, 12f, 8f, 72f, 28f);
+                float width = size.x;
+                float height = size.y;
+                candidates.Add(new WorldMapRegionLabelCandidate
+                {
+                    regionId = region.regionId,
+                    cellIndex = anchorCellIndex,
+                    displayPriority = region.displayPriority,
+                    isKnown = known,
+                    isSelected = selected,
+                    isInViewport = visible,
+                    isInSafeArea = safeArea.Contains(screen.x, screen.y, width, height),
+                    screenX = screen.x,
+                    screenY = screen.y,
+                    width = width,
+                    height = height
+                });
+            }
+            List<WorldMapRegionLabelCandidate> chosen =
+                WorldMapRegionPresentationPolicy.SelectRegionLabels(candidates, lastZoomLevel);
+            for (int index = 0; index < chosen.Count; index++)
+            {
+                WorldMapRegionLabelCandidate candidate = chosen[index];
+                if (!presentationRegionById.TryGetValue(candidate.regionId, out MapRegionData region)) continue;
+                TMP_Text label = GetPooledLabel(regionLabelPool, regionLabelRoot, index, 16f);
+                label.text = region.regionName + "·" + WorldMapRegionRules.RegionTypeLabel(region.regionType);
+                label.rectTransform.anchoredPosition = ScreenToCanvas(regionLabelRoot,
+                    candidate.screenX, candidate.screenY);
+                label.rectTransform.sizeDelta = new Vector2(
+                    candidate.width / canvasScale,
+                    candidate.height / canvasScale);
+                label.color = candidate.isKnown ? new Color(1f, 0.94f, 0.78f, 0.92f) :
+                    new Color(0.82f, 0.84f, 0.82f, 0.68f);
+            }
+        }
+
+        private float GetLabelCanvasScale()
+        {
+            float scale = regionLabelRoot == null ? 0f : regionLabelRoot.lossyScale.x;
+            if (scale <= 0f && hudCanvas != null) scale = hudCanvas.transform.lossyScale.x;
+            return scale > 0f ? scale : 1f;
+        }
+
+        private Vector2 MeasureLabel(string text, float fontSize)
+        {
+            if (labelMeasure == null)
+            {
+                if (regionLabelRoot == null)
+                    return new Vector2(Mathf.Max(1f, text.Length * fontSize), Mathf.Max(1f, fontSize * 1.4f));
+                labelMeasure = RuntimeUIFactory.Text(regionLabelRoot, string.Empty,
+                    Mathf.RoundToInt(fontSize), 24f);
+                labelMeasure.alignment = TextAlignmentOptions.Center;
+                labelMeasure.enableWordWrapping = false;
+                labelMeasure.overflowMode = TextOverflowModes.Overflow;
+                labelMeasure.raycastTarget = false;
+                labelMeasure.color = new Color(0f, 0f, 0f, 0f);
+            }
+            labelMeasure.fontSize = fontSize;
+            return labelMeasure.GetPreferredValues(text);
+        }
+
+        private static TMP_Text GetPooledLabel(List<TMP_Text> pool, RectTransform root, int index, float size)
+        {
+            while (pool.Count <= index)
+            {
+                TMP_Text text = RuntimeUIFactory.Text(root, string.Empty, Mathf.RoundToInt(size), 24f);
+                text.alignment = TextAlignmentOptions.Center;
+                text.raycastTarget = false;
+                text.enableWordWrapping = false;
+                text.overflowMode = TextOverflowModes.Overflow;
+                pool.Add(text);
+            }
+            TMP_Text label = pool[index];
+            label.fontSize = size;
+            label.gameObject.SetActive(true);
+            return label;
+        }
+
+        private static void HideLabelPool(IEnumerable<TMP_Text> pool)
+        {
+            foreach (TMP_Text label in pool) if (label != null) label.gameObject.SetActive(false);
+        }
+
+        private static Vector2 ScreenToCanvas(RectTransform root, float x, float y)
+        {
+            return RectTransformUtility.ScreenPointToLocalPointInRectangle(root,
+                new Vector2(x, y), null, out Vector2 local) ? local : Vector2.zero;
+        }
+
+        private string DebugRegionSummary()
+        {
+            if (!debugViewEnabled || map?.cells == null || selectedCellIndex < 0 || selectedCellIndex >= map.cells.Length)
+                return string.Empty;
+            WorldCell cell = map.cells[selectedCellIndex];
+            return $"\n[调试] Zoom={lastZoomLevel}｜Region={cell.regionId}｜Position={cell.internalPositionTag}";
         }
 
         private static Color LandformFillColor(WorldCell cell)
@@ -406,7 +726,7 @@ namespace Cultivation4X.WorldMap
             }
             // Landform remains the dominant fill; biome tint supplies a second,
             // low-contrast cue without exposing hidden-cell environmental data.
-            return Color.Lerp(baseColor, biomeTint, 0.18f);
+            return Color.Lerp(baseColor, biomeTint, 0.30f);
         }
 
         private static Color TemperatureColor(float value)

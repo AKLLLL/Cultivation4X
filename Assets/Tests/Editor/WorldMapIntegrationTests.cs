@@ -26,7 +26,7 @@ public class WorldMapIntegrationTests
         WorldMap first = WorldGenerator.Generate(settings);
         WorldMap second = WorldGenerator.Generate(settings);
         Assert.AreEqual(JsonConvert.SerializeObject(first), JsonConvert.SerializeObject(second));
-        Assert.AreEqual(3, first.generationVersion);
+        Assert.AreEqual(4, first.generationVersion);
         Assert.NotNull(first.generationSettings);
         Assert.IsNotEmpty(first.rivers);
         Assert.That(first.spiritVeins.Count(vein => vein.size == SpiritVeinSize.Large),
@@ -76,7 +76,7 @@ public class WorldMapIntegrationTests
         Assert.AreEqual(map.rivers.Count, restored.worldMap.rivers.Count);
         Assert.AreEqual(map.spiritVeins.Count, restored.worldMap.spiritVeins.Count);
         Assert.NotNull(restored.worldMap.generationSettings);
-        Assert.AreEqual(3, restored.worldMap.generationSettings.generationVersion);
+        Assert.AreEqual(4, restored.worldMap.generationSettings.generationVersion);
         Assert.AreEqual(3, restored.worldMap.pointsOfInterest.Count);
         Assert.IsTrue(restored.worldMap.pointsOfInterest.All(point => point.cellIndex >= 0));
     }
@@ -89,6 +89,8 @@ public class WorldMapIntegrationTests
         WorldMap restored = JsonConvert.DeserializeObject<WorldMap>(json);
         Assert.NotNull(restored);
         Assert.AreEqual(128 * 96, restored.cells.Length);
+        Assert.IsNotEmpty(restored.regions);
+        Assert.IsTrue(restored.cells.All(cell => !string.IsNullOrWhiteSpace(cell.regionId)));
         Assert.Less(json.Length, 15_000_000, "默认世界快照超过 15 MB 原型预算");
         TestContext.WriteLine($"Default world JSON bytes (UTF-16 chars): {json.Length}");
     }

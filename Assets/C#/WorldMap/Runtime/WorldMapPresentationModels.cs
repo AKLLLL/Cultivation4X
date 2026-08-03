@@ -292,7 +292,19 @@ namespace Cultivation4X.WorldMap
         public static string Format(WorldMap map, int cellIndex, WorldMapViewMode mode, bool siteSelectionMode,
             IEnumerable<WorldMapPresentationMarker> markers, WorldMapProgressState progress, PlayerData sect)
         {
-            if (siteSelectionMode || sect?.founding == null ||
+            if (siteSelectionMode)
+            {
+                if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
+                    return "点击地图格查看详情。";
+                WorldCell siteCell = map.cells[cellIndex];
+                CellInfluenceRuntimeState siteInfluence =
+                    WorldMapInfluenceRules.GetCellState(map, progress, cellIndex);
+                if (siteInfluence.knowledge == KnowledgeState.Unknown)
+                    return $"坐标 {siteCell.coord.col},{siteCell.coord.row}\n认知：未知\n" +
+                           RegionSummary(map, siteCell, false);
+                return Format(map, cellIndex, mode, true, markers);
+            }
+            if (sect?.founding == null ||
                 !FoundingRules.HasReachedCave(sect.founding))
                 return Format(map, cellIndex, mode, siteSelectionMode, markers);
             if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
@@ -300,8 +312,9 @@ namespace Cultivation4X.WorldMap
 
             CellInfluenceRuntimeState influence = WorldMapInfluenceRules.GetCellState(map, progress, cellIndex);
             WorldCell cell = map.cells[cellIndex];
+            string regionSummary = RegionSummary(map, cell, influence.knowledge == KnowledgeState.Known);
             if (influence.knowledge == KnowledgeState.Unknown)
-                return $"坐标 {cell.coord.col},{cell.coord.row}\n认知：未知";
+                return $"坐标 {cell.coord.col},{cell.coord.row}\n认知：未知\n{regionSummary}";
 
             string terrain = $"{LandformLabel(cell.landform)}/{BiomeLabel(cell.biome)}";
             string markerText = string.Join("、", (markers ?? Enumerable.Empty<WorldMapPresentationMarker>())
@@ -320,7 +333,7 @@ namespace Cultivation4X.WorldMap
                                       $"控制宗门：{influence.controllerSectId ?? "无"}｜来源：" +
                                       (influence.sourceIds.Count == 0 ? "无" : string.Join("、", influence.sourceIds));
             if (influence.level != InfluenceLevel.Core)
-                return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n" +
+                return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n{regionSummary}\n" +
                        $"灵气：{AuraBand(cell.totalAura)}｜灵脉：{veinSummary}\n" +
                        $"危险：{danger}｜地点：{markerText}\n{influenceSummary}{contentSummary}";
 
@@ -328,11 +341,23 @@ namespace Cultivation4X.WorldMap
                 .Where(vein => vein?.pathCellIndices?.Contains(cellIndex) == true)
                 .Select(vein => $"{vein.id}({vein.primaryElement}/{vein.size})"));
             if (string.IsNullOrEmpty(veins)) veins = "无";
-            return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n{influenceSummary}\n" +
+            return $"坐标 {cell.coord.col},{cell.coord.row}｜{terrain}\n{regionSummary}\n{influenceSummary}\n" +
                    $"高度 {cell.height:0.000}｜温度 {cell.temperature:0.000}｜湿度 {cell.moisture:0.000}\n" +
                    $"基础灵气 {cell.baseAura:0.000}｜总灵气 {cell.totalAura:0.000}\n" +
                    $"金 {cell.elementalAura.metal:0.000} 木 {cell.elementalAura.wood:0.000} 水 {cell.elementalAura.water:0.000} 火 {cell.elementalAura.fire:0.000} 土 {cell.elementalAura.earth:0.000}\n" +
                    $"危险：{danger}｜地点：{markerText}｜灵脉：{veins}{contentSummary}";
+        }
+
+        private static string RegionSummary(WorldMap map, WorldCell cell, bool includePosition)
+        {
+            MapRegionData region = map?.regions?.FirstOrDefault(item => item != null &&
+                string.Equals(item.regionId, cell?.regionId, StringComparison.Ordinal));
+            string regionName = string.IsNullOrWhiteSpace(region?.regionName) ? "未划分区域" : region.regionName;
+            string regionType = region == null ? "未知" : WorldMapRegionRules.RegionTypeLabel(region.regionType);
+            if (!includePosition || cell == null)
+                return $"区域：{regionName}｜类型：{regionType}";
+            return $"区域：{regionName}｜类型：{regionType}｜位置：" +
+                   WorldMapRegionRules.PositionLabel(cell.internalPositionTag);
         }
 
         private static string ContentSummary(WorldMapProgressState progress, int cellIndex)

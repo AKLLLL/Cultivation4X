@@ -2,18 +2,21 @@
 
 ## 1. 项目定位与当前闭环
 
-Cultivation4X 是 Unity 单机修仙宗门经营原型。当前设计优先验证人物成长、宗门资源循环、来源化事件，以及“从破败洞府到建立宗门”的新手流程。
+Cultivation4X 是 Unity 单机修仙宗门经营原型。当前设计优先验证世界选址、洞府立宗、人物成长、宗门资源循环、来源化事件，以及宗门对外部世界的认知与影响范围。
 
 ```text
 新档立宗
+  -> 确定性生成世界地图并选择宗门落点
   -> 从 10 名候选者中选择 3 名核心弟子
   -> 选择宗门初始传承
+  -> 命名宗门，建立唯一宗门驻地和初始影响圈
   -> 修复洞府、修炼并提升功法理解
   -> 接触青石村并取得凡人支持
   -> 建成传承方向设施，完成立宗
   -> 进入任务、设施、事件与探索循环
   -> 宗门发展触发青石村外部威胁
   -> 调查、选择战斗方案并承担村庄与宗门后果
+  -> 在世界地图查看认知、影响等级、地点与宗门简报
 ```
 
 技术基线：
@@ -37,6 +40,7 @@ Assets/
     RunTime/    Mission、NPCRuntime 等运行时对象
     UI/         场景 UI 与运行时创建的 UGUI 面板
     Utility/    枚举、物品栈、成长规则和辅助工具
+    WorldMap/   世界生成、静态快照、动态进度、影响力规则和地图表现
   Resources/
     Configs/
       CharacterEvents/    来源化事件
@@ -111,7 +115,7 @@ Assets/
 
 ### 3.6 探索与发现
 
-探索系统只提供宗门外部世界入口，不包含世界地图、坐标、地块或势力系统。三个预设区域位于 `Resources/Configs/ExplorationRegions`，状态保存在 `PlayerData.explorationRegions`。
+探索系统仍以任务和预设区域为玩法单位；三个区域位于 `Resources/Configs/ExplorationRegions`，状态保存在 `PlayerData.explorationRegions`。区域 ID 同时映射到世界地图的兴趣点，但当前没有单位逐格移动、地图行军或势力 AI。
 
 探索复用任务系统：
 
@@ -119,7 +123,7 @@ Assets/
 - `Progress`：推进已发现区域，每个区域同时最多一个。
 - `Ongoing`：最终发现后的持续驻守，每个区域同时最多一个。
 
-区域进度由 `ExplorationRules` 推进，发现事件进入 `EventManager` 收件箱，奖励继续走现有奖励与仓库路径。`ExplorationPanel` 是当前验证 UI，不代表未来世界地图方案。
+区域进度由 `ExplorationRules` 推进，发现事件进入 `EventManager` 收件箱，奖励继续走现有奖励与仓库路径。`ExplorationPanel` 负责派遣；世界地图负责位置、认知和影响显示，两者尚未合并为逐格探索系统。
 
 ### 3.7 外部威胁与战斗结算
 
@@ -133,18 +137,40 @@ Assets/
 
 首个切片为“沾染灵气的野兽冲击青石村”：关系达到 20 后延迟 5 天激活，玩家可以反复派遣单名弟子执行调查任务，并在正面迎击、简单防御和退守洞府之间选择。战斗结果可以改变弟子伤势、经验、死亡状态以及村庄人口、劳动力和关系，但失败不会直接结束游戏。
 
+### 3.8 世界地图、认知与宗门影响力
+
+世界地图采用“静态生成快照 + 动态地图进度”分层：
+
+- `WorldMap` 保存生成版本、参数快照、六边格、河流、灵脉和兴趣点；生成完成后不写入玩法进度。
+- `WorldMapProgressState` 保存显式揭示格、地图地点、影响来源、非零影响格缓存和整图脏标记。
+- `WorldMapSession` 保存当前运行时地图与进度引用，不是新的全局 `MonoBehaviour` Manager。
+- `WorldMapInfluenceRules` 是无 UI 依赖的规则类，负责确定性重算、认知派生和权限查询。
+
+当前唯一真实影响来源是玩家宗门驻地：来源格 100、距离 1 为 60、距离 2 为 20，更远为 0；地图边缘自然裁剪。同宗来源按稳定 ID 排序累加并封顶 100。等级为 `None`、`Outer`、`Influence`、`Core`，阈值分别是 0、1–29、30–69、70–100。
+
+认知和影响力相互独立：
+
+- `revealedCellIndices` 是显式探索认知的持久化事实来源。
+- 非零影响格自动视为 `Known`，但不会反向写入显式揭示列表。
+- `RevealCell()` 只能产生 `Known + None`，不会授予开发权限。
+- 未知格只显示暗色粗略地形，不显示危险、地点、灵脉、控制方、来源或影响值。
+
+规则层已提供调查、清理、建立联系、资源开发、村庄关系、据点和核心设施的累计权限查询；除宗门驻地外，这些领域对象和操作入口尚未实现，不能把规则接口视为已完成玩法。
+
 ## 4. 洞府立宗状态机
 
 `FoundingState` 保存在 `PlayerData` 中，不新增全局 Manager：
 
 ```text
-CandidateSelection
+WorldSelection
+  -> CandidateSelection
   -> TechniqueSelection
+  -> SectConfirmation
   -> Cave
   -> Completed
 ```
 
-状态内保存候选生成种子与候选快照、核心弟子 ID、所选功法、理解度、里程碑标记和村庄数据。
+状态内保存世界种子与所选世界格、候选生成种子与候选快照、核心弟子 ID、所选功法、理解度、里程碑标记和村庄数据。`SectConfirmation` 负责宗门命名；确认成功后创建唯一 `SectBase` 地点及同 ID 影响来源，再进入 `Cave`。
 
 三条传承方向：
 
@@ -160,7 +186,7 @@ CandidateSelection
 
 ## 5. 存档与迁移
 
-`GameState` 当前版本为 `SaveDataVersion.Current = 6`。主要内容：
+`GameState` 当前版本为 `SaveDataVersion.Current = 10`。主要内容：
 
 - 天数、确定性随机种子和抽取次数
 - 宗门资源、设施、立宗状态、村庄、探索区域和外部威胁状态
@@ -170,17 +196,19 @@ CandidateSelection
 - 事件历史、待触发事件、收件箱和当前事件
 - 普通事件十日节奏的生成日与当日生成计数
 - 最近未读日结
+- 世界地图静态快照和 `WorldMapProgressState`
 
-`SaveManager.MigrateState()` 负责旧字段默认值和版本迁移：
+当前项目明确不兼容旧存档：`Load()` 只接受版本 10，版本更低或更高都会拒绝，并要求删除旧档后新开游戏。历史版本节点：
 
 - v1–v3 旧档迁移为“已完成立宗”，保留既有角色和设施等级。
 - v4 新档允许 0 级设施及未完成立宗状态。
 - v5 增加战斗悟性、战斗经验和任务能力快照。
 - v6 增加外部威胁状态、青石村一次性劳动力授予标记和普通事件节奏状态。
-- 加载旧版本存档并迁移前，会按当前版本建立 `.pre-v6` 备份作为回滚点。
-- 加载后恢复人物、任务、事件和仓库，并规范化重复物品栈。
+- v8 增加世界地图快照、生成参数和世界选址。
+- v9 增加地图进度、宗门身份、唯一驻地和立宗确认。
+- v10 增加持久化影响来源、非零影响缓存和严格一致性校验。
 
-兼容要求：不得改名已有 JSON 字段、境界旧枚举值、角色稳定 ID 或 `MissionState`；新增存档字段必须有默认值和迁移测试。
+保存前会确保影响缓存已重算。读取 v10 时只允许对“已有合法来源但派生缓存为空或标脏”的情况重算；缺失地图进度、缺失来源真源、非法索引、重复索引、错误等级、悬空来源、控制宗门冲突或干净缓存与来源不一致都会拒绝。`MigrateState()` 仍负责当前状态中的集合规范化，但不再承担旧版本升级。
 
 ## 6. Manager 职责
 
@@ -190,15 +218,15 @@ CandidateSelection
 | `NPCManager` | 创建/恢复/查询角色，派遣、恢复、伤亡、关系与招募 |
 | `MissionManager` | 所有任务配置加载、校验、推进、失败/取消清理、威胁调查和待领奖 |
 | `EventManager` | 来源化事件、收件箱、过期、效果和历史 |
-| `PlayerManager` | 宗门资源、设施、立宗状态、功法理解、村庄人口、关系和劳动力 |
+| `PlayerManager` | 世界选址、宗门确认、宗门资源、设施、立宗状态、功法理解、村庄人口、关系和劳动力 |
 | `WarehouseManager` | 物品增减、容量检查和重复栈合并 |
 | `RewardManager` | 向宗门、人物和仓库发放任务奖励 |
-| `SaveManager` | 捕获、保存、读取、备份和迁移 `GameState` |
+| `SaveManager` | 捕获、保存、读取和严格验证 `GameState`、世界地图快照及动态地图进度 |
 | `ItemDatabase` / `TraitDatabase` | 加载和查询 JSON 内容 |
 | `UIManager` | 面板打开、关闭、Esc 返回栈及按打开顺序分配模态面板显示层级 |
 | `RandomEventManager` | 旧随机事件兼容与调试 |
 
-立宗、探索和外部威胁切片沿用现有 Manager，没有新增全局单例。战斗与威胁规则位于无状态数据/规则类中；需要跨场景保留的对象通过 `DontDestroyUtility.MarkPersistent()` 处理。
+立宗、探索、世界地图、影响力和外部威胁切片沿用现有 Manager，没有为地图或影响力新增全局单例。地图、影响力、战斗与威胁计算位于无状态数据/规则类中；需要跨场景保留的对象通过 `DontDestroyUtility.MarkPersistent()` 处理。
 
 ## 7. 每日推进顺序
 
@@ -218,11 +246,15 @@ CandidateSelection
 
 结束日前的派遣消耗、事件选择、设施升级和待领奖领取通过既有预推进资源记录进入下一份日结。
 
+首版影响力没有每日增长或衰减，不订阅 `OnDayPassed`，也不改变上述推进顺序。影响来源创建或修改、保存前检查和合法的读档缓存修复才会触发重算。
+
 ## 8. UI 架构
 
 主要面板：
 
-- `FoundingPanel`：候选选择、传承选择、洞府修复、功法理解、村庄与路线建设入口。
+- `WorldMapPresenter`：世界生成结果、六边格选址、认知遮蔽、影响覆盖层、地点和地图详情。
+- `SectWorldInterface`：宗门资源栏、宗门简报、宗门布局及任务堂入口。
+- `FoundingPanel`：候选选择、传承选择、宗门命名、洞府修复、功法理解、村庄与路线建设入口。
 - `SectPanel` / `NPCInfoPanel`：弟子列表与人物详情。
 - `MissionPanel` / `MissionNodePanel`：任务、设施行动、节点选择和待领奖。
 - `CharacterEventPanel`：事件收件箱、正文和选项。
@@ -234,6 +266,8 @@ CandidateSelection
 - `WarehousePanel`：仓库与物品详情。
 
 `FoundingPanel`、`CharacterEventPanel`、`DaySettlementPanel`、`SectDevelopmentPanel`、`ExplorationPanel` 和 `AlchemyPanel` 使用 `RuntimeUIFactory` 创建基础 UGUI 控件。UI 通过 Manager 命令接口改变状态，不应直接修改 Manager 内部集合。
+
+`WorldMapPresenterObservability` 提供地形、温度、湿度、五行和灵脉等调试视图；游戏态影响图例与调试图例分离。`LegacyWorldUiGate` 隐藏旧场景世界入口。宗门内部建筑仍只存在于宗门布局界面，不占用世界地图格。
 
 内容较多的面板使用轻量页签而不是无限延长单一滚动列表：
 
@@ -274,23 +308,28 @@ EditMode 测试文件：
 - `FoundingSystemTests.cs`
 - `SectVitalityTests.cs`
 - `UIPaginationTests.cs`
+- `UIManagerStackingTests.cs`
+- `WorldMapIntegrationTests.cs`
+- `WorldMapProgressTests.cs`
+- `SectFoundingIntegrationTests.cs`
 
-自动化覆盖候选确定性与唯一性、人物与任务存档迁移、设施循环、来源化事件、探索、宗门生命力、外部威胁两阶段结算、调查/袭击/撤退边界、村庄后果、普通事件十日节奏，以及两批 UI 页签结构和跨页状态保留。
+自动化覆盖候选确定性与唯一性、人物与任务状态、设施循环、来源化事件、探索、宗门生命力、外部威胁两阶段结算、世界生成确定性、地图进度、认知遮蔽、影响阈值与 1/6/12 分布、多来源累加、v10 存档校验、立宗驻地、UI 栈和分页。
 
-当前自动化基线：Unity EditMode 92/92 通过。合并前仍需确认：
+当前自动化基线：Unity 2022.3.62f3 EditMode 131/131 通过（2026-08-02 验证）。每次合并前仍需确认：
 
 1. Unity Editor 编译通过。
 2. Resources JSON 可解析且引用有效。
 3. `git diff --check` 无格式错误且没有无关场景、Prefab、字体或 ProjectSettings 改动。
-4. 手动验证候选选择、任务/威胁/探索/日结页签、事件正文滚动、Esc 返回、威胁调查与结算，以及保存后重启恢复。
+4. 手动验证世界选址、宗门命名、1/6/12 影响显示、未知格遮蔽、宗门简报、候选选择、任务/威胁/探索/日结页签、Esc 返回，以及 v10 保存后重启恢复。
 
-`dotnet build` 不能可靠验证该项目，因为解决方案中存在 Unity 生成的同名 `Assembly-CSharp` 项目；以 Unity Editor 和 Unity Test Runner 为准。
+`dotnet build` 可作为快速编译辅助，但会报告 Unity/CodeCoverage 的既有程序集版本冲突；最终结果以 Unity Editor 和 Unity Test Runner 为准。
 
 ## 11. 高风险区与扩展规则
 
 高风险区：
 
-- `GameState`、存档版本、备份和迁移
+- `GameState`、存档版本和严格加载校验
+- 世界地图生成版本、参数快照、格索引和 `WorldMapProgressState`
 - 角色稳定 ID、自定义生成角色恢复和境界枚举值
 - `TimeManager.EndDay()` 每日顺序
 - Mission/Event 状态机及失败、取消、死亡、待领奖清理
@@ -301,14 +340,16 @@ EditMode 测试文件：
 扩展原则：
 
 - 新玩法优先复用 `Mission`、`EventManager`、`CharacterState` 和 `FacilityRules`。
-- 不为未来需求提前增加全局 Manager、复杂技能树、人口 AI 或世界地图。
+- 不为未来需求提前增加全局 Manager、复杂技能树、人口 AI、多宗门外交或战争 AI。
+- 世界生成数据与动态地图进度必须分离；影响力只能通过格索引和 `HexCoord.Distance()` 计算。
+- 认知与影响等级必须分离，UI 不得自行复制行动权限判断。
 - 新事件效果必须补配置校验和测试。
-- 新存档字段必须提供默认值、迁移策略和旧档回滚方式。
+- 新存档字段必须明确版本、默认值、严格校验及旧档是否直接拒绝。
 - 新任务行为必须覆盖完成、失败、取消、角色死亡、读档和 UI 路径。
 
 具体协作规则、风险审批和变更预算以根目录 `AGENTS.md` 为准。
 
-## 12. 第一次宗门生命力提升
+## 12. 历史切片：第一次宗门生命力提升
 
 `CharacterState` 新增 `baseCombatComprehension` 与 `combatExperience`，保留既有 `attack` 序列化字段，并在玩家界面显示为“力量”。无状态的 `CharacterCapabilityRules` 统一计算战力和任务评分，不增加 Manager。战力由力量、敏捷、体质、战斗悟性、封顶战斗经验、境界、当前宗门功法和预留装备参数组成。
 
@@ -322,6 +363,6 @@ EditMode 测试文件：
 
 立宗新档只有 5 份基础材料；洞府修复仍复用现有 Mission。护山阵把普通任务失败伤势从 3 天降为 1 天。立宗完成后，未修复的洞府与村庄事务仍可执行。
 
-存档版本为 v5。迁移会以普通悟性补齐旧生成弟子的战斗悟性、将战斗经验安全归零，并在写入迁移前建立 `.pre-v5` 备份；缺少任务能力快照的活动任务会在恢复时按当前执行者计算一次。
+该切片落地时存档版本为 v5；当时的迁移会以普通悟性补齐旧生成弟子的战斗悟性、将战斗经验安全归零，并为缺少能力快照的活动任务补算一次。
 
-此后 v6 在不改变既有人物和任务稳定 ID 的前提下加入外部威胁、青石村劳动力授予标记和事件生成节奏；当前写入的存档统一使用 v6。
+此后 v6 加入外部威胁、青石村劳动力授予标记和事件生成节奏；v8–v10 继续加入世界地图、立宗驻地和影响力。当前写入版本以第 5 节所述 v10 为准。
