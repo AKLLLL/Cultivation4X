@@ -12,6 +12,7 @@ public class SectDevelopmentPanel : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<SectDevelopmentPanel>() == null)
             new GameObject("SectDevelopmentPanel").AddComponent<SectDevelopmentPanel>();
     }

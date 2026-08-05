@@ -21,6 +21,7 @@ public sealed class LegacyWorldUiGate : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<LegacyWorldUiGate>() == null)
             new GameObject("LegacyWorldUiGate").AddComponent<LegacyWorldUiGate>();
     }

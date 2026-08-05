@@ -32,6 +32,7 @@ public class ExternalThreatPanel : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<ExternalThreatPanel>() == null)
             new GameObject("ExternalThreatPanel").AddComponent<ExternalThreatPanel>();
     }

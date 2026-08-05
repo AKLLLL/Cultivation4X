@@ -25,6 +25,7 @@ public class DaySettlementPanel : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<DaySettlementPanel>() == null)
             new GameObject("DaySettlementPanel").AddComponent<DaySettlementPanel>();
     }

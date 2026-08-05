@@ -19,6 +19,7 @@ public class CharacterEventPanel : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<CharacterEventPanel>() == null)
             new GameObject("CharacterEventPanel").AddComponent<CharacterEventPanel>();
     }

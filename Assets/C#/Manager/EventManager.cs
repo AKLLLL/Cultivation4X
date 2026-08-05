@@ -27,6 +27,7 @@ public class EventManager : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (Instance == null) new GameObject("EventManager").AddComponent<EventManager>();
     }
 

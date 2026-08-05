@@ -32,6 +32,11 @@ public class SaveManager : MonoBehaviour
     private IEnumerator Start()
     {
         yield return null;
+        if (MapTestBootstrap.IsTestScene)
+        {
+            IsInitializationComplete = true;
+            yield break;
+        }
         if (File.Exists(SavePath))
         {
             LoadedExistingSave = Load();

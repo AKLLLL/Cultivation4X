@@ -21,6 +21,7 @@ public sealed class SectWorldInterface : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<SectWorldInterface>() == null)
             new GameObject("SectWorldInterface").AddComponent<SectWorldInterface>();
     }

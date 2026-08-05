@@ -31,6 +31,7 @@ public class FoundingPanel : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<FoundingPanel>() == null)
             new GameObject("FoundingPanel").AddComponent<FoundingPanel>();
     }

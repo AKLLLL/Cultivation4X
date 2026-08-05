@@ -22,6 +22,7 @@ public class AlchemyPanel : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
+        if (MapTestBootstrap.IsTestScene) return;
         if (FindObjectOfType<AlchemyPanel>() == null)
             new GameObject("AlchemyPanel").AddComponent<AlchemyPanel>();
     }
