@@ -9,9 +9,9 @@ public enum FoundingStage
     WorldSelection = -1,
     CandidateSelection = 0,
     TechniqueSelection = 1,
-    Cave = 2,
-    Completed = 3,
-    SectConfirmation = 4
+    SectConfirmation = 2,
+    Cave = 3,
+    Completed = 4
 }
 
 public enum FoundingActionKind

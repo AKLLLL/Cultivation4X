@@ -43,6 +43,8 @@ public class MissionNodePanel : MonoBehaviour
 
         descriptionText.text =
             $"执行弟子：{mission.AssignedNPC?.Data.npcName ?? "未知"}\n{node.description}";
+        if (!string.IsNullOrEmpty(mission.NodeFailureReason))
+            descriptionText.text += $"\n<color=#ff9a5c>{mission.NodeFailureReason}</color>";
         //先全部隐藏
 
         option1Button.gameObject.SetActive(false);

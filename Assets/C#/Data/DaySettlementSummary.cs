@@ -27,7 +27,7 @@ public class FacilityUpgradeRecord
     public FacilityType facility;
     public int newLevel;
 }
-//Ã¿ÈÕ½áËãÊı¾İÄ£ĞÍ£º×ÊÔ´±ä»¯¡¢ÈÎÎñ½á¹û¡¢µÜ×Ó×´Ì¬±ä»¯¡¢ĞÂÊÂ¼ş¡¢ÉèÊ©Éı¼¶¼ÇÂ¼¡£
+//æ¯æ—¥ç»“ç®—æ•°æ®æ¨¡å‹ï¼šèµ„æºå˜åŒ–ã€ä»»åŠ¡ç»“æœã€å¼Ÿå­çŠ¶æ€å˜åŒ–ã€æ–°äº‹ä»¶ã€è®¾æ–½å‡çº§è®°å½•ã€‚
 [Serializable]
 public class DaySettlementSummary
 {

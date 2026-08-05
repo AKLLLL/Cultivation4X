@@ -46,6 +46,7 @@ public class TimeManager : MonoBehaviour
     /// </summary>
     public void EndDay()
     {
+        if (isAdvancingDay) { Debug.LogWarning("正在推进天数，忽略重复调用"); return; }
         if (IsSettlementOpen) { Debug.LogWarning("请先关闭每日结算"); return; }
         if (EventManager.Instance != null && !EventManager.Instance.PrepareForDayAdvance(CurrentDay, out string reason))
         {

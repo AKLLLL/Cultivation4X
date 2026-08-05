@@ -36,8 +36,6 @@ namespace Cultivation4X.WorldMap
                 item != null && item.siteType == type));
         }
 
-        public static bool IsExplorationHallUnlocked() => HasDevelopedSite(MapSiteType.CaveResidence);
-
         /// <summary>
         /// 每日效果只在时间推进入口调用一次；同一天重复调用不会重复产出。
         /// </summary>
@@ -98,14 +96,6 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Ruin:
                     PlayerManager.Instance?.AddTechniqueUnderstanding(RuinTechniqueUnderstandingReward);
                     break;
-                case MapSiteType.CaveResidence:
-                    // 新档洞府建成时探索堂尚为 Lv0；开发地点后先把现有设施建成 Lv1，
-                    // 后续升级仍沿用现有资源与容量规则。
-                    if (PlayerManager.Instance != null &&
-                        PlayerManager.Instance.GetFacilityLevel(FacilityType.ExplorationHall) <= 0)
-                        PlayerManager.Instance.SetFacilityLevelForStory(FacilityType.ExplorationHall, 1);
-                    else PlayerManager.Instance?.NotifyFoundingChanged();
-                    break;
             }
         }
 
@@ -118,7 +108,6 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Village: return "完成后：村落关系+15，宗门声望+10";
                 case MapSiteType.BeastLair: return "清理后：抑制尚未排程的兽潮，或延后现有威胁节点";
                 case MapSiteType.Ruin: return "调查后：功法理解+5";
-                case MapSiteType.CaveResidence: return "开发后：建成探索堂 Lv1，并解锁后续升级入口";
                 default: return string.Empty;
             }
         }

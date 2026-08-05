@@ -7,7 +7,6 @@ public enum FacilityType
     TrainingRoom,
     SecretRealm,
     AlchemyRoom,
-    ExplorationHall,
     ProtectionArray,
     InheritanceChamber,
     ForgeRoom,

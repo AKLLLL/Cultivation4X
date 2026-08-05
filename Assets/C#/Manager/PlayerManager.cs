@@ -37,7 +37,6 @@ public class PlayerManager : MonoBehaviour
             trainingRoomLevel = 0,
             secretRealmLevel = 0,
             alchemyRoomLevel = 0,
-            explorationHallLevel = 0,
             protectionArrayLevel = 0,
             inheritanceChamberLevel = 0,
             forgeRoomLevel = 0,
@@ -198,7 +197,6 @@ public class PlayerManager : MonoBehaviour
             case FacilityType.TrainingRoom: return playerData.trainingRoomLevel;
             case FacilityType.SecretRealm: return playerData.secretRealmLevel;
             case FacilityType.AlchemyRoom: return playerData.alchemyRoomLevel;
-            case FacilityType.ExplorationHall: return playerData.explorationHallLevel;
             case FacilityType.ProtectionArray: return playerData.protectionArrayLevel;
             case FacilityType.InheritanceChamber: return playerData.inheritanceChamberLevel;
             case FacilityType.ForgeRoom: return playerData.forgeRoomLevel;
@@ -216,8 +214,6 @@ public class PlayerManager : MonoBehaviour
         }
         int level = GetFacilityLevel(facility);
         if (level <= 0) { reason = "设施尚未修复或建成"; return false; }
-        if (facility == FacilityType.ExplorationHall && !Cultivation4X.WorldMap.WorldMapContentEffects.IsExplorationHallUnlocked())
-        { reason = "需要先开发地图洞府地点"; return false; }
         if (facility == FacilityType.ProtectionArray ||
             facility == FacilityType.InheritanceChamber || facility == FacilityType.ForgeRoom ||
             facility == FacilityType.FormationPlatform)
@@ -256,7 +252,6 @@ public class PlayerManager : MonoBehaviour
             case FacilityType.TrainingRoom: playerData.trainingRoomLevel = level; break;
             case FacilityType.SecretRealm: playerData.secretRealmLevel = level; break;
             case FacilityType.AlchemyRoom: playerData.alchemyRoomLevel = level; break;
-            case FacilityType.ExplorationHall: playerData.explorationHallLevel = level; break;
             case FacilityType.ProtectionArray: playerData.protectionArrayLevel = level; break;
             case FacilityType.InheritanceChamber: playerData.inheritanceChamberLevel = level; break;
             case FacilityType.ForgeRoom: playerData.forgeRoomLevel = level; break;

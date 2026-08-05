@@ -33,8 +33,7 @@ public class SectDevelopmentPanel : MonoBehaviour
                 FacilityType.Warehouse,
                 FacilityType.TrainingRoom,
                 FacilityType.SecretRealm,
-                FacilityType.AlchemyRoom,
-                FacilityType.ExplorationHall
+                FacilityType.AlchemyRoom
         };
         foreach (FacilityType facility in upgradeFacilities)
         {
@@ -84,13 +83,6 @@ public class SectDevelopmentPanel : MonoBehaviour
                 pair.Value.interactable = false;
                 continue;
             }
-            if (pair.Key == FacilityType.ExplorationHall &&
-                !Cultivation4X.WorldMap.WorldMapContentEffects.IsExplorationHallUnlocked())
-            {
-                pair.Value.GetComponentInChildren<TMP_Text>().text = $"{Name(pair.Key)}\n需要先开发地图洞府地点";
-                pair.Value.interactable = false;
-                continue;
-            }
             int gold = FacilityRules.UpgradeGoldCost(level), material = FacilityRules.UpgradeMaterialCost(level);
             pair.Value.GetComponentInChildren<TMP_Text>().text = level >= FacilityRules.MaxLevel
                 ? $"{Name(pair.Key)} Lv.{level}（已满级）"
@@ -103,7 +95,7 @@ public class SectDevelopmentPanel : MonoBehaviour
     {
         switch (type) { case FacilityType.MissionHall: return "任务堂"; case FacilityType.Warehouse: return "仓库";
             case FacilityType.TrainingRoom: return "修炼室"; case FacilityType.SecretRealm: return "秘境";
-            case FacilityType.ExplorationHall: return "探索堂"; default: return "炼丹房"; }
+            default: return "炼丹房"; }
     }
 
     private static string Effect(FacilityType type, int level)
@@ -112,7 +104,6 @@ public class SectDevelopmentPanel : MonoBehaviour
             case FacilityType.Warehouse: return $"物品种类上限 {FacilityRules.WarehouseSlots(level)}";
             case FacilityType.TrainingRoom: return $"每日基础修为 +{FacilityRules.TrainingGain(level)}";
             case FacilityType.SecretRealm: return $"探索 {FacilityRules.SecretRealmDays(level)} 天 / 材料 {FacilityRules.SecretRealmMaterialReward(level)}";
-            case FacilityType.ExplorationHall: return "开启宗门外部探索";
             default: return $"炼丹 {FacilityRules.AlchemyDays(level)} 天 / 丹药 {FacilityRules.AlchemyPillReward(level)}"; }
     }
 }

@@ -82,19 +82,6 @@ public class UIPaginationTests
     }
 
     [Test]
-    public void WorldMapLegend_StaysInsideLeftMapRegion()
-    {
-        GameObject owner = Track(new GameObject("WorldMapLegendLayoutTest", typeof(RectTransform)));
-        RectTransform legend = owner.GetComponent<RectTransform>();
-        typeof(Cultivation4X.WorldMap.WorldMapPresenter)
-            .GetMethod("ConfigureInfluenceLegendLayout", StaticFlags)
-            .Invoke(null, new object[] { legend });
-
-        Assert.Less(legend.anchorMax.x, 0.70f);
-        Assert.AreEqual(154f, legend.offsetMin.x);
-    }
-
-    [Test]
     public void NpcContentLayout_ControlsTabBarWidthAfterRebuild()
     {
         GameObject viewportObject = Track(new GameObject("NpcViewportLayoutTest", typeof(RectTransform)));
@@ -231,33 +218,6 @@ public class UIPaginationTests
         CollectionAssert.Contains(selected, "npc-a");
         Assert.AreEqual(CombatPlanType.SimpleDefense,
             typeof(ExternalThreatPanel).GetField("selectedPlan", InstanceFlags).GetValue(panel));
-    }
-
-    [Test]
-    public void ExplorationPanel_UsesThreePagesAndKeepsSelectionState()
-    {
-        GameObject owner = Track(new GameObject("ExplorationPaginationTest"));
-        ExplorationPanel panel = owner.AddComponent<ExplorationPanel>();
-        typeof(ExplorationPanel).GetMethod("Awake", InstanceFlags).Invoke(panel, null);
-
-        IDictionary buttons = (IDictionary)typeof(ExplorationPanel)
-            .GetField("pageButtons", InstanceFlags).GetValue(panel);
-        Assert.AreEqual(3, buttons.Count);
-
-        typeof(ExplorationPanel).GetField("selectedRegionId", InstanceFlags).SetValue(panel, "region-a");
-        typeof(ExplorationPanel).GetField("pendingMissionId", InstanceFlags).SetValue(panel, "mission-a");
-        object detailsKey = Enum.Parse(buttons.GetType().GetGenericArguments()[0], "Details");
-        ((Button)buttons[detailsKey]).onClick.Invoke();
-
-        Assert.AreEqual("region-a",
-            typeof(ExplorationPanel).GetField("selectedRegionId", InstanceFlags).GetValue(panel));
-        Assert.AreEqual("mission-a",
-            typeof(ExplorationPanel).GetField("pendingMissionId", InstanceFlags).GetValue(panel));
-        RectTransform root = (RectTransform)typeof(ExplorationPanel)
-            .GetField("panel", InstanceFlags).GetValue(panel);
-        Button close = (Button)typeof(ExplorationPanel)
-            .GetField("closeButton", InstanceFlags).GetValue(panel);
-        Assert.AreSame(root, close.transform.parent);
     }
 
     [Test]

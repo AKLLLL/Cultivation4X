@@ -29,6 +29,10 @@ public class Mission
     public MissionResultTier ResultTier { get; private set; } = MissionResultTier.Qualified;
     private bool hasCapabilitySnapshot;
     public Cultivation4X.WorldMap.MapMissionContext MapContext { get; private set; }
+    /// <summary>
+    /// 节点选项效果执行失败的提示（例如物品不足）；失败时任务停留在 WaitingNode 并重新弹出面板。
+    /// </summary>
+    public string NodeFailureReason { get; private set; }
 
    
     public Mission(MissionData data, int facilityLevel = 1)
@@ -119,11 +123,6 @@ public class Mission
         
         if (State != MissionState.Active)
             return;
-        if (Data.explorationKind == ExplorationMissionKind.Ongoing && RemainingDays <= 0)
-        {
-            MissionManager.Instance.EvaluateMission(this);
-            return;
-        }
         //经过一天
 
         ElapsedDays++;
@@ -212,12 +211,15 @@ public class Mission
             return;
         }
 
-        ApplyEffects(
-            option
-        );
+        if (!ApplyEffects(option))
+        {
+            // 效果执行失败（如物品不足）：不结算任务、不关闭选择，重新弹出节点面板并展示原因。
+            MissionManager.Instance?.OnMissionNodeTriggered(this);
+            return;
+        }
 
         ContinueMission();
-       
+
 
     }
     // 检查选项条件
@@ -255,12 +257,12 @@ public class Mission
         return true;
 
     }
-    //效果执行
-    private void ApplyEffects(
+    //效果执行；返回是否全部成功。
+    private bool ApplyEffects(
     MissionOptionData option)
     {
         if (option.effects == null)
-            return;
+            return true;
         foreach (var effect in option.effects)
         {
 
@@ -315,7 +317,8 @@ public class Mission
                     if (!removed)
                     {
                         Debug.LogWarning($"任务效果失败，物品不足: {effect.itemId}");
-                        return;
+                        NodeFailureReason = $"材料不足，无法执行：{effect.itemId}";
+                        return false;
                     }
 
                     Debug.Log(
@@ -358,12 +361,14 @@ public class Mission
 
         }
 
+        return true;
     }
    
     //节点选择后继续任务
     private void ContinueMission()
     {
 
+        NodeFailureReason = null;
         CurrentNodeIndex++;
 
 
@@ -446,13 +451,6 @@ public class Mission
         CurrentNode = null;
     }
 
-    public void RestartCycle()
-    {
-        if (State != MissionState.Active || Data.explorationKind != ExplorationMissionKind.Ongoing) return;
-        RemainingDays = Mathf.Max(1, Data.needDays);
-        ElapsedDays = 0;
-    }
-
     public Mission(MissionData data, MissionSaveData saved, NPCRuntime npc)
     {
         Data = data;
@@ -495,9 +493,9 @@ public class Mission
         };
     }
 
-    public bool CancelAwaitingMapReward()
+    public bool CancelAwaitingReward()
     {
-        if (State != MissionState.AwaitingReward || MapContext == null) return false;
+        if (State != MissionState.AwaitingReward) return false;
         State = MissionState.Failed;
         CurrentNode = null;
         return true;

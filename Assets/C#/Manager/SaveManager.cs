@@ -97,13 +97,26 @@ public class SaveManager : MonoBehaviour
         {
             string json = JsonConvert.SerializeObject(CaptureState(), Formatting.Indented);
             string temporaryPath = SavePath + ".tmp";
+            string backupPath = SavePath + ".bak";
             File.WriteAllText(temporaryPath, json);
-            if (File.Exists(SavePath)) File.Delete(SavePath);
+            if (File.Exists(backupPath)) File.Delete(backupPath);
+            if (File.Exists(SavePath)) File.Move(SavePath, backupPath);
             File.Move(temporaryPath, SavePath);
+            if (File.Exists(backupPath)) File.Delete(backupPath);
         }
         catch (Exception exception)
         {
             Debug.LogError($"保存失败: {exception.Message}");
+            // 正式档被替换失败时，尝试从备份恢复，避免丢失旧档。
+            try
+            {
+                if (!File.Exists(SavePath) && File.Exists(SavePath + ".bak"))
+                    File.Move(SavePath + ".bak", SavePath);
+            }
+            catch (Exception restoreException)
+            {
+                Debug.LogError($"恢复旧档失败: {restoreException.Message}");
+            }
         }
     }
 
@@ -178,7 +191,6 @@ public class SaveManager : MonoBehaviour
         state.sect.warehouseLevel = Mathf.Clamp(state.sect.warehouseLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
         state.sect.secretRealmLevel = Mathf.Clamp(state.sect.secretRealmLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
         state.sect.alchemyRoomLevel = Mathf.Clamp(state.sect.alchemyRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
-        state.sect.explorationHallLevel = Mathf.Clamp(state.sect.explorationHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
         state.sect.protectionArrayLevel = Mathf.Clamp(state.sect.protectionArrayLevel, 0, FacilityRules.MaxLevel);
         state.sect.inheritanceChamberLevel = Mathf.Clamp(state.sect.inheritanceChamberLevel, 0, FacilityRules.MaxLevel);
         state.sect.forgeRoomLevel = Mathf.Clamp(state.sect.forgeRoomLevel, 0, FacilityRules.MaxLevel);
@@ -225,14 +237,6 @@ public class SaveManager : MonoBehaviour
             .ToList();
         foreach (EventHistoryRecord item in state.eventHistory)
             item.participantIds = CleanParticipantIds(item.participantIds);
-        state.sect.explorationRegions = (state.sect.explorationRegions ?? new System.Collections.Generic.List<ExplorationRegionState>())
-            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.regionId))
-            .GroupBy(item => item.regionId)
-            .Select(group => new ExplorationRegionState
-            {
-                regionId = group.Key,
-                stage = Mathf.Clamp(group.Max(item => item.stage), 0, ExplorationRules.MaxStage)
-            }).ToList();
         state.dailyMissionCandidateIds = state.dailyMissionCandidateIds ?? new System.Collections.Generic.List<string>();
         state.eventInbox = (state.eventInbox ?? new System.Collections.Generic.List<EventInboxEntry>())
             .Where(item => item != null && !string.IsNullOrWhiteSpace(item.entryId) && !string.IsNullOrWhiteSpace(item.eventId))

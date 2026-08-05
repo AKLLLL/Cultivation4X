@@ -67,11 +67,10 @@ public class WorldMapContentEffectsTests
     }
 
     [Test]
-    public void CompletionEffects_AreAppliedOnceAndUnlockCaveUpgrade()
+    public void CompletionEffects_AreAppliedOnce()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
-        player.playerData.explorationHallLevel = 0;
         player.playerData.founding = new FoundingState
         {
             initialized = true, completed = false, stage = FoundingStage.Cave,
@@ -83,9 +82,7 @@ public class WorldMapContentEffectsTests
         MapSiteData village = Developed(MapSiteType.Village, 5);
         MapSiteData ruin = new MapSiteData { siteId = "ruin", siteType = MapSiteType.Ruin,
             cellIndex = 6, siteState = MapSiteState.Investigated };
-        MapSiteData cave = Developed(MapSiteType.CaveResidence, 7);
-        cave.siteState = MapSiteState.Investigated;
-        WorldMapSession.Set(map, new WorldMapProgressState { mapSites = new List<MapSiteData> { village, ruin, cave } });
+        WorldMapSession.Set(map, new WorldMapProgressState { mapSites = new List<MapSiteData> { village, ruin } });
 
         WorldMapContentEffects.ApplySiteCompletion(village, MapActionType.EstablishVillageRelation, 1);
         WorldMapContentEffects.ApplySiteCompletion(village, MapActionType.EstablishVillageRelation, 1);
@@ -95,13 +92,6 @@ public class WorldMapContentEffectsTests
         WorldMapContentEffects.ApplySiteCompletion(ruin, MapActionType.InvestigateRuin, 1);
         WorldMapContentEffects.ApplySiteCompletion(ruin, MapActionType.InvestigateRuin, 1);
         Assert.AreEqual(5, player.playerData.founding.techniqueUnderstanding);
-        Assert.IsFalse(WorldMapContentEffects.IsExplorationHallUnlocked());
-        cave.siteState = MapSiteState.Developed;
-        WorldMapContentEffects.ApplySiteCompletion(cave, MapActionType.BuildCaveResidenceOutpost, 1);
-        WorldMapContentEffects.ApplySiteCompletion(cave, MapActionType.BuildCaveResidenceOutpost, 1);
-        Assert.AreEqual(1, player.GetFacilityLevel(FacilityType.ExplorationHall));
-        Assert.IsTrue(WorldMapContentEffects.IsExplorationHallUnlocked());
-        Assert.IsTrue(player.CanUpgradeFacility(FacilityType.ExplorationHall, out string reason), reason);
     }
 
     [Test]

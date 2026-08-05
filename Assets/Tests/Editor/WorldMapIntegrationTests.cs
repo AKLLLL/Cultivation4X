@@ -220,17 +220,6 @@ public class WorldMapIntegrationTests
     }
 
     [Test]
-    public void ExplorationResolver_RejectsOutOfRangePointWithoutThrowing()
-    {
-        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
-            { width = 64, height = 48, seed = 2024 });
-        WorldMapSession.Set(map);
-        WorldPointOfInterest point = map.pointsOfInterest.First(item => item.id == "mistwood");
-        point.cellIndex = map.cells.Length;
-        Assert.AreEqual(-1, ExplorationRules.GetMapCellIndex("mistwood"));
-    }
-
-    [Test]
     public void PresentationPolicy_IsDeterministicAndDoesNotCreateDemoFacts()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings

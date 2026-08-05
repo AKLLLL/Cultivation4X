@@ -480,6 +480,8 @@ public class WorldMapRegionTests
         {
             presenterObject = new GameObject("RegionPresenterWiringTest");
             WorldMapPresenter presenter = presenterObject.AddComponent<WorldMapPresenter>();
+            // EditMode 下 AddComponent 不会自动调用 Awake；显式调用以触发 HUD 与摄像机装配。
+            InvokePrivate(presenter, "Awake");
             Camera camera = GetPrivateField<Camera>(presenter, "mapCamera");
             if (priorCamera == null) createdCamera = camera;
             if (priorEventSystem == null) createdEventSystem = UnityEngine.Object.FindObjectOfType<EventSystem>();
@@ -548,9 +550,11 @@ public class WorldMapRegionTests
             for (int index = 0; index < firstInstances.Length; index++)
                 Assert.AreSame(firstInstances[index], detailPool[index], "标签刷新必须复用池对象");
 
+            // EditMode 测试中 DestroyImmediate 不会自动分发 OnDestroy；显式调用以验证 HUD 清理逻辑。
+            InvokePrivate(presenter, "OnDestroy");
+            Assert.IsTrue(ownedHud == null, "Presenter 销毁后不得遗留 WorldMapHUD");
             UnityEngine.Object.DestroyImmediate(presenterObject);
             presenterObject = null;
-            Assert.IsTrue(ownedHud == null, "Presenter 销毁后不得遗留 WorldMapHUD");
         }
         finally
         {

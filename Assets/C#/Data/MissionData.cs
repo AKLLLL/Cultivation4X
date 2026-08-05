@@ -25,8 +25,6 @@ public class MissionData
     public FoundingActionKind foundingAction;
     public string foundingTargetId;
     public int laborCost;
-    public ExplorationMissionKind explorationKind;
-    public string explorationRegionId;
     public ThreatMissionKind threatMissionKind;
     public bool generatedByMap;
 

@@ -57,8 +57,7 @@ public class MissionPanel : MonoBehaviour
         }
 
         Debug.Log($"已选择任务：{selectedMissionData.name}");
-        if (!selectedMissionData.isStoryAction && !selectedMissionData.isFacilityAction &&
-            selectedMissionData.explorationKind == ExplorationMissionKind.None)
+        if (!selectedMissionData.isStoryAction && !selectedMissionData.isFacilityAction)
         {
             Debug.Log(
                 $"任务门槛【{selectedMissionData.name}】：力量≥{selectedMissionData.requiredAttack}，" +
@@ -223,9 +222,7 @@ public class MissionPanel : MonoBehaviour
         string header = $"宗门事务　声望 {reputation}　开放至 {FacilityRules.MaxMissionRankForReputation(reputation)} 阶任务";
         statusText.text = string.IsNullOrEmpty(dynamicFeedback) ? header : $"{header}\n{dynamicFeedback}";
         dynamicFeedback = null;
-        // 探索保持由原探索面板负责，避免在本次“宗门事务”入口中提前暴露未来系统。
         List<MissionData> visible = MissionManager.Instance.GetVisibleMissions()
-            .Where(data => data.explorationKind == ExplorationMissionKind.None)
             .ToList();
         List<MissionData> pageMissions = visible.Where(data => GetMissionPage(data) == currentPage).ToList();
         if (currentPage == MissionPage.Repair)

@@ -56,17 +56,15 @@ public class FoundingSystemTests
         Assert.IsTrue(state.sect.founding.completed);
         Assert.AreEqual(FoundingStage.Completed, state.sect.founding.stage);
         Assert.AreEqual(2, state.sect.missionHallLevel);
-        Assert.AreEqual(1, state.sect.explorationHallLevel);
     }
 
     [Test]
     public void V4Save_PreservesZeroFacilitiesAndIncompleteFounding()
     {
         GameState state = JsonConvert.DeserializeObject<GameState>(
-            "{\"version\":4,\"sect\":{\"missionHallLevel\":0,\"trainingRoomLevel\":0,\"warehouseLevel\":0,\"secretRealmLevel\":0,\"alchemyRoomLevel\":0,\"explorationHallLevel\":0,\"founding\":{\"initialized\":true,\"completed\":false,\"stage\":\"Cave\",\"techniqueUnderstanding\":42}}}");
+            "{\"version\":4,\"sect\":{\"missionHallLevel\":0,\"trainingRoomLevel\":0,\"warehouseLevel\":0,\"secretRealmLevel\":0,\"alchemyRoomLevel\":0,\"founding\":{\"initialized\":true,\"completed\":false,\"stage\":\"Cave\",\"techniqueUnderstanding\":42}}}");
         SaveManager.MigrateState(state);
         Assert.AreEqual(0, state.sect.missionHallLevel);
-        Assert.AreEqual(0, state.sect.explorationHallLevel);
         Assert.IsFalse(state.sect.founding.completed);
         Assert.AreEqual(42, state.sect.founding.techniqueUnderstanding);
     }
@@ -123,7 +121,6 @@ public class FoundingSystemTests
         player.InitializeNewFoundingGame(91);
         Assert.AreEqual(100, player.playerData.gold);
         Assert.AreEqual(0, player.GetFacilityLevel(FacilityType.MissionHall));
-        Assert.AreEqual(0, player.GetFacilityLevel(FacilityType.ExplorationHall));
         Assert.AreEqual(10, player.playerData.founding.candidates.Count);
     }
 

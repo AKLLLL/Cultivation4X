@@ -309,7 +309,7 @@ public class WorldMapProgressTests
     }
 
     [Test]
-    public void OverlayStylesAndGameplayLegend_DistinguishAllNonzeroLevels()
+    public void OverlayStyles_DistinguishAllNonzeroLevels()
     {
         Assert.IsFalse(WorldMapInfluencePresentation.TryGetOverlayStyle(
             InfluenceLevel.None, out _, out _));
@@ -324,10 +324,6 @@ public class WorldMapProgressTests
         Assert.Less(influence.a, core.a);
         Assert.Less(outerWidth, influenceWidth);
         Assert.Less(influenceWidth, coreWidth);
-        StringAssert.Contains("外缘", WorldMapInfluencePresentation.LegendText);
-        StringAssert.Contains("影响", WorldMapInfluencePresentation.LegendText);
-        StringAssert.Contains("核心", WorldMapInfluencePresentation.LegendText);
-        StringAssert.Contains("\n", WorldMapInfluencePresentation.LegendText);
     }
 
     [Test]

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Cultivation4X.WorldMap;
 using Newtonsoft.Json;
 using NUnit.Framework;
 using UnityEngine;
@@ -168,6 +169,102 @@ public class FacilityLoopTests
         manager.RestoreMissions(new[] { new MissionSaveData { missionId = "missing", assignedCharacterId = npc.CharacterId } });
         Assert.AreEqual(NPCState.Idle, npc.State);
         Assert.IsNull(npc.CurrentMission);
+    }
+
+    [Test]
+    public void NodeRemoveItemFailure_KeepsWaitingAndRecordsReason()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        WarehouseManager.Instance = Add<WarehouseManager>("Warehouse");
+        NPCManager npcs = Add<NPCManager>("NPCs");
+        NPCManager.Instance = npcs;
+        MissionManager manager = Add<MissionManager>("Missions");
+        MissionManager.Instance = manager;
+        manager.LoadMissionsFromJson();
+        NPCRuntime npc = CreateRuntime(npcs, "node-actor", true);
+
+        const string missingItem = "node_cost_item";
+        MissionData data = new MissionData
+        {
+            id = "test_node_cost",
+            name = "节点成本测试",
+            missionType = MissionType.Sect,
+            needDays = 3,
+            itemRewards = new List<ItemReward>(),
+            nodes = new List<MissionNodeData>
+            {
+                new MissionNodeData
+                {
+                    triggerType = "Day", triggerValue = 1, title = "节点", description = "消耗物品",
+                    options = new List<MissionOptionData>
+                    {
+                        new MissionOptionData
+                        {
+                            text = "消耗", requirementType = "None",
+                            effects = new List<MissionEffectData>
+                            {
+                                new MissionEffectData { type = "RemoveItem", itemId = missingItem, count = 1 }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        ((Dictionary<string, MissionData>)typeof(MissionManager)
+            .GetField("missionTemplates", flags).GetValue(manager))[data.id] = data;
+
+        Mission mission = manager.CreateMission(data.id);
+        mission.StartMission(npc);
+        mission.PassOneDay(); // 触发节点 -> WaitingNode
+        Assert.AreEqual(MissionState.WaitingNode, mission.State);
+        Assert.IsFalse(npc.CanDispatch());
+
+        mission.SelectOption(0);
+        Assert.AreEqual(MissionState.WaitingNode, mission.State, "物品不足时任务必须保持等待，不能软锁");
+        Assert.IsNotNull(mission.NodeFailureReason);
+        StringAssert.Contains("材料不足", mission.NodeFailureReason);
+
+        WarehouseManager.Instance.AddItem(missingItem, 1);
+        mission.SelectOption(0);
+        Assert.AreEqual(MissionState.Active, mission.State);
+        Assert.IsNull(mission.NodeFailureReason);
+    }
+
+    [Test]
+    public void Kill_CancelsAllAwaitingRewardMissionsForCharacter()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        WarehouseManager.Instance = Add<WarehouseManager>("Warehouse");
+        NPCManager npcs = Add<NPCManager>("NPCs");
+        NPCManager.Instance = npcs;
+        MissionManager manager = Add<MissionManager>("Missions");
+        MissionManager.Instance = manager;
+        manager.LoadMissionsFromJson();
+        NPCRuntime target = CreateRuntime(npcs, "kill-actor", true);
+        CreateRuntime(npcs, "other-actor", true);
+
+        Mission ordinary = manager.CreateMission(manager.GetMissionPool()
+            .First(item => !item.isFacilityAction && !item.isStoryAction &&
+                           !item.generatedByMap && item.missionType != MissionType.WorldEvent).id);
+        ordinary.StartMission(target);
+        ordinary.WaitForReward();
+        manager.AddActiveMission(ordinary);
+
+        Mission map = manager.CreateMission(WorldMapContentRules.ExploreMissionId);
+        map.ConfigureMapMission(new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = 0 },
+            new Reward());
+        map.StartMission(target);
+        map.WaitForReward();
+        manager.AddActiveMission(map);
+
+        Assert.AreEqual(2, manager.GetActiveMissions().Count(item => item.State == MissionState.AwaitingReward));
+        npcs.Kill(target, "test");
+        Assert.IsFalse(target.Character.IsAlive);
+        Assert.IsEmpty(manager.GetActiveMissions());
     }
 
     private T Add<T>(string name) where T : Component

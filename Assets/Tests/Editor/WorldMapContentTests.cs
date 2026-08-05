@@ -284,21 +284,9 @@ public class WorldMapContentTests
     }
 
     [Test]
-    public void LegendText_CoversAllSiteAndEnvironmentLabels()
+    public void VersionFourteen_RoundTripsAndRejectsIllegalContentState()
     {
-        string legend = WorldMapInfluencePresentation.LegendText;
-        StringAssert.Contains("宗门驻地", legend);
-        StringAssert.Contains("潜在线索", legend);
-        foreach (string label in new[] { "村庄", "灵泉", "灵矿", "洞府", "兽巢", "遗迹" })
-            StringAssert.Contains(label, legend);
-        foreach (string label in new[] { "水汽", "矿脉", "兽迹", "残垣", "聚落迹象", "洞穴迹象" })
-            StringAssert.Contains(label, legend);
-    }
-
-    [Test]
-    public void VersionThirteen_RoundTripsAndRejectsIllegalContentState()
-    {
-        Assert.AreEqual(13, SaveDataVersion.Current);
+        Assert.AreEqual(14, SaveDataVersion.Current);
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5105 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
@@ -489,7 +477,7 @@ public class WorldMapContentTests
         MethodInfo deserialize = typeof(SaveManager).GetMethod("DeserializeCurrentVersion",
             BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(deserialize);
-        string current = JsonConvert.SerializeObject(new GameState { version = 13 });
+        string current = JsonConvert.SerializeObject(new GameState { version = SaveDataVersion.Current });
         Assert.DoesNotThrow(() => deserialize.Invoke(null, new object[] { current }));
         string legacy = JsonConvert.SerializeObject(new GameState { version = 12 });
         TargetInvocationException failure = Assert.Throws<TargetInvocationException>(() =>

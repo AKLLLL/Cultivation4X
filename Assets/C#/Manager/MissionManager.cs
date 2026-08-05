@@ -63,8 +63,6 @@ public class MissionManager : MonoBehaviour
     private readonly List<string> dailyMissionCandidateIds = new List<string>();
     private int missionCandidateDay = -1;
     private readonly List<MissionDayResult> dailyResults = new List<MissionDayResult>();
-    public string LastExplorationNotice { get; private set; }
-    private string lastExplorationNoticeRegionId;
 
 
     public MissionNodePanel missionNodePanel;
@@ -280,12 +278,9 @@ public class MissionManager : MonoBehaviour
             return;
         }
         mission.StartMission(npc);
-        if (mission.Data.explorationKind == ExplorationMissionKind.None)
-            TriggerMissionSource(mission.Data, npc, false);
+        TriggerMissionSource(mission.Data, npc, false);
 
-        activeMissions.Add(mission); 
-        if (mission.Data.explorationKind == ExplorationMissionKind.Ongoing)
-            RetryRegionDiscoveryEvent(mission.Data.explorationRegionId, npc);
+        activeMissions.Add(mission);
         Debug.Log(
         $"创建任务实例:{mission.Data.name}"
     );
@@ -358,17 +353,6 @@ public class MissionManager : MonoBehaviour
         if (mission.Data.threatMissionKind == ThreatMissionKind.Investigation)
         {
             EvaluateThreatInvestigation(mission);
-            return;
-        }
-        if (mission.Data.explorationKind == ExplorationMissionKind.Ongoing)
-        {
-            EvaluateOngoingExploration(mission);
-            return;
-        }
-        if (mission.Data.explorationKind == ExplorationMissionKind.Survey ||
-            mission.Data.explorationKind == ExplorationMissionKind.Progress)
-        {
-            EvaluateExploration(mission);
             return;
         }
         NPCRuntime npc =
@@ -553,68 +537,6 @@ public class MissionManager : MonoBehaviour
 
     }
 
-    private void EvaluateExploration(Mission mission)
-    {
-        NPCRuntime npc = mission.AssignedNPC;
-        bool succeeded = false;
-        if (mission.Data.explorationKind == ExplorationMissionKind.Survey)
-        {
-            succeeded = ExplorationRules.DiscoverNextRegion() != null;
-        }
-        else if (ExplorationRules.TryAdvance(mission.Data.explorationRegionId, out ExplorationRegionState state))
-        {
-            succeeded = true;
-            if (state.stage > 0) RetryRegionDiscoveryEvent(state.regionId, npc);
-        }
-
-        if (!succeeded)
-        {
-            Debug.LogWarning($"探索状态已变化，无法结算任务: {mission.Data.name}");
-            mission.FailMission(false);
-            return;
-        }
-
-        mission.CompleteMission();
-        RecordResult(mission, MissionState.Completed);
-        SaveManager.Instance?.AutoSave();
-    }
-
-    private void EvaluateOngoingExploration(Mission mission)
-    {
-        if (mission.State != MissionState.Active || mission.RemainingDays > 0) return;
-        if (RewardManager.Instance == null || !RewardManager.Instance.CanGiveReward(mission.Reward))
-        {
-            Debug.LogWarning($"仓库容量不足，持续探索暂停结算: {mission.Data.name}");
-            return;
-        }
-        RewardManager.Instance.GiveReward(mission.AssignedNPC, mission.Reward);
-        RetryRegionDiscoveryEvent(mission.Data.explorationRegionId, mission.AssignedNPC);
-        mission.RestartCycle();
-        SaveManager.Instance?.AutoSave();
-    }
-
-    private bool RetryRegionDiscoveryEvent(string regionId, NPCRuntime actor)
-    {
-        ExplorationRegionDefinition region = ExplorationRules.GetRegion(regionId);
-        if (region == null || string.IsNullOrEmpty(region.firstProgressEventId)) return true;
-        bool enqueued = EventManager.Instance != null && EventManager.Instance.TryEnqueueEventById(region.firstProgressEventId, actor);
-        if (enqueued)
-        {
-            if (lastExplorationNoticeRegionId == regionId)
-            {
-                LastExplorationNotice = null;
-                lastExplorationNoticeRegionId = null;
-            }
-        }
-        else
-        {
-            LastExplorationNotice = $"{region.name}的探索发现暂未进入事件收件箱，将在后续区域行动时重试。";
-            lastExplorationNoticeRegionId = regionId;
-            Debug.LogWarning($"探索事件入箱失败: {region.firstProgressEventId}; EventManager={(EventManager.Instance == null ? "null" : "ready")}; actor={actor?.CharacterId}");
-        }
-        return enqueued;
-    }
-
     public bool CanTriggerMission(string missionId, NPCRuntime npc, out string reason)
     {
         MissionData data = GetMissionData(missionId);
@@ -626,38 +548,8 @@ public class MissionManager : MonoBehaviour
         { reason = "已有弟子正在调查该威胁"; return false; }
         if (data.requiredFacilityLevel > PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) { reason = "设施等级不足"; return false; }
         if (!CanStartFoundingAction(data, npc, out reason)) return false;
-        if (data.explorationKind == ExplorationMissionKind.Survey && !ExplorationRules.HasUndiscoveredRegion())
-        { reason = "所有预设区域均已发现"; return false; }
-        if (data.explorationKind == ExplorationMissionKind.Progress)
-        {
-            ExplorationRegionState state = ExplorationRules.GetState(data.explorationRegionId);
-            if (state == null) { reason = "区域尚未发现"; return false; }
-            if (state.stage >= ExplorationRules.MaxStage) { reason = "区域探索已经完成"; return false; }
-        }
-        if (data.explorationKind == ExplorationMissionKind.Ongoing)
-        {
-            ExplorationRegionState state = ExplorationRules.GetState(data.explorationRegionId);
-            if (state == null || state.stage < ExplorationRules.MaxStage) { reason = "尚未发现区域的特殊存在"; return false; }
-        }
         Func<Mission, bool> running = item => item.State == MissionState.Active || item.State == MissionState.WaitingNode;
-        if (data.explorationKind == ExplorationMissionKind.Survey)
-        {
-            if (activeMissions.Any(item => running(item) && item.Data.explorationKind == ExplorationMissionKind.Survey))
-            { reason = "已有未知区域勘察正在进行"; return false; }
-        }
-        else if (data.explorationKind == ExplorationMissionKind.Progress)
-        {
-            if (activeMissions.Any(item => running(item) && item.Data.explorationKind == ExplorationMissionKind.Progress &&
-                item.Data.explorationRegionId == data.explorationRegionId))
-            { reason = "该区域已有弟子正在探索"; return false; }
-        }
-        else if (data.explorationKind == ExplorationMissionKind.Ongoing)
-        {
-            if (activeMissions.Any(item => running(item) && item.Data.explorationKind == ExplorationMissionKind.Ongoing &&
-                item.Data.explorationRegionId == data.explorationRegionId))
-            { reason = "该区域已有弟子驻守"; return false; }
-        }
-        else if (data.isFacilityAction)
+        if (data.isFacilityAction)
         {
             if (activeMissions.Any(item => running(item) && item.Data.isFacilityAction && item.Data.requiredFacility == data.requiredFacility))
             { reason = "该设施正在使用"; return false; }
@@ -840,17 +732,6 @@ public class MissionManager : MonoBehaviour
         return activeMissions.AsReadOnly();
     }
 
-    public bool TryRecallExplorationMission(string regionId, out string reason)
-    {
-        Mission mission = activeMissions.FirstOrDefault(item => item.Data.explorationKind == ExplorationMissionKind.Ongoing &&
-            item.Data.explorationRegionId == regionId && item.State == MissionState.Active);
-        if (mission == null) { reason = "该区域没有驻守弟子"; return false; }
-        mission.CompleteMission();
-        reason = null;
-        SaveManager.Instance?.AutoSave();
-        return true;
-    }
-
     public bool TryClaimReward(Mission mission, out string reason)
     {
         if (mission == null || mission.State != MissionState.AwaitingReward) { reason = "任务没有待领取奖励"; return false; }
@@ -889,14 +770,14 @@ public class MissionManager : MonoBehaviour
         return true;
     }
 
-    public int CancelAwaitingMapMissionsForCharacter(string characterId)
+    public int CancelAwaitingMissionsForCharacter(string characterId)
     {
         if (string.IsNullOrWhiteSpace(characterId)) return 0;
         List<Mission> cancelled = activeMissions.Where(mission => mission?.AssignedNPC?.CharacterId == characterId &&
-            mission.State == MissionState.AwaitingReward && mission.MapContext != null).ToList();
+            mission.State == MissionState.AwaitingReward).ToList();
         foreach (Mission mission in cancelled)
         {
-            if (!mission.CancelAwaitingMapReward()) continue;
+            if (!mission.CancelAwaitingReward()) continue;
             RecordResult(mission, MissionState.Failed);
             RemoveMission(mission);
         }
@@ -1061,7 +942,7 @@ public class MissionManager : MonoBehaviour
 
         foreach (Mission mission in missions)
         {
-            if (mission.Data.isFacilityAction && mission.Data.explorationKind == ExplorationMissionKind.None && mission.State == MissionState.Active)
+            if (mission.Data.isFacilityAction && mission.State == MissionState.Active)
             {
                 if (mission.Data.requiredFacility == FacilityType.SecretRealm)
                     EventManager.Instance?.TryTriggerSource(EventSource.SecretRealm, mission.AssignedNPC);
@@ -1082,7 +963,7 @@ public class MissionManager : MonoBehaviour
     {
         dailyMissionCandidateIds.Clear();
         dailyMissionCandidateIds.AddRange(missionTemplates.Values
-            .Where(data => !data.isStoryAction && !data.isFacilityAction && data.explorationKind == ExplorationMissionKind.None && IsMissionVisible(data))
+            .Where(data => !data.isStoryAction && !data.isFacilityAction && IsMissionVisible(data))
             .OrderBy(data => data.id)
             .Select(data => data.id));
         missionCandidateDay = day;
@@ -1107,7 +988,6 @@ public class MissionManager : MonoBehaviour
             ActiveThreatState threat = ExternalThreatRules.GetState();
             return threat != null && threat.status == ExternalThreatStatus.Active && threat.intelligence < 100;
         }
-        if (data.explorationKind != ExplorationMissionKind.None) return true;
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
         if (data.isStoryAction)
         {

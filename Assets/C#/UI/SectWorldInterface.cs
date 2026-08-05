@@ -136,7 +136,6 @@ public sealed class SectWorldInterface : MonoBehaviour
         Clear(taskPanel);
         RuntimeUIFactory.Text(taskPanel, "任务堂／执事堂", 30, 48);
         AddEntry(taskPanel, "宗门任务", OpenMissionPanel);
-        AddEntry(taskPanel, "探索派遣", () => FindRuntime<ExplorationPanel>()?.OpenFromSectLayout());
         AddEntry(taskPanel, "外部威胁", () => FindRuntime<ExternalThreatPanel>()?.OpenFromSectLayout());
         AddCloseButton(taskPanel);
         OpenManaged(taskPanel);

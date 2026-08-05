@@ -248,7 +248,7 @@ public class NPCManager : MonoBehaviour
 
         npc.Character.health = HealthState.Dead;
         if (currentMission != null) currentMission.FailMission(false);
-        MissionManager.Instance?.CancelAwaitingMapMissionsForCharacter(npc.CharacterId);
+        MissionManager.Instance?.CancelAwaitingMissionsForCharacter(npc.CharacterId);
         npc.Character.activityState = NPCState.Idle;
         npc.State = NPCState.Idle;
         npc.CurrentMission = null;

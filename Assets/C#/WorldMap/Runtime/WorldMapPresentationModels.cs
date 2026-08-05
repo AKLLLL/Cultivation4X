@@ -19,12 +19,6 @@ namespace Cultivation4X.WorldMap
 
     public static class WorldMapInfluencePresentation
     {
-        public const string LegendText =
-            "地图表现：填充=地形色差；边界=海岸/地貌分界；纹理符号=低密度地形概览\n" +
-            "影响力：外缘（冷色细边）　影响（蓝色）　核心（金色）；影响范围无需探索即可显示\n" +
-            "地点图标顺序：宗门驻地/潜在线索/村庄/灵泉/灵矿/洞府/兽巢/遗迹（潜在线索为菱形线索环）\n" +
-            "环境暗示：水汽/矿脉/兽迹/残垣/聚落迹象/洞穴迹象（仅已知格）";
-
         public static bool TryGetOverlayStyle(InfluenceLevel level, out Color color, out float width)
         {
             switch (level)
