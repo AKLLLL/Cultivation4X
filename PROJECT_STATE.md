@@ -1,89 +1,84 @@
-# Cultivation4X 项目当前状态（2026-08-04）
+# Cultivation4X 项目当前状态（2026-08-16）
 
-本文档为只读调查结论，记录截至 2026-08-04 的项目状态：分支、最新提交、未提交工作区改动、已执行的测试证据与未验证项。除本文件与 `PROJECT_ARCHITECTURE.md` 的同步外，本次未修改任何代码。
+本文档记录地图生成系统优化完成时的项目状态：分支、提交、测试证据、已冻结的技术方案与遗留问题。
 
 ## 1. 概览
 
-- 当前分支：`agent/influence-integration`（与 `origin/agent/influence-integration` 同步，均指向 `301360d`）。
-- 最近提交：`301360d 完善世界地图区域表现、认知与小块生成`（2026-08-04 01:19，+2425 行 / 21 文件）。
-- 工作区：测试修复、文档同步与 v14 设计改动（探索堂移除/枚举重排/图例删除/四项小修）均未提交；另存在 TMP 字体资产生成的噪音 diff（提交时需排除）。
-- 游戏主循环：确定性生成世界并选址 → 洞府立宗（候选/传承/命名） → 建设/修炼 → 探索、地图内容、事件与威胁 → 宗门发展。
+- 当前分支：`agent/influence-integration`，与 `origin/agent/influence-integration` 同步。
+- 本次工作产出两个提交：
+  - `e32a422` fix: 修复每日推进/存档/任务结算/威胁面板稳定性并补测试
+  - `a88f2fe` feat: 完成地图生成系统优化并冻结表现层技术方案
+- 地图生成系统优化已成功完成，下述技术方案**冻结**。后续除非提出专门方案并获得确认，不再随意调整六边形拓扑、山体形态、相机曲线、细节分层与森林表现策略。
+- 工作区：仅保留本文件更新，随后单独提交。
 
 ## 2. 版本控制状态
 
 远端：`https://github.com/AKLLLL/Cultivation4X.git`
 
 ```text
-301360d (HEAD -> agent/influence-integration, origin/agent/influence-integration) 完善世界地图区域表现、认知与小块生成
-3abe746 完善地图内容、语义图标与地点后果
-bfdaf49 Implement sect influence system
-65c6fa5 Add world map progress, sect founding confirmation and world UI
-1b1c86e Add world map generation and observability
-b49c419 (origin/codex/exploration-discovery-slice, codex/exploration-discovery-slice) Improve runtime UI pagination
-1a82987 Add Qingshi external threat slice
-c8dc24e feat: deepen sect vitality progression
+a88f2fe (HEAD -> agent/influence-integration, origin/agent/influence-integration) feat: 完成地图生成系统优化并冻结表现层技术方案
+e32a422 fix: 修复每日推进/存档/任务结算/威胁面板稳定性并补测试
+a1ba38c fix: 修复集成测试引用已重命名的地形详情格式化类
+0afa77a chore: 停止跟踪生成的 TMP 字体资产并配置 Git LFS 规则
+f91e317 feat: 世界地图地形渲染与美术呈现，引入 Polyart 资源并扩充测试
+50749a6 refactor: organize world map into MapSystem module and add TerrainTest scene
 ```
 
-其他本地分支：`main` 停在 `65c6fa5`（落后 7 个提交），`agent/world-map-migration` 停在 `65c6fa5`，`codex/exploration-discovery-slice` 停在 `b49c419`。
+`main` 分支为 `9345061 Merge branch 'agent/influence-integration' into main`。
 
-### 工作区改动清单
+## 3. 本轮已完成内容
 
-本次任务新增/修改（均未提交）：
+### 3.1 P0 稳定性修复（e32a422）
 
-- `Assets/Tests/Editor/UIPaginationTests.cs`：删除指向已移除方法 `ConfigureInfluenceLegendLayout` 的过时图例测试。
-- `Assets/Tests/Editor/WorldMapRegionTests.cs`：EditMode 下显式调用 `Awake` 与 `OnDestroy`，修复 presenter 生命周期测试。
-- `PROJECT_ARCHITECTURE.md`：同步存档 v13、地图内容/区域规则、187/187 测试基线、每日推进顺序与图例现状。
-- `PROJECT_STATE.md`：本文件重写为 2026-08-04 快照。
+- `TimeManager.EndDay()` 防重入；`SaveManager` 初始化失败保护。
+- 任务结算：节点 `RemoveItem` 失败保持 `WaitingNode` 并重新弹出面板；弟子死亡取消其全部 AwaitingReward 任务；最终日结算保护。
+- `ExternalThreatPanel` 按钮可见性修正。
+- 新增 `Assets/Tests/Editor/StabilityFixTests.cs` 覆盖上述场景。
 
-随后批准实施的 v14 设计改动（均未提交）：
+### 3.2 地图生成系统优化（a88f2fe，方案已冻结）
 
-- 移除探索堂：`FacilityType.ExplorationHall`、`PlayerData.explorationHallLevel` 及相关升级入口/解锁门删除；7 个探索任务 JSON 解除设施门槛；洞府地点开发不再授予设施后果。
-- `FoundingStage` 重排为流程顺序（SectConfirmation=2, Cave=3, Completed=4），`SaveDataVersion.Current` 13 → 14，旧档一律拒绝。
-- 删除未使用的 `WorldMapInfluencePresentation.LegendText` 常量及对应测试。
-- 四项小修：`TimeManager.EndDay()` 防重入；任务节点 `RemoveItem` 失败保持 WaitingNode 并重新弹出面板展示原因；弟子死亡取消其全部 AwaitingReward 任务；`Save()` 改为 .tmp/.bak 备份式原子写入。
-- 相应更新测试：删除/改写探索堂、图例、洞府后果相关用例，新增节点失败重选与死亡清理用例。
+**山体**
+- 山体采用台阶式“LEGO 山”：Mountain 格顶面平坦、侧壁垂直，宽厚台地可生成多层平台。
+- 前脸朝向相机（行号更小 / -Z 一侧），前宽后窄非对称；山体总高控制在约 2 个六角格。
+- 连续地表构建器对 Mountain 使用平顶 + 垂直侧墙，同级台地高度一致。
 
-用户测试反馈后补做的整体移除（均未提交）：
+**相机与细节分层**
+- Civ6 风格相机：归一化 zoom 0..1，高度/俯仰 AnimationCurve，固定 FOV，仅 WASD 平移，焦点平滑与地面跟随。
+- 三层细节：Near(<0.25) / Mid(0.25–0.60) / Far(≥0.60)。
+- Far = 高亮纯地形色块 + 区域名，不显示纹理、网格与模型；Mid = 正常地形；Near 预留给高细节。
 
-- 旧区域探索系统整体删除：`ExplorationPanel`（探索派遣面板）、`ExplorationModels.cs`（区域/探索规则）、7 个勘察/推进/驻守任务 JSON、`Configs/ExplorationRegions`、`PlayerData.explorationRegions` 状态及 `MissionManager` 中 Survey/Progress/Ongoing 全部分支；宗门简报 → 任务堂/执事堂的"探索派遣"入口删除。探索统一走世界地图探索行动。
-- 相应删除 `ExplorationSystemTests` 及 UIPaginationTests/WorldMapIntegrationTests 中的探索用例。
+**地表与标签**
+- 地表低饱和、哑光，带宏观色斑变化与大气透视，叠加轻量六边形网格；山体区域跳过网格。
+- 区域名固定在地面（`SetGroundFixed`），只在 Far 显示。
+- 曲率保持关闭（`nearRadialCurvature = 0`）。
 
-`git diff --check` 无格式错误。`Assets/Resources/SourceHanSansHWSC-Bold SDF.asset` 为 TMP 生成噪音，非逻辑改动，提交时需排除。
+**森林表现（本轮重点）**
+- 森林树模型簇只在 `WorldMapDecorationRenderer` 中程序化生成，不再依赖 Dreamscape 高模树预制体。
+- 单树为 16 三角面的低模“圆锥树冠 + 粗树干”，`Unlit/VertexColor` 平涂。
+- 每个森林格对应 1 个树簇，每簇 8～19 棵；簇按区域中心权重衰减（中心密、边缘疏），簇中心随机偏移 0.12～0.85 格半径，允许跨格分布。
+- 每棵缩放 `0.22～0.36`（世界高度约 0.24～0.40 格）。
+- 每个森林区域合并为**单一 Mesh + 单一 GameObject**，全图森林渲染对象从约 1443 降到约 104。
+- `MapTestManager.TerrainOnlyEvaluationMode` 仍为 true，纯地形验收只选择性加回森林树簇，其余模型/图标/区域覆盖保持关闭。
 
-## 3. 已提交切片时间线（1b1c86e → 301360d）
+**地图拓扑**
+- 保持 odd-r pointy-top 六边形；Flat-top 转换已回滚并推迟，除非有专门重构提案否则不再尝试。
 
-| 提交 | 存档版本 | 内容 |
-|---|---|---|
-| `1b1c86e` | v8 | 世界地图确定性生成、参数快照与可观测性 |
-| `65c6fa5` | v9 | 地图进度、立宗确认、宗门世界界面 |
-| `bfdaf49` | v10 | 宗门影响力来源、影响缓存与权限查询 |
-| `3abe746` | v12 | 地图内容地点/行动/后果、语义图标，生成版本升至 4 |
-| `301360d` | v13 | 区域规则与快照校验、区域表现/认知/小块 |
-| 工作区（未提交） | v14 | 移除探索堂与旧区域探索系统、FoundingStage 重排、图例常量删除、四项小修 |
-
-存档版本号从 v10 直接跳到 v12，未使用 v11 号段。
-
-## 4. 测试与验证现状
+## 4. 测试与验证
 
 | 项目 | 状态 |
 |---|---|
-| 2026-08-04 22:04 全量 EditMode | **173/173 通过**（`Logs/exploration-removal-results.xml`，failed=0 / skipped=0，73.4s） |
-| 本次验证过程 | v14 首轮 185/187（新测试 NRE、版本门字面量）修正后 187/187；探索系统移除后 173/173 |
-| 文档基线 | `PROJECT_ARCHITECTURE.md` 已同步至 v14 与 187/187 |
-| 配置/场景/包 | 无改动；66 个 JSON 配置全部可解析 |
-| diff 清洁度 | `git diff --check` 通过；唯一无关改动为 TMP 字体资产 |
+| EditMode 全量 | **350/350 通过**（`Logs/forest-region-merged-results.xml`，failed=0 / skipped=0） |
+| 场景批处理渲染 | TerrainTest 生成 + 渲染成功（`Logs/forest-region-merged-preview.log`） |
+| diff 清洁度 | `git diff --check` 通过，无 TMP/Logs 噪音 |
+| 配置/场景/包 | 本轮未修改存档结构、场景、Prefab GUID 或 Resources 配置 |
 
-批处理经验：带 `-quit` 的 batchmode 在本机偶发在测试启动前退出（日志仅出现 “Batchmode quit successfully invoked”）；本次改用省略 `-quit` 的形态，多次运行均正常产出报告。若复现，优先去掉 `-quit` 重试。
+## 5. 已知问题与未验证项
 
-## 5. 未验证项（残余风险）
+1. **生物群系疑似问题（暂不处理）**：当前生成结果中森林格明显集中出现在海边/湖边，疑为温度/湿度/淡水距离权重使然。用户确认本轮不修，留作下一轮独立排查。
+2. 手动视觉验收未做：打开 TerrainTest 确认森林中心密边缘疏、树簇跨格、树干可见、远景隐藏；确认帧率改善。
+3. 玩法闭环手测（选址 → 立宗 → 世界地图 → 探索 → 事件/威胁）仍按 PROJECT_ARCHITECTURE.md 的既有清单执行。
 
-1. 手动玩法验收未做：世界选址 → 命名立宗 → 世界地图认知/影响/地点 → 探索 → 外部威胁 → 地图内容行动闭环，以及 v13 保存后重启恢复。
-2. 地图候选地点仅在“探索结算为优秀”时有概率被发现（灵泉必发现，其余 65%）；失败后只能升级为 `Hinted` 提示而无法交互，且已探索格不能重复探索。探索堂与旧区域探索系统移除后不再软锁任何子系统，但地图内容系统仍可能“看得见摸不着”，是否加再发现路径需产品决策。
-3. `LegacyWorldUiGate` 依赖场景对象名硬编码，场景改名会失效。
-4. 运行时自动创建的 UI（`SectWorldInterface`、`WorldMapPresenter`、各面板）的层级与点击穿透需手测确认。
+## 6. 下一步建议
 
-## 6. 建议的下一步
-
-1. 提交测试修复、文档同步与 v14 设计改动（提交时排除 TMP 字体资产与 Logs）。
-2. 手动跑“新档 → 选址 → 立宗 → 世界地图玩法”闭环，重点验证探索任务无需设施即可派遣、洞府地点开发、节点失败重选、v14 保存/读档。
-3. 产品确认：`Hinted` 地点是否需要再发现路径。
+1. 单独排查生物群系分类中“森林贴水”的问题：检查 `WorldMapBiomeRules`/温度-湿度-淡水距离权重，以及区域归并时对海岸/湖岸格的吸收策略。
+2. 地图表现层冻结期内，只在 TerrainTest 做数值调参（树缩放、簇密度、中心衰减权重），不引入新渲染架构。
