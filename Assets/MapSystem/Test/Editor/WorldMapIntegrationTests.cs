@@ -227,7 +227,7 @@ public class WorldMapIntegrationTests
                 .Any(neighbor => cells.Any(other => other.index == neighbor))),
                 "台地集群内的每个格子都必须与同组另一格相邻");
         }
-        string terraceLabel = WorldMapPresentationModels.Format(map, terraces[0].index,
+        string terraceLabel = WorldMapCellDetailsFormatter.Format(map, terraces[0].index,
             WorldMapViewMode.Landform, true, Array.Empty<WorldMapPresentationMarker>());
         StringAssert.Contains("山地台地", terraceLabel,
             "可建山地必须在选址信息中显示明确台地语义，不能只显示普通山地");
