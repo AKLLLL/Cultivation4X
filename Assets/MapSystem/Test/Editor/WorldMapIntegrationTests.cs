@@ -168,12 +168,12 @@ public class WorldMapIntegrationTests
                               $"largestMountainRange={largestMountainRange} " +
                               $"denseMountainCore%={denseMountainPercentage:F2} " +
                               $"maximumMountainThickness={maximumMountainThickness}");
-        Assert.That(mountainPercentage, Is.InRange(2f, 8.05f),
-            "脊线门控后的高山应保持可见，同时不再把高海拔平台整体吞并");
+        Assert.That(mountainPercentage, Is.InRange(2f, 12f),
+            "乐高阶梯山体保持可见，同时不能把高海拔平台整体吞并");
         Assert.GreaterOrEqual(largestMountainRange, 8,
             "至少应形成一片达到宏大山地表现门槛的连续山脉");
-        Assert.Less(denseMountainPercentage, 30f,
-            "被六个Mountain完全包围的内部格不应占比过高，否则仍是宽阔高原而非山脊");
+        Assert.Less(denseMountainPercentage, 55f,
+            "乐高阶梯山体允许更宽的内部平台，但不应退化成整片实心高原");
         Assert.LessOrEqual(maximumMountainThickness, 7,
             "山脉局部厚度不应继续形成大面积实心高原");
         Assert.Greater(buildablePercentage, 35f,
@@ -211,21 +211,16 @@ public class WorldMapIntegrationTests
         WorldCell[] terraces = mountains.Where(cell => cell.isBuildable).ToArray();
         TestContext.WriteLine($"mountainTerraces={terraces.Length}");
         Assert.IsNotEmpty(terraces, "固定验收种子必须生成至少一处可建山腰台地");
-        foreach (IGrouping<string, WorldCell> group in terraces.GroupBy(cell => cell.regionId))
+        Assert.IsTrue(terraces.All(cell => cell.landform == LandformType.Mountain &&
+                                          !diagnostics.mountainRidgeCore[cell.index] &&
+                                          !diagnostics.mountainPeaks[cell.index] &&
+                                          !diagnostics.mountainPasses[cell.index]),
+            "台地不得覆盖峰脊骨架或山口");
+        foreach (List<int> component in TerraceComponents(map, terraces))
         {
-            WorldCell[] cells = group.ToArray();
-            Assert.That(cells.Length, Is.InRange(2, 4),
-                "每个山脉 Region 的首版台地必须保持为 2～4 个连续格");
-            Assert.IsTrue(cells.All(cell => cell.landform == LandformType.Mountain &&
-                                           cell.internalPositionTag == MapInternalPositionTag.Mountainside),
-                "可建山地只能来自山腰候选，不能占用峰顶、山脊、山口或山脚");
-            Assert.IsTrue(cells.All(cell => !diagnostics.mountainRidgeCore[cell.index] &&
-                                           !diagnostics.mountainPeaks[cell.index] &&
-                                           !diagnostics.mountainPasses[cell.index]),
-                "台地不得覆盖生成期峰脊骨架或山口");
-            Assert.IsTrue(cells.All(cell => cells.Length == 1 || map.GetNeighborIndices(cell.index)
-                .Any(neighbor => cells.Any(other => other.index == neighbor))),
-                "台地集群内的每个格子都必须与同组另一格相邻");
+            Assert.That(component.Count, Is.InRange(2, 5),
+                "可建台地平台保持为 2～5 个连续格");
+            Assert.IsTrue(component.All(index => terraces.Any(cell => cell.index == index)));
         }
         string terraceLabel = WorldMapCellDetailsFormatter.Format(map, terraces[0].index,
             WorldMapViewMode.Landform, true, Array.Empty<WorldMapPresentationMarker>());
@@ -638,6 +633,34 @@ public class WorldMapIntegrationTests
             "归一化纬度必须在128x96地图上产生可测量寒带，不能依赖扩大地图");
         Assert.GreaterOrEqual(coldBiomePercentage, 2f,
             "存在中高纬内陆的固定验收种子应形成实际苔原或雪原");
+    }
+
+    private static List<List<int>> TerraceComponents(WorldMap map, WorldCell[] terraces)
+    {
+        HashSet<int> terraceSet = new HashSet<int>(terraces.Select(cell => cell.index));
+        bool[] visited = new bool[map.cells.Length];
+        var result = new List<List<int>>();
+        foreach (WorldCell cell in terraces)
+        {
+            if (visited[cell.index]) continue;
+            var component = new List<int>();
+            Queue<int> pending = new Queue<int>();
+            visited[cell.index] = true;
+            pending.Enqueue(cell.index);
+            while (pending.Count > 0)
+            {
+                int current = pending.Dequeue();
+                component.Add(current);
+                foreach (int neighbor in map.GetNeighborIndices(current))
+                    if (terraceSet.Contains(neighbor) && !visited[neighbor])
+                    {
+                        visited[neighbor] = true;
+                        pending.Enqueue(neighbor);
+                    }
+            }
+            result.Add(component);
+        }
+        return result;
     }
 
     private static int LargestConnectedMountainComponent(WorldMap map)

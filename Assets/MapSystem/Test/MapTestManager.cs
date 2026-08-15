@@ -28,18 +28,18 @@ public sealed class MapTestManager : MonoBehaviour
     private int selectedCellIndex = -1;
     private bool selectionPointerDown;
     private Vector3 selectionPointerStart;
-    private const float DefaultDebugCurvature = 0.0035f;
+    private const float DefaultDebugCurvature = 0f;
     private const float DefaultDebugNearFieldOfView = 45f;
     private const float DefaultTextureStrength = 0.82f;
     private const float DefaultTextureContrast = 1.55f;
     private const float DefaultTextureTiling = 0.46f;
     private const float DefaultTerrainReliefScale = 1f;
-    // Current milestone validates the generated height field itself. Art prefabs, map icons,
-    // region overlays and labels remain referenced by the scene but are deliberately not rendered.
+    // 当前里程碑验证生成的高度场。纯地形模式只选择性加回森林树模型簇，
+    // 其余美术模型、地图图标与区域覆盖仍保持关闭，避免遮挡地形问题。
     private const bool TerrainOnlyEvaluationMode = true;
     internal static bool TerrainOnlyEvaluationEnabled => TerrainOnlyEvaluationMode;
     private static readonly Rect DebugPanelRect = new Rect(10f, 10f, 720f, 635f);
-    private string curvatureInput = "0.0035";
+    private string curvatureInput = "0";
     private string fieldOfViewInput = "45";
     private string textureStrengthInput = "0.82";
     private string textureContrastInput = "1.55";
@@ -81,7 +81,7 @@ public sealed class MapTestManager : MonoBehaviour
         GUI.skin.textField.fontSize = 16;
         GUILayout.BeginArea(DebugPanelRect, GUI.skin.box);
         GUILayout.Label($"按 {regenerateKey} 重新随机生成地图 · 当前种子 {seed}");
-        if (TerrainOnlyEvaluationMode) GUILayout.Label("纯地形验收：模型、标识与区域覆盖已暂停");
+        if (TerrainOnlyEvaluationMode) GUILayout.Label("纯地形验收：仅保留基础地表、区域名与森林树簇");
         GUILayout.Label($"按 {politicalMapKey} 切换政治地图模式 · 当前 {(politicalMapEnabled ? "开启" : "关闭")}");
         DrawClimateDebugControls();
         DrawTextureControls();
@@ -140,7 +140,12 @@ public sealed class MapTestManager : MonoBehaviour
         if (TerrainOnlyEvaluationMode)
         {
             politicalMapEnabled = false;
-            ClearOptionalPresentationLayers();
+            // 森林树簇是纯地形模式的唯一保留模型，政治地图切换不得清空它；
+            // 其余模型未生成，只需清理覆盖层与图标。
+            if (regionOverlayRenderer != null) regionOverlayRenderer.Clear();
+            if (mapIconRenderer != null) mapIconRenderer.Clear();
+            // 区域名属于远景选址层，TerrainOnly 下仍保留。
+            if (regionNameRenderer != null) regionNameRenderer.SetPoliticalMapEnabled(true);
             return;
         }
         if (regionOverlayRenderer != null)
@@ -280,12 +285,20 @@ public sealed class MapTestManager : MonoBehaviour
             hexGridOverlayRenderer.SetGridVisible(visible);
         }
         int focusCellIndex = SelectStrategicFocusCell(map);
-        if (!TerrainOnlyEvaluationMode)
+        if (TerrainOnlyEvaluationMode)
         {
-            if (decorationRenderer != null) decorationRenderer.Render(map, focusCellIndex);
+            if (decorationRenderer != null) decorationRenderer.RenderForestTreeClusters(map);
+        }
+        else if (decorationRenderer != null)
+        {
+            decorationRenderer.Render(map, focusCellIndex);
             if (regionOverlayRenderer != null) regionOverlayRenderer.Render(map);
             if (mapIconRenderer != null) mapIconRenderer.Render(map, WorldMapSession.Progress);
             if (regionNameRenderer != null) regionNameRenderer.Render(map);
+        }
+        else if (regionNameRenderer != null)
+        {
+            regionNameRenderer.Render(map);
         }
         ApplyPoliticalMapMode();
     }
@@ -318,11 +331,20 @@ public sealed class MapTestManager : MonoBehaviour
                 terrainRenderer.SetNearRadialCurvature(debugCurvature);
             if (hexGridOverlayRenderer != null)
                 hexGridOverlayRenderer.Render(map);
-            if (!TerrainOnlyEvaluationMode && decorationRenderer != null)
+            if (TerrainOnlyEvaluationMode)
+            {
+                if (decorationRenderer != null)
+                    decorationRenderer.RenderForestTreeClusters(map);
+            }
+            else if (decorationRenderer != null)
+            {
                 decorationRenderer.Render(map, focusCellIndex);
+            }
         }
         else
             Debug.LogWarning("MapTestManager 未关联 TerrainRenderer，跳过 3D 渲染");
+        if (regionNameRenderer != null)
+            regionNameRenderer.Render(map);
         if (!TerrainOnlyEvaluationMode)
         {
             AddDemoSites(map);
@@ -330,8 +352,6 @@ public sealed class MapTestManager : MonoBehaviour
                 regionOverlayRenderer.Render(map);
             if (mapIconRenderer != null)
                 mapIconRenderer.Render(map, WorldMapSession.Progress);
-            if (regionNameRenderer != null)
-                regionNameRenderer.Render(map);
         }
         ApplyPoliticalMapMode();
     }
@@ -364,6 +384,8 @@ public sealed class MapTestManager : MonoBehaviour
         int tundra = 0;
         int snowfield = 0;
         int alpine = 0;
+        int terraceGroups = 0;
+        int terraceCells = 0;
         foreach (WorldCell cell in map.cells)
         {
             if (cell == null || cell.landform == LandformType.DeepWater ||
@@ -395,11 +417,20 @@ public sealed class MapTestManager : MonoBehaviour
                     break;
             }
 
+            if (cell.landform == LandformType.Mountain && cell.isBuildable)
+            {
+                terraceCells++;
+            }
+
             if (cell.moisture < 0.22f) dryLand++;
             else if (cell.moisture >= 0.66f) wetLand++;
         }
 
         if (land == 0) return "地形统计：没有陆地";
+        terraceGroups = map.cells
+            .Where(cell => cell != null && cell.landform == LandformType.Mountain && cell.isBuildable)
+            .GroupBy(cell => cell.regionId)
+            .Count();
         int largestMountainRange = LargestMountainComponent(map);
         int denseMountainCore = CountDenseMountainCore(map);
         float denseMountainPercentage = mountains > 0 ? Percentage(denseMountainCore, mountains) : 0f;
@@ -423,6 +454,7 @@ public sealed class MapTestManager : MonoBehaviour
         }
         return $"地形统计（占陆地）：平原/海岸 {Percentage(flat, land):F1}% · " +
                $"丘陵 {Percentage(hills, land):F1}% · 高山 {Percentage(mountains, land):F1}% · " +
+               $"台地 {terraceGroups} 组 / {terraceCells} 格 · " +
                $"最大连续山脉 {largestMountainRange} 格 · 内核 {denseMountainPercentage:F1}% · " +
                $"最大厚度约 {maximumMountainThickness} 格\n" +
                $"沙地外观：沙漠 {Percentage(desert, land):F1}% · 海岸 {Percentage(coast, land):F1}% · " +
@@ -597,7 +629,7 @@ public sealed class MapTestManager : MonoBehaviour
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("关闭曲率", GUILayout.Width(120f)))
             ApplyDebugCurvature(0f, true);
-        if (GUILayout.Button("重置 0.0035", GUILayout.Width(140f)))
+        if (GUILayout.Button("重置 0", GUILayout.Width(140f)))
             ApplyDebugCurvature(DefaultDebugCurvature, false);
         GUILayout.Label("允许范围 0 ～ 0.02；建议每次调整 0.0005");
         GUILayout.EndHorizontal();
@@ -606,6 +638,23 @@ public sealed class MapTestManager : MonoBehaviour
     private void DrawPerspectiveControls()
     {
         if (terrainRenderer == null) return;
+        GUILayout.Label($"Civ Zoom {terrainRenderer.ZoomLevel:F2} (当前 {terrainRenderer.CurrentZoom:F2}) · " +
+                        $"层级 {terrainRenderer.CurrentDetailLevel} · " +
+                        $"高度 {terrainRenderer.CameraHeightForZoom(terrainRenderer.CurrentZoom):F1} · " +
+                        $"俯仰 {terrainRenderer.CameraPitchForZoom(terrainRenderer.CurrentZoom):F1}° · " +
+                        "移动：WASD");
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("-0.1", GUILayout.Width(64f)))
+            terrainRenderer.SetZoomLevel(terrainRenderer.ZoomLevel - 0.1f);
+        if (GUILayout.Button("+0.1", GUILayout.Width(64f)))
+            terrainRenderer.SetZoomLevel(terrainRenderer.ZoomLevel + 0.1f);
+        if (GUILayout.Button("最近 0", GUILayout.Width(80f)))
+            terrainRenderer.SetZoomLevel(0f);
+        if (GUILayout.Button("中景 0.35", GUILayout.Width(110f)))
+            terrainRenderer.SetZoomLevel(0.35f);
+        if (GUILayout.Button("最远 1", GUILayout.Width(80f)))
+            terrainRenderer.SetZoomLevel(1f);
+        GUILayout.EndHorizontal();
         GUILayout.Label($"近景 FOV {terrainRenderer.NearFieldOfViewDegrees:F1}° · " +
                         $"当前 FOV {terrainRenderer.ActiveFieldOfViewDegrees:F1}° · " +
                         $"横向可见 {terrainRenderer.ActiveVisibleHexesAcross:F2} 格 · " +
@@ -633,8 +682,8 @@ public sealed class MapTestManager : MonoBehaviour
             ApplyPerspectivePreset(40f, 0f);
         if (GUILayout.Button("强透视 50° / 平面", GUILayout.Width(170f)))
             ApplyPerspectivePreset(50f, 0f);
-        if (GUILayout.Button("混合 45° / 0.0035", GUILayout.Width(175f)))
-            ApplyPerspectivePreset(45f, 0.0035f);
+        if (GUILayout.Button("混合 45° / 0", GUILayout.Width(175f)))
+            ApplyPerspectivePreset(45f, 0f);
         GUILayout.EndHorizontal();
         GUILayout.Label("FOV 范围 20°～70°；改变 FOV 时自动保持当前横向覆盖格数");
         GUILayout.BeginHorizontal();

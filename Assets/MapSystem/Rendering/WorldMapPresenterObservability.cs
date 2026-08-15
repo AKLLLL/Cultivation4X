@@ -367,6 +367,42 @@ namespace Cultivation4X.WorldMap
             AddMeshObject("SectInfluence", buffer, Layer("Influence"), 5);
         }
 
+        private static bool IsSelectablePlateau(WorldCell cell)
+        {
+            return cell != null && cell.landform == LandformType.Mountain && cell.isBuildable;
+        }
+
+        private void BuildSiteSelectionOverlay()
+        {
+            FoundingState founding = PlayerManager.Instance?.playerData?.founding;
+            if (founding?.stage != FoundingStage.WorldSelection || map?.cells == null) return;
+            WorldMapGeometryBuffer buffer = new WorldMapGeometryBuffer();
+            Color fillColor = new Color(1f, 0.82f, 0.36f, 0.30f);
+            Color outlineColor = new Color(1f, 0.88f, 0.50f, 0.95f);
+            foreach (WorldCell cell in map.cells)
+            {
+                if (!IsSelectablePlateau(cell) || !CanShowGameplayCell(cell.index)) continue;
+                Vector2 center = Center(cell.coord);
+                for (int corner = 0; corner < 6; corner++)
+                {
+                    float a = Mathf.Deg2Rad * (corner * 60f - 30f);
+                    float b = Mathf.Deg2Rad * ((corner + 1) * 60f - 30f);
+                    buffer.AddTriangle(center,
+                        center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.90f,
+                        center + new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * 0.90f,
+                        fillColor);
+                }
+                for (int corner = 0; corner < 6; corner++)
+                {
+                    float a = Mathf.Deg2Rad * (corner * 60f - 30f);
+                    float b = Mathf.Deg2Rad * ((corner + 1) * 60f - 30f);
+                    buffer.AddLine(center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.88f,
+                        center + new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * 0.88f, 0.08f, outlineColor);
+                }
+            }
+            AddMeshObject("SiteSelectionPlateau", buffer, Layer("Selection"), 6);
+        }
+
         private static float InfluenceFillAlpha(InfluenceLevel level)
         {
             switch (level)
@@ -710,6 +746,8 @@ namespace Cultivation4X.WorldMap
 
         private static Color LandformFillColor(WorldCell cell)
         {
+            if (cell.landform == LandformType.Mountain && cell.isBuildable)
+                return Color.Lerp(LandformColor(LandformType.Mountain), new Color(0.62f, 0.55f, 0.40f), 0.55f);
             Color baseColor = LandformColor(cell.landform);
             Color biomeTint;
             switch (cell.biome)

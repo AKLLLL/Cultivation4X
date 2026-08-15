@@ -9,11 +9,11 @@ namespace Cultivation4X.WorldMap
     public sealed class HexGridOverlayRenderer : MonoBehaviour
     {
         [SerializeField] private TerrainRenderer terrainRenderer;
-        [SerializeField, Min(0.002f)] private float lineWidth = 0.018f;
+        [SerializeField, Min(0.002f)] private float lineWidth = 0.012f;
         [SerializeField, Range(1, 4)] private int edgeSubdivisions = 2;
-        [SerializeField] private Color nearColor = new Color(0.07f, 0.09f, 0.07f, 0.12f);
-        [SerializeField] private Color midColor = new Color(0.07f, 0.09f, 0.07f, 0.23f);
-        [SerializeField] private Color farColor = new Color(0.07f, 0.09f, 0.07f, 0.54f);
+        [SerializeField] private Color nearColor = new Color(0.07f, 0.09f, 0.07f, 0.05f);
+        [SerializeField] private Color midColor = new Color(0.07f, 0.09f, 0.07f, 0.08f);
+        [SerializeField] private Color farColor = new Color(0.07f, 0.09f, 0.07f, 0.16f);
 
         private GameObject gridObject;
         private Mesh ownedMesh;
@@ -41,11 +41,14 @@ namespace Cultivation4X.WorldMap
             EdgeCount = 0;
             foreach (WorldCell cell in map.cells)
             {
-                if (cell == null) continue;
+                if (cell == null || cell.landform == LandformType.Mountain) continue;
                 Vector2 center = TerrainMeshGenerator.HexCenter(cell.coord);
                 for (int edge = 0; edge < 6; edge++)
                 {
                     int neighbor = map.GetIndex(map.GetNeighbor(cell.coord, edge));
+                    if (neighbor >= 0 && neighbor < map.cells.Length &&
+                        map.cells[neighbor] != null && map.cells[neighbor].landform == LandformType.Mountain)
+                        continue;
                     if (neighbor >= 0 && neighbor < cell.index) continue;
                     WorldCell neighborCell = neighbor >= 0 && neighbor < map.cells.Length
                         ? map.cells[neighbor]
@@ -79,7 +82,7 @@ namespace Cultivation4X.WorldMap
         {
             activeTier = tier;
             if (gridObject == null || ownedMaterial == null) return;
-            gridObject.SetActive(userVisible);
+            gridObject.SetActive(userVisible && tier != WorldMap3DZoomTier.Far);
             ownedMaterial.color = tier == WorldMap3DZoomTier.Near ? nearColor :
                 tier == WorldMap3DZoomTier.Mid ? midColor : farColor;
             if (ownedMaterial.HasProperty("_WidthScale"))

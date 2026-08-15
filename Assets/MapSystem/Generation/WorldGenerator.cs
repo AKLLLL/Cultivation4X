@@ -125,6 +125,7 @@ namespace Cultivation4X.WorldMap
                     snapshot.spiritVeins);
                 SpiritCalculator.Calculate(map);
                 WorldMapRegionRules.Assign(map);
+                // 方案 A 验证阶段：恢复严格候选规则；表现层垂直尺度已放大 2 倍。
                 AssignMountainTerraces(map);
                 ExplorationRegionMapper.Assign(map);
                 if (map.cells.Any(cell => cell.isBuildable)) return map;
@@ -145,45 +146,85 @@ namespace Cultivation4X.WorldMap
 
             TerrainGenerationParameters terrain = map.generationSettings?.terrain ??
                                                   new TerrainGenerationParameters();
-            float targetHeight = terrain.hillUpperThreshold +
-                                 (0.86f - terrain.hillUpperThreshold) * 0.42f;
-            foreach (MapRegionData region in map.regions
-                         .Where(item => item != null && item.regionType == MapRegionType.MountainRange &&
-                                        item.cellIndices != null && item.cellIndices.Count >= 8)
-                         .OrderBy(item => item.regionId, StringComparer.Ordinal))
+            HashSet<int> mountainSet = new HashSet<int>(Enumerable.Range(0, map.cells.Length)
+                .Where(index => map.cells[index] != null &&
+                                map.cells[index].landform == LandformType.Mountain));
+            foreach (List<int> cluster in CollectTerraceComponents(map, mountainSet))
             {
-                HashSet<int> candidates = new HashSet<int>(region.cellIndices.Where(index =>
+                if (cluster.Count == 0) continue;
+                int area = cluster.Count;
+                float baseRadius = (float)Math.Sqrt(area);
+                float minimumHeight = cluster.Min(index => map.cells[index].height);
+                float maximumHeight = cluster.Max(index => map.cells[index].height);
+                float heightRange = maximumHeight - minimumHeight;
+                float compactness = baseRadius <= 0f ? 0f : heightRange / baseRadius;
+                int roll = (int)((uint)SeedDerivation.Derive(map.effectiveSeed,
+                    "mountain-type-cluster-" + cluster[0]) % 100u);
+
+                string mountainType;
+                int maximumTerraceGroups;
+                if (area < 25)
+                {
+                    mountainType = "小丘陵";
+                    maximumTerraceGroups = 0;
+                }
+                else if (compactness >= 0.050f)
+                {
+                    mountainType = "陡峭峰脊";
+                    maximumTerraceGroups = 0;
+                }
+                else if (compactness <= 0.035f && area >= 70 && roll < 70)
+                {
+                    mountainType = "宽厚台地";
+                    maximumTerraceGroups = 5;
+                }
+                else if (roll < 20)
+                {
+                    mountainType = "陡峭峰脊";
+                    maximumTerraceGroups = 0;
+                }
+                else
+                {
+                    mountainType = "普通";
+                    maximumTerraceGroups = 1;
+                }
+
+                if (maximumTerraceGroups <= 0) continue;
+
+                float averageHeight = cluster.Average(index => map.cells[index].height);
+                float averageRow = (float)cluster.Average(index => map.cells[index].coord.row);
+                HashSet<int> candidates = new HashSet<int>(cluster.Where(index =>
                 {
                     WorldCell cell = map.cells[index];
-                    return cell != null && cell.landform == LandformType.Mountain &&
-                           cell.internalPositionTag == MapInternalPositionTag.Mountainside &&
-                           !diagnostics.mountainRidgeCore[index] &&
+                    return !diagnostics.mountainRidgeCore[index] &&
                            !diagnostics.mountainPeaks[index] &&
                            !diagnostics.mountainPasses[index] &&
-                           diagnostics.terrainSlope[index] <= 0.16f &&
-                           cell.height > terrain.hillUpperThreshold && cell.height <= 0.88f;
+                           diagnostics.terrainSlope[index] <= 0.12f &&
+                           cell.coord.row <= averageRow + 1;
                 }));
                 if (candidates.Count < 2) continue;
 
+                MapRegionData clusterRegion = map.regions?.FirstOrDefault(item =>
+                    item != null && item.cellIndices != null && item.cellIndices.Contains(cluster[0]));
                 List<List<int>> components = CollectTerraceComponents(map, candidates);
-                List<int> component = components.Where(item => item.Count >= 2)
-                    .OrderBy(item => item.Average(index => diagnostics.terrainSlope[index]))
-                    .ThenBy(item => item.Min(index => StableTerraceOrder(map, region, index)))
-                    .FirstOrDefault();
-                if (component == null) continue;
-
-                int seed = component.OrderBy(index => diagnostics.terrainSlope[index])
-                    .ThenBy(index => Math.Abs(map.cells[index].height - targetHeight))
-                    .ThenBy(index => StableTerraceOrder(map, region, index))
-                    .First();
-                int desiredSize = 2 + (int)((uint)StableTerraceOrder(map, region, seed) % 3u);
-                List<int> terrace = GrowTerraceCluster(map, component, seed, desiredSize,
-                    diagnostics.terrainSlope, targetHeight, region);
-                if (terrace.Count < 2) continue;
-                foreach (int index in terrace) map.cells[index].isBuildable = true;
+                foreach (List<int> component in components.Where(item => item.Count >= 2)
+                    .OrderBy(item => item.Average(index => map.cells[index].coord.row))
+                    .ThenBy(item => item.Average(index => diagnostics.terrainSlope[index]))
+                    .ThenBy(item => item.Min(index => StableTerraceOrder(map, clusterRegion, index)))
+                    .Take(maximumTerraceGroups))
+                {
+                    int seed = component.OrderBy(index => diagnostics.terrainSlope[index])
+                        .ThenBy(index => Math.Abs(map.cells[index].height - averageHeight))
+                        .ThenBy(index => StableTerraceOrder(map, clusterRegion, index))
+                        .First();
+                    int desiredSize = 2 + (int)((uint)StableTerraceOrder(map, clusterRegion, seed) % 4u);
+                    List<int> terrace = GrowTerraceCluster(map, component, seed, desiredSize,
+                        diagnostics.terrainSlope, averageHeight, clusterRegion);
+                    if (terrace.Count < 2) continue;
+                    foreach (int index in terrace) map.cells[index].isBuildable = true;
+                }
             }
         }
-
         private static List<List<int>> CollectTerraceComponents(WorldMap map, HashSet<int> candidates)
         {
             var result = new List<List<int>>();
@@ -236,7 +277,7 @@ namespace Cultivation4X.WorldMap
 
         private static int StableTerraceOrder(WorldMap map, MapRegionData region, int index) =>
             SeedDerivation.Derive(map.effectiveSeed,
-                $"mountain-terrace-{region.regionId}-{index}");
+                $"mountain-terrace-{region?.regionId ?? "cluster"}-{index}");
 
         private static WorldMap CreateEmptyMap(MapGenerationSettings settings, int effectiveSeed)
         {
@@ -483,10 +524,19 @@ namespace Cultivation4X.WorldMap
                 foreach (int source in ridgeSources)
                 {
                     int distance = HexCoord.Distance(map.cells[index].coord, map.cells[source].coord);
-                    int radius = peakSet.Contains(source) ? 6 : 4;
+                    // 非对称山体：前坡(+Z，相机朝向)加宽、后坡收紧，用更多格子承担前坡高度。
+                    float zDelta = (map.cells[index].coord.row - map.cells[source].coord.row) * 1.5f;
+                    float zRatio = distance <= 0 ? 0f :
+                        Math.Max(-1f, Math.Min(1f, zDelta / (distance * 1.5f)));
+                    // 相机位于 -Z、看向 +Z：row 较小的一侧才是玩家看到的前坡。
+                    float frontness = -zRatio * 0.5f + 0.5f;
+                    int backRadius = peakSet.Contains(source) ? 4 : 3;
+                    int frontRadius = peakSet.Contains(source) ? 8 : 6;
+                    float radius = backRadius + (frontRadius - backRadius) * frontness;
                     if (distance > radius) continue;
-                    float t = 1f - distance / (float)radius;
-                    float falloff = (float)Math.Pow(t, 2.20f);
+                    float t = 1f - distance / radius;
+                    float exponent = 2.40f + (1.35f - 2.40f) * frontness;
+                    float falloff = (float)Math.Pow(t, exponent);
                     float candidateHeight = baseHeights[index] +
                                             (ridgeTarget[source] - baseHeights[index]) * falloff;
                     raised = Math.Max(raised, candidateHeight);
@@ -500,14 +550,31 @@ namespace Cultivation4X.WorldMap
                 map.cells[index].height = Math.Max(baseHeights[index],
                     Math.Min(map.cells[index].height, terrain.hillUpperThreshold - 0.012f));
             }
+            // 前坡方向的距离：只向 +Z 方向扩展，限制前坡最多 3 环。
+            int[] frontRidgeDistance = Enumerable.Repeat(int.MaxValue, count).ToArray();
+            Queue<int> frontQueue = new Queue<int>(ridgeSources);
+            foreach (int source in ridgeSources) frontRidgeDistance[source] = 0;
+            while (frontQueue.Count > 0)
+            {
+                int current = frontQueue.Dequeue();
+                foreach (int neighbor in map.GetNeighborIndices(current))
+                {
+                    if (map.cells[neighbor].coord.row > map.cells[current].coord.row) continue;
+                    if (frontRidgeDistance[neighbor] <= frontRidgeDistance[current] + 1) continue;
+                    frontRidgeDistance[neighbor] = frontRidgeDistance[current] + 1;
+                    frontQueue.Enqueue(neighbor);
+                }
+            }
             for (int index = 0; index < count; index++)
             {
                 if (result.valley[index]) continue;
                 bool touchesSpine = result.ridgeCore[index] ||
                                     map.GetNeighborIndices(index).Any(neighbor => result.ridgeCore[neighbor]);
-                result.mountain[index] = touchesSpine &&
+                bool withinFrontReach = frontRidgeDistance[index] <= 2;
+                result.mountain[index] = (touchesSpine || withinFrontReach) &&
                                          map.cells[index].height >= terrain.hillUpperThreshold;
             }
+            ApplySteppedMountainLayers(map, result, terrain);
             float[] slopes = new float[count];
             for (int index = 0; index < count; index++)
                 slopes[index] = map.GetNeighborIndices(index)
@@ -517,6 +584,40 @@ namespace Cultivation4X.WorldMap
             WorldGenerationDiagnosticsStore.RecordMountainField(map, result.ridgeCore, result.peak,
                 result.valley, result.ridgeStrength, result.influence, slopes);
             return result;
+        }
+
+        /// <summary>
+        /// 把每座连续山体从连续陡升改成 3～5 个高度层：
+        /// 层内保留约 22% 的原坡度（接近平台），层与层之间自然形成短崖。
+        /// 峰/脊/山口保持原始高度，保证轮廓仍在。
+        /// </summary>
+        private static void ApplySteppedMountainLayers(WorldMap map, MountainField mountainField,
+            TerrainGenerationParameters terrain)
+        {
+            if (map?.cells == null || mountainField?.mountain == null) return;
+            foreach (List<int> component in ConnectedComponents(map, mountainField.mountain))
+            {
+                if (component.Count < 8) continue;
+                float minimumHeight = component.Min(index => map.cells[index].height);
+                float maximumHeight = component.Max(index => map.cells[index].height);
+                float heightRange = maximumHeight - minimumHeight;
+                if (heightRange < 0.10f) continue;
+
+                int layerCount = component.Count >= 200 ? 5 :
+                    component.Count >= 80 ? 4 : 3;
+                float[] edges = new float[layerCount + 1];
+                for (int layer = 0; layer <= layerCount; layer++)
+                    edges[layer] = minimumHeight + heightRange * layer / layerCount;
+                foreach (int index in component)
+                {
+                    if (mountainField.peak[index] || mountainField.valley[index]) continue;
+                    float original = map.cells[index].height;
+                    int layer = (int)((original - minimumHeight) / Math.Max(0.0001f, heightRange) *
+                                      layerCount);
+                    layer = Math.Max(0, Math.Min(layerCount - 1, layer));
+                    map.cells[index].height = edges[layer];
+                }
+            }
         }
 
         private static List<List<int>> ConnectedComponents(WorldMap map, bool[] included)

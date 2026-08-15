@@ -32,7 +32,8 @@ public sealed class HexGridOverlayRendererTests
             renderer.SetGridVisible(true);
             Assert.IsTrue(filter.gameObject.activeSelf);
             renderer.ApplyTier(WorldMap3DZoomTier.Far);
-            Assert.IsTrue(filter.gameObject.activeSelf);
+            Assert.IsFalse(filter.gameObject.activeSelf,
+                "远景只显示地形色块，不显示六角格网格线");
             float farAlpha = renderer.ActiveColor.a;
             float farWidth = renderer.ActiveWidthScale;
             Assert.Less(nearAlpha, midAlpha, "近景操作边界应比中景更淡");

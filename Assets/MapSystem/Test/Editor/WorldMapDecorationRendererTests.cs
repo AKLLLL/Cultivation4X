@@ -138,16 +138,12 @@ public sealed class WorldMapDecorationRendererTests
     }
 
     [Test]
-    public void Forest_CombinesWholeRegionIntoOneRenderable()
+    public void Forest_MergesWholeRegionIntoLowPolyTreeClusters()
     {
         GameObject root = new GameObject("ForestDecorationRendererTest");
-        GameObject largeTree = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        GameObject birch = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         try
         {
             WorldMapDecorationRenderer renderer = root.AddComponent<WorldMapDecorationRenderer>();
-            Configure(renderer, largeTree);
-            SetField(renderer, "birchPrefab", birch);
             WorldMap map = BuildMap(9, 9, LandformType.Hill);
             foreach (WorldCell cell in map.cells) cell.biome = BiomeType.TemperateForest;
             AddRegion(map, "forest", MapRegionType.Forest,
@@ -156,29 +152,123 @@ public sealed class WorldMapDecorationRendererTests
             renderer.Render(map, 0);
 
             Transform structural = root.transform.Find("Structural Region Decorations");
-            Assert.That(structural.childCount, Is.Zero,
-                "不得再生成覆盖地表的 Region Forest Canopy 圆盘结构");
+            Assert.That(structural.childCount, Is.EqualTo(1),
+                "一个森林区域应只保留一个合并渲染对象");
             Transform detail = root.transform.Find("Near Region Details");
-            Assert.That(detail.childCount, Is.EqualTo(1),
-                "整片森林 Region 应保留一个合并树簇模型");
-            Transform forest = detail.GetChild(0);
+            Assert.That(detail.childCount, Is.Zero);
+            Transform forest = structural.GetChild(0);
+            MeshFilter filter = forest.GetComponent<MeshFilter>();
             MeshRenderer visual = forest.GetComponent<MeshRenderer>();
-            Assert.That(forest.name, Does.Contain("Forest forest Cells 81 Items 81"));
+            Assert.That(filter, Is.Not.Null);
+            Assert.That(filter.sharedMesh, Is.Not.Null);
             Assert.That(forest.childCount, Is.Zero);
-            Assert.That(forest.GetComponent<MeshFilter>()?.sharedMesh, Is.Not.Null);
-            Assert.That(forest.GetComponent<MeshFilter>().sharedMesh.bounds.size.x, Is.GreaterThan(8f));
-            Assert.That(forest.GetComponent<MeshFilter>().sharedMesh.bounds.size.z, Is.GreaterThan(8f));
+            Assert.That(visual.sharedMaterial, Is.Not.Null);
+            Assert.That(visual.sharedMaterial.shader.name, Is.EqualTo("Unlit/VertexColor"));
             Assert.That(forest.localScale.x, Is.LessThanOrEqualTo(1f));
             var block = new MaterialPropertyBlock();
             visual.GetPropertyBlock(block);
             Assert.That(block.isEmpty, Is.False);
             Assert.That(block.GetFloat("_WindIntensity"), Is.EqualTo(0f));
+
+            string[] nameParts = forest.name.Split(' ');
+            int clusterToken = Array.LastIndexOf(nameParts, "Clusters");
+            int treeToken = Array.IndexOf(nameParts, "Trees");
+            Assert.That(clusterToken, Is.GreaterThanOrEqualTo(0));
+            Assert.That(treeToken, Is.GreaterThan(clusterToken));
+            int clusters = int.Parse(nameParts[clusterToken + 1]);
+            int totalTrees = int.Parse(nameParts[treeToken + 1]);
+            Assert.That(clusters, Is.EqualTo(81), "81 格森林仍应生成 81 个树簇");
+            Assert.That(totalTrees, Is.InRange(81 * 8, 81 * 19));
+            Assert.That(filter.sharedMesh.vertexCount, Is.InRange(totalTrees * 20,
+                    totalTrees * 48 + 64),
+                "区域合并后总顶点数仍应保持每棵树低模量级");
+
+            Vector3[] vertices = filter.sharedMesh.vertices;
+            float maxRadius = 0f;
+            foreach (Vector3 vertex in vertices)
+                maxRadius = Mathf.Max(maxRadius,
+                    new Vector2(vertex.x, vertex.z).magnitude);
+            int innerVertices = 0;
+            int outerVertices = 0;
+            foreach (Vector3 vertex in vertices)
+            {
+                float radius = new Vector2(vertex.x, vertex.z).magnitude / maxRadius;
+                if (radius <= 0.55f) innerVertices++;
+                else if (radius >= 0.85f) outerVertices++;
+            }
+            float innerArea = 0.55f * 0.55f;
+            float outerArea = 1f - 0.85f * 0.85f;
+            Assert.That(innerVertices / innerArea,
+                Is.GreaterThan(outerVertices / outerArea),
+                "按单位面积比较，森林中心应比边缘更茂密");
         }
         finally
         {
-            UnityEngine.Object.DestroyImmediate(largeTree);
-            UnityEngine.Object.DestroyImmediate(birch);
             UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
+    public void RenderForestTreeClusters_BuildsOnlyForestRegions()
+    {
+        GameObject root = new GameObject("ForestOnlyDecorationRendererTest");
+        try
+        {
+            WorldMapDecorationRenderer renderer = root.AddComponent<WorldMapDecorationRenderer>();
+            WorldMap map = BuildMap(21, 7, LandformType.Hill);
+            foreach (WorldCell cell in map.cells)
+                cell.biome = BiomeType.TemperateForest;
+            AddRegion(map, "forest", MapRegionType.Forest,
+                map.cells.Where(cell => cell.coord.col < 8).Select(cell => cell.index));
+            AddRegion(map, "range", MapRegionType.MountainRange,
+                map.cells.Where(cell => cell.coord.col >= 13).Select(cell => cell.index));
+
+            renderer.RenderForestTreeClusters(map);
+
+            Transform structural = root.transform.Find("Structural Region Decorations");
+            Transform detail = root.transform.Find("Near Region Details");
+            Transform markers = root.transform.Find("Far Terrain Markers");
+            Assert.That(renderer.StructuralCount, Is.EqualTo(1),
+                "56 格森林应合并为一个区域渲染对象");
+            Assert.That(renderer.DetailCount, Is.Zero);
+            Assert.That(renderer.TerrainMarkerCount, Is.Zero);
+            Assert.That(structural.GetChild(0).name,
+                Does.Contain("Forest Clusters Region forest Clusters 56 Trees "));
+            Assert.That(structural.GetChild(0).name,
+                Does.Not.Contain("MountainRange"));
+            Assert.That(detail.childCount, Is.Zero);
+            Assert.That(markers.childCount, Is.Zero);
+            Assert.That(structural.gameObject.activeSelf, Is.True);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
+    public void ForestSimpleTree_ExposesThickTrunkUnderCanopy()
+    {
+        MethodInfo builder = typeof(WorldMapDecorationRenderer).GetMethod(
+            "BuildSimpleForestTreeMesh", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.That(builder, Is.Not.Null);
+        Mesh mesh = (Mesh)builder.Invoke(null, null);
+        try
+        {
+            Vector3[] vertices = mesh.vertices;
+            Assert.That(vertices.Any(vertex => vertex.y <= 0.01f &&
+                                               new Vector2(vertex.x, vertex.z).magnitude >= 0.15f),
+                Is.True, "树干底部必须保持粗壮，斜俯视时不能完全被树冠遮住");
+            Assert.That(vertices.Any(vertex => Mathf.Abs(vertex.y - 0.52f) < 0.001f &&
+                                               new Vector2(vertex.x, vertex.z).magnitude >= 0.34f),
+                Is.True, "树冠应从树干中上部开始展开，而不是贴地盖住树干");
+            Assert.That(vertices.Any(vertex => vertex.y >= 0.56f &&
+                                               new Vector2(vertex.x, vertex.z).magnitude <= 0.11f),
+                Is.True, "树干顶部应收进树冠内部，形成可见的树干与树冠交界");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(mesh);
         }
     }
 

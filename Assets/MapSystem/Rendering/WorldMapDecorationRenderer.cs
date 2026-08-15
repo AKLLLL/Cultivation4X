@@ -71,6 +71,8 @@ namespace Cultivation4X.WorldMap
         private Material[] paintedMountainMaterials;
         private Material regionTerrainMaterial;
         private Material modularCliffMaterial;
+        private Material simpleForestTreeMaterial;
+        private Mesh simpleForestTreeMesh;
         private readonly Dictionary<string, GameObject> modularCliffPrefabs =
             new Dictionary<string, GameObject>(StringComparer.Ordinal);
         private WorldMap map;
@@ -102,9 +104,44 @@ namespace Cultivation4X.WorldMap
             {
                 List<WorldCell> cells = RegionCells(region);
                 if (cells.Count == 0) continue;
+                if (region.regionType == MapRegionType.Forest)
+                {
+                    SpawnForestTreeClusters(region, cells);
+                    continue;
+                }
                 SpawnLandformStructure(region, cells);
                 SpawnRegionLayer(region, cells, true);
                 SpawnTerrainMarker(region, cells);
+            }
+
+            ApplyTier(terrainRenderer != null
+                ? terrainRenderer.ActiveZoomTier
+                : WorldMap3DZoomTier.Near);
+        }
+
+        /// <summary>
+        /// 表现层隔离模式下的选择性加回：只为 Forest Region 生成合并树模型簇。
+        /// 山体、谷地、岩石、草地、远标识等仍保持关闭，树簇作为 Region 级结构在
+        /// 中景与近景显示，进入远景纯色块模式时隐藏。
+        /// </summary>
+        public void RenderForestTreeClusters(WorldMap worldMap)
+        {
+            Clear();
+            map = worldMap;
+            if (map?.cells == null || map.cells.Length == 0) return;
+
+            EnsureRoots();
+            IEnumerable<MapRegionData> regions = map.regions ?? new List<MapRegionData>();
+            foreach (MapRegionData region in regions
+                         .Where(item => item != null &&
+                                        item.regionType == MapRegionType.Forest &&
+                                        item.cellIndices != null && item.cellIndices.Count > 0)
+                         .OrderBy(item => item.cellIndices.Min())
+                         .ThenBy(item => item.regionId, StringComparer.Ordinal))
+            {
+                List<WorldCell> cells = RegionCells(region);
+                if (cells.Count == 0) continue;
+                SpawnForestTreeClusters(region, cells);
             }
 
             ApplyTier(terrainRenderer != null
@@ -280,6 +317,106 @@ namespace Cultivation4X.WorldMap
             markerMaterial = new Material(shader) { name = "World Map Terrain Markers" };
         }
 
+        private Material EnsureSimpleForestTreeMaterial()
+        {
+            if (simpleForestTreeMaterial != null) return simpleForestTreeMaterial;
+            Shader shader = Shader.Find("Unlit/VertexColor");
+            if (shader == null) return null;
+            simpleForestTreeMaterial = new Material(shader)
+            {
+                name = "Forest Simple Tree",
+                color = Color.white
+            };
+            return simpleForestTreeMaterial;
+        }
+
+        private Mesh EnsureSimpleForestTreeMesh()
+        {
+            if (simpleForestTreeMesh != null) return simpleForestTreeMesh;
+            simpleForestTreeMesh = BuildSimpleForestTreeMesh();
+            return simpleForestTreeMesh;
+        }
+
+        /// <summary>
+        /// 低模战略树：8 面圆锥树冠 + 4 面锥形树干，顶点色区分树干与树冠，
+        /// 单个树约 16 个三角面。树高约 1.1 个六角格半径，实际再乘 0.22～0.36。
+        /// </summary>
+        private static Mesh BuildSimpleForestTreeMesh()
+        {
+            var vertices = new List<Vector3>();
+            var colors = new List<Color>();
+            var triangles = new List<int>();
+
+            AddTreeTrunk(vertices, colors, triangles);
+            AddTreeCanopy(vertices, colors, triangles);
+
+            var mesh = new Mesh { name = "Forest Simple Tree" };
+            mesh.SetVertices(vertices);
+            mesh.SetColors(colors);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void AddTreeTrunk(List<Vector3> vertices, List<Color> colors,
+            List<int> triangles)
+        {
+            const int segments = 4;
+            const float bottomY = 0f;
+            const float topY = 0.58f;
+            const float bottomRadius = 0.16f;
+            const float topRadius = 0.10f;
+            Color dark = new Color(0.38f, 0.23f, 0.11f);
+            Color light = new Color(0.48f, 0.30f, 0.15f);
+            for (int segment = 0; segment < segments; segment++)
+            {
+                float angleA = segment * Mathf.PI * 2f / segments;
+                float angleB = (segment + 1) * Mathf.PI * 2f / segments;
+                Vector3 bottomA = RingPoint(bottomRadius, bottomY, angleA);
+                Vector3 bottomB = RingPoint(bottomRadius, bottomY, angleB);
+                Vector3 topA = RingPoint(topRadius, topY, angleA);
+                Vector3 topB = RingPoint(topRadius, topY, angleB);
+                Color faceColor = (segment & 1) == 0 ? dark : light;
+                AddTriangle(vertices, colors, triangles, bottomA, bottomB, topB, faceColor);
+                AddTriangle(vertices, colors, triangles, bottomA, topB, topA, faceColor);
+            }
+        }
+
+        private static void AddTreeCanopy(List<Vector3> vertices, List<Color> colors,
+            List<int> triangles)
+        {
+            const int segments = 8;
+            const float baseY = 0.52f;
+            const float tipY = 1.10f;
+            const float baseRadius = 0.36f;
+            Vector3 tip = new Vector3(0f, tipY, 0f);
+            Color deep = new Color(0.10f, 0.26f, 0.09f);
+            Color bright = new Color(0.18f, 0.42f, 0.13f);
+            Color pale = new Color(0.24f, 0.46f, 0.16f);
+            for (int segment = 0; segment < segments; segment++)
+            {
+                float angleA = segment * Mathf.PI * 2f / segments;
+                float angleB = (segment + 1) * Mathf.PI * 2f / segments;
+                Vector3 baseA = RingPoint(baseRadius, baseY, angleA);
+                Vector3 baseB = RingPoint(baseRadius, baseY, angleB);
+                Color faceColor = segment % 3 == 0 ? pale :
+                    segment % 3 == 1 ? bright : deep;
+                AddTriangle(vertices, colors, triangles, baseA, baseB, tip, faceColor);
+            }
+        }
+
+        private static Vector3 RingPoint(float radius, float y, float angle) =>
+            new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
+
+        private static void AddTriangle(List<Vector3> vertices, List<Color> colors,
+            List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Color color)
+        {
+            int start = vertices.Count;
+            vertices.Add(a); vertices.Add(b); vertices.Add(c);
+            colors.Add(color); colors.Add(color); colors.Add(color);
+            triangles.Add(start); triangles.Add(start + 1); triangles.Add(start + 2);
+        }
+
         private void ApplyMarkerOpacity(float opacity)
         {
             bool visible = opacity > 0.001f;
@@ -418,6 +555,139 @@ namespace Cultivation4X.WorldMap
             };
             instances.Add(entry);
             Position(entry);
+        }
+
+        /// <summary>
+        /// 森林专用表现：按区域形状生成树簇布局，簇数等于区域格数，再把整区
+        /// 树簇合并为单一 Mesh（一个森林区域只留一个渲染对象）。越靠近区域中心
+        /// 的格子权重越高，簇中心还会从格子中心偏移 0.12～0.85 个六角格半径，
+        /// 因此树簇跨格分布、中心密边缘疏。树由圆锥树冠 + 加粗可见树干组成。
+        /// </summary>
+        private void SpawnForestTreeClusters(MapRegionData region, List<WorldCell> cells)
+        {
+            if (region == null || cells == null || cells.Count == 0) return;
+            Mesh treeMesh = EnsureSimpleForestTreeMesh();
+            Material treeMaterial = EnsureSimpleForestTreeMaterial();
+            if (treeMesh == null || treeMaterial == null) return;
+
+            WorldCell rootAnchor = RegionAnchor(region, cells);
+            if (rootAnchor == null) rootAnchor = cells[0];
+            Vector2 regionCenter = TerrainMeshGenerator.HexCenter(rootAnchor.coord);
+            float falloffRadius = 1.1f;
+            for (int index = 0; index < cells.Count; index++)
+                falloffRadius = Mathf.Max(falloffRadius,
+                    (TerrainMeshGenerator.HexCenter(cells[index].coord) - regionCenter).magnitude);
+
+            var cellWeights = new float[cells.Count + 1];
+            for (int index = 0; index < cells.Count; index++)
+            {
+                float normalized = Mathf.Clamp01(
+                    (TerrainMeshGenerator.HexCenter(cells[index].coord) - regionCenter).magnitude /
+                    falloffRadius);
+                float centerWeight = 1f - normalized;
+                cellWeights[index + 1] = cellWeights[index] + 0.08f +
+                                         0.92f * centerWeight * centerWeight;
+            }
+
+            int clusterCount = Mathf.Clamp(cells.Count, 1, 256);
+            Vector2 rootAnchorCenter = TerrainMeshGenerator.HexCenter(rootAnchor.coord);
+            float rootAnchorHeight = TerrainRenderer.PresentationSurfaceHeightAt(
+                map, rootAnchorCenter, rootAnchor);
+            var regionObject = new GameObject(
+                $"Forest Clusters Region {region.regionId} Clusters {clusterCount}");
+            regionObject.transform.SetParent(structuralRoot, false);
+            int totalTrees = 0;
+
+            for (int clusterIndex = 0; clusterIndex < clusterCount; clusterIndex++)
+            {
+                uint clusterHash = StableHash(map.effectiveSeed,
+                    region.centerCellIndex >= 0 ? region.centerCellIndex : cells[0].index,
+                    4100 + clusterIndex * 31);
+                WorldCell anchor = PickWeightedForestCell(cells, cellWeights, clusterHash);
+                float anchorDistance = (TerrainMeshGenerator.HexCenter(anchor.coord) -
+                                        regionCenter).magnitude / falloffRadius;
+                float centerFactor = 1f - Mathf.Clamp01(anchorDistance);
+                int treeCount = Mathf.Clamp(
+                    Mathf.RoundToInt(Mathf.Lerp(8f, 19f, centerFactor * centerFactor)), 8, 19);
+                totalTrees += treeCount;
+
+                float clusterAngle = Hash01(clusterHash >> 8) * Mathf.PI * 2f;
+                float clusterOffset = Mathf.Lerp(0.12f, 0.85f,
+                    Mathf.Sqrt(Hash01(clusterHash >> 16)));
+                Vector2 clusterCenter = TerrainMeshGenerator.HexCenter(anchor.coord) +
+                    new Vector2(Mathf.Cos(clusterAngle), Mathf.Sin(clusterAngle)) * clusterOffset;
+
+                for (int treeIndex = 0; treeIndex < treeCount; treeIndex++)
+                {
+                    uint treeHash = StableHash(map.effectiveSeed, anchor.index,
+                        5100 + clusterIndex * 37 + treeIndex * 19);
+                    float angle = (treeHash % 360u) * Mathf.Deg2Rad;
+                    float radius = Mathf.Lerp(0.06f, 0.62f,
+                        Mathf.Sqrt(Hash01(treeHash >> 8)));
+                    Vector2 center = clusterCenter +
+                                     new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                    float surfaceHeight = TerrainRenderer.PresentationSurfaceHeightAt(
+                        map, center, anchor);
+                    float scale = Mathf.Lerp(0.22f, 0.36f, Hash01(treeHash >> 17));
+
+                    var part = new GameObject($"Tree {clusterIndex}-{treeIndex}");
+                    part.transform.SetParent(regionObject.transform, false);
+                    part.transform.localPosition = new Vector3(
+                        center.x - rootAnchorCenter.x,
+                        surfaceHeight - rootAnchorHeight,
+                        center.y - rootAnchorCenter.y);
+                    part.transform.localRotation = Quaternion.Euler(0f,
+                        (treeHash >> 16) % 360u, 0f);
+                    part.transform.localScale = Vector3.one * scale;
+                    MeshFilter filter = part.AddComponent<MeshFilter>();
+                    filter.sharedMesh = treeMesh;
+                    MeshRenderer partRenderer = part.AddComponent<MeshRenderer>();
+                    partRenderer.sharedMaterial = treeMaterial;
+                    partRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                    partRenderer.receiveShadows = false;
+                }
+            }
+
+            regionObject.name = $"Forest Clusters Region {region.regionId} " +
+                                $"Clusters {clusterCount} Trees {totalTrees}";
+            Mesh combined = CombineChildren(regionObject,
+                $"Forest Region Tree Clusters {region.regionId}", false);
+            if (combined == null)
+            {
+                DestroyOwned(regionObject);
+                return;
+            }
+            MeshRenderer regionRenderer = regionObject.GetComponent<MeshRenderer>();
+            if (regionRenderer != null)
+            {
+                regionRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                regionRenderer.receiveShadows = false;
+            }
+
+            var entry = new DecorationInstance
+            {
+                transform = regionObject.transform,
+                anchorCell = rootAnchor,
+                baseRotation = Quaternion.identity,
+                ownedMesh = combined
+            };
+            instances.Add(entry);
+            Position(entry);
+        }
+
+        private static WorldCell PickWeightedForestCell(List<WorldCell> cells,
+            float[] cumulativeWeights, uint hash)
+        {
+            float target = Hash01(hash) * cumulativeWeights[cumulativeWeights.Length - 1];
+            int low = 0;
+            int high = cells.Count - 1;
+            while (low < high)
+            {
+                int mid = (low + high) / 2;
+                if (cumulativeWeights[mid + 1] < target) low = mid + 1;
+                else high = mid;
+            }
+            return cells[low];
         }
 
         /// <summary>
@@ -923,7 +1193,8 @@ namespace Cultivation4X.WorldMap
             switch (type)
             {
                 case MapRegionType.Forest:
-                    return detail ? Mathf.Clamp(cellCount, 18, 96) : 0;
+                    // 森林不再走通用预制体分布，由 SpawnForestTreeClusters 生成低模树簇。
+                    return 0;
                 case MapRegionType.MountainRange:
                     return 0;
                 case MapRegionType.Hills:
@@ -1252,6 +1523,8 @@ namespace Cultivation4X.WorldMap
             if (markerMaterial != null) DestroyOwned(markerMaterial);
             if (regionTerrainMaterial != null) DestroyOwned(regionTerrainMaterial);
             if (modularCliffMaterial != null) DestroyOwned(modularCliffMaterial);
+            if (simpleForestTreeMaterial != null) DestroyOwned(simpleForestTreeMaterial);
+            if (simpleForestTreeMesh != null) DestroyOwned(simpleForestTreeMesh);
             if (paintedMountainMaterials != null)
                 foreach (Material material in paintedMountainMaterials)
                     if (material != null) DestroyOwned(material);

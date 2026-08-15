@@ -9,6 +9,13 @@ namespace Cultivation4X.WorldMap
     /// </summary>
     public sealed class TerrainRenderer : MonoBehaviour
     {
+        public enum MapDetailLevel
+        {
+            Near = 0,
+            Mid = 1,
+            Far = 2
+        }
+
         private readonly List<GameObject> farChunkObjects = new List<GameObject>();
         private readonly List<GameObject> nearChunkObjects = new List<GameObject>();
         private readonly List<Mesh> ownedMeshes = new List<Mesh>();
@@ -39,10 +46,13 @@ namespace Cultivation4X.WorldMap
         [SerializeField, Range(0f, 1f)] private float groundTextureStrength = 0.82f;
         [SerializeField, Range(0.5f, 2.5f)] private float groundTextureContrast = 1.55f;
         [SerializeField, Min(0.01f)] private float groundTextureTiling = 0.46f;
-        [SerializeField, Range(0f, 0.35f)] private float groundMacroStrength = 0.16f;
-        [SerializeField, Min(0.005f)] private float groundMacroScale = 0.065f;
+        [SerializeField, Range(0f, 0.35f)] private float groundMacroStrength = 0.22f;
+        [SerializeField, Min(0.005f)] private float groundMacroScale = 0.055f;
         [SerializeField, Range(0f, 0.5f)] private float groundTextureColorBlend = 0.10f;
         [SerializeField, Range(0f, 1.5f)] private float groundNormalStrength = 0.55f;
+        [SerializeField, Range(0f, 1f)] private float groundSaturation = 0.78f;
+        [SerializeField, Range(0f, 1f)] private float groundLightingStrength = 0.72f;
+        [SerializeField, Range(0f, 1f)] private float groundAtmosphereStrength = 0.35f;
         [SerializeField] private bool groundTextureOnly;
         [SerializeField, Range(0.75f, 1.35f)] private float groundBrightness = 1f;
         [SerializeField, Range(0f, 1f)] private float groundLinearColorLift = 0.30f;
@@ -61,9 +71,10 @@ namespace Cultivation4X.WorldMap
         [SerializeField] private float cameraDistanceFactor = 0.85f;
         [SerializeField] private float cameraCurveMaxVisibleHexes = 16f;
         [Header("Near radial curvature")]
-        [SerializeField, Range(0f, 0.02f)] private float nearRadialCurvature = 0.0035f;
+        [SerializeField, Range(0f, 0.02f)] private float nearRadialCurvature = 0f;
+        [SerializeField, Range(0f, 1f)] private float curvatureNearZoomThreshold = 0.30f;
         [Header("Horizon atmosphere")]
-        [SerializeField] private Color horizonFogColor = new Color(0.62f, 0.72f, 0.78f, 1f);
+        [SerializeField] private Color horizonFogColor = new Color(0.52f, 0.60f, 0.66f, 1f);
         // Civ VI camera1: Fog_Start / Height = 400/180 near, 1300/880 far.
         [SerializeField] private float nearFogStartHeightFactor = 2.222222f;
         [SerializeField] private float farFogStartHeightFactor = 1.477273f;
@@ -75,6 +86,27 @@ namespace Cultivation4X.WorldMap
         // 最远可拉到的距离 = 全图适应距离 × 该系数，保证拉远后仍能看到整张地图的轮廓。
         [SerializeField] private float maxZoomOutFactor = 1.15f;
         [SerializeField] private float cameraZoomRatio = 0.88f;
+        [Header("Civ VI style camera")]
+        [SerializeField, Range(0f, 1f)] private float zoomLevel = 0.35f;
+        [SerializeField, Min(0.001f)] private float zoomSpeed = 0.015f;
+        [SerializeField, Min(0.01f)] private float zoomSmoothTime = 0.25f;
+        [SerializeField, Min(0.01f)] private float panSmoothTime = 0.08f;
+        [SerializeField, Min(0.01f)] private float keyboardPanSpeed = 40f;
+        [SerializeField] private bool enableEdgePan = true;
+        [SerializeField, Min(1f)] private float edgePanBorder = 12f;
+        [SerializeField] private float focusHeightOffset = 0f;
+        [SerializeField] private AnimationCurve heightCurve = new AnimationCurve(
+            new Keyframe(0f, 6f),
+            new Keyframe(0.45f, 22f),
+            new Keyframe(1f, 210f));
+        [SerializeField] private AnimationCurve pitchCurve = new AnimationCurve(
+            new Keyframe(0f, 40f),
+            new Keyframe(0.5f, 42f),
+            new Keyframe(1f, 45f));
+        private float currentZoom;
+        private float zoomVelocity;
+        private Vector3 targetPivot;
+        private Vector3 focusVelocity;
         private float cameraYawDegrees;
         private float initialVisibleHexes;
         private int initialFocusCellIndex = -1;
@@ -114,6 +146,11 @@ namespace Cultivation4X.WorldMap
         /// <summary>当前生效的缩放档位。</summary>
         public WorldMap3DZoomTier ActiveZoomTier => activeTier;
 
+        /// <summary>Civ Zoom 驱动的表现层级：近 0~0.25、中 0.25~0.60、远 0.60~1。</summary>
+        public MapDetailLevel CurrentDetailLevel =>
+            currentZoom < 0.25f ? MapDetailLevel.Near :
+            currentZoom < 0.60f ? MapDetailLevel.Mid : MapDetailLevel.Far;
+
         /// <summary>当前相机斜向旋转角，供视觉规范测试读取。</summary>
         internal float CameraYawDegrees => cameraYawDegrees;
 
@@ -129,6 +166,12 @@ namespace Cultivation4X.WorldMap
         internal float ActiveFieldOfViewDegrees { get; private set; }
         internal float ActiveCameraDistance => cameraDistance;
         internal float ActiveVisibleHexesAcross { get; private set; }
+        internal float ZoomLevel => zoomLevel;
+        internal float CurrentZoom => currentZoom;
+        internal bool EdgePanEnabled => enableEdgePan;
+        internal float CameraHeightForZoom(float zoom) => heightCurve.Evaluate(zoom);
+        internal float CameraPitchForZoom(float zoom) => pitchCurve.Evaluate(zoom);
+        internal Vector3 TargetPivot => targetPivot;
         internal float CameraNearPitchDegrees => cameraPitchDegrees;
         internal float CameraFarPitchDegrees => cameraPitchFarDegrees;
         internal float CameraCurveMaxVisibleHexes => cameraCurveMaxVisibleHexes;
@@ -157,6 +200,16 @@ namespace Cultivation4X.WorldMap
             nearRadialCurvature = Mathf.Clamp(value, 0f, 0.02f);
             Camera camera = Camera.main;
             if (camera != null && map != null) ApplyCameraTransform(camera);
+        }
+
+        internal void SetZoomLevel(float value)
+        {
+            zoomLevel = Mathf.Clamp01(value);
+        }
+
+        internal void SetEdgePanEnabled(bool enabled)
+        {
+            enableEdgePan = enabled;
         }
 
         internal void SetTerrainReliefScale(float value)
@@ -243,6 +296,8 @@ namespace Cultivation4X.WorldMap
         /// <summary>当前地形网格使用的表现参数，供地点图标按同一高度定位。</summary>
         public static TerrainMeshAppearance ActiveAppearance { get; private set; } = TerrainMeshAppearance.Default;
         public static bool ActiveContinuousSurface { get; private set; }
+        /// <summary>当前全局表现层级，供 RegionNameRenderer 等其它表现层读取。</summary>
+        public static MapDetailLevel ActiveDetailLevel { get; private set; } = MapDetailLevel.Mid;
         private static float[] activeSurfaceHeights;
         private static System.Func<Vector2, bool, float> activeSurfaceHeightAt;
         private static WorldMap activeSurfaceMap;
@@ -251,7 +306,8 @@ namespace Cultivation4X.WorldMap
         public static float PresentationSurfaceHeight(WorldMap worldMap, WorldCell cell)
         {
             if (cell == null) return 0f;
-            if (ActiveContinuousSurface && activeSurfaceHeights != null &&
+            if (ActiveContinuousSurface && ReferenceEquals(worldMap, activeSurfaceMap) &&
+                activeSurfaceHeights != null &&
                 cell.index >= 0 && cell.index < activeSurfaceHeights.Length &&
                 worldMap?.cells != null && cell.index < worldMap.cells.Length &&
                 ReferenceEquals(worldMap.cells[cell.index], cell))
@@ -280,20 +336,40 @@ namespace Cultivation4X.WorldMap
         internal void ApplyWorldMapVisualProfile(int focusCellIndex)
         {
             cameraYawDegrees = 12f;
-            cameraFieldOfViewDegrees = 30f;
+            cameraFieldOfViewDegrees = 40f;
             nearFieldOfViewDegrees = 45f;
             cameraPitchDegrees = 55f;
             cameraPitchFarDegrees = 45f;
             cameraCurveMaxVisibleHexes = 16f;
-            nearRadialCurvature = 0.0035f;
-            nearFogStartHeightFactor = 400f / 180f;
+            nearRadialCurvature = 0f;
+            curvatureNearZoomThreshold = 0.30f;
+            horizonFogColor = new Color(0.52f, 0.60f, 0.66f, 1f);
+            nearFogStartHeightFactor = 5.5f;
             farFogStartHeightFactor = 1300f / 880f;
-            nearFogSpanHeightFactor = 1.5f;
+            nearFogSpanHeightFactor = 4.5f;
             farFogSpanHeightFactor = nearFogSpanHeightFactor / 1.6f;
             initialVisibleHexes = 12f;
             initialFocusCellIndex = focusCellIndex;
             minVisibleHexes = 5f;
-            nearHeightScale = 1.15f;
+            zoomLevel = 0.35f;
+            currentZoom = zoomLevel;
+            zoomVelocity = 0f;
+            focusVelocity = Vector3.zero;
+            zoomSmoothTime = 0.25f;
+            panSmoothTime = 0.08f;
+            enableEdgePan = true;
+            edgePanBorder = 12f;
+            focusHeightOffset = 0f;
+            heightCurve = new AnimationCurve(
+                new Keyframe(0f, 6f),
+                new Keyframe(0.45f, 22f),
+                new Keyframe(1f, 210f));
+            pitchCurve = new AnimationCurve(
+                new Keyframe(0f, 40f),
+                new Keyframe(0.5f, 42f),
+                new Keyframe(1f, 45f));
+            // 用户最终方向：总高约 2 个六角格，前坡保持 5 环宽。
+            nearHeightScale = 1.05f;
             nearSideDarkenFactor = 0.96f;
             farAppearance = new TerrainMeshAppearance
             {
@@ -335,6 +411,7 @@ namespace Cultivation4X.WorldMap
             // Far and near meshes are two tessellation levels of the same terrain, not two
             // different reliefs. Keeping the height scale identical removes zoom-tier popping.
             effectiveFarAppearance.heightScale = nearAppearance.heightScale;
+            Color32 FarColor(WorldCell cell) => TerrainPresentationModels.FarColorForCell(cell);
             List<Mesh> farMeshes;
             List<Mesh> nearMeshes;
             if (useContinuousTerrainSurface)
@@ -342,8 +419,8 @@ namespace Cultivation4X.WorldMap
                 bool blendLandMaterials = blendContinuousTerrainMaterials &&
                                           climateDebugView == WorldMapClimateDebugView.Normal;
                 ContinuousTerrainSurfaceBuilder.BuildResult farBuild =
-                    ContinuousTerrainSurfaceBuilder.CreateTerrainChunks(map, chunkSize, NearColor,
-                        effectiveFarAppearance, 1, blendLandMaterials);
+                    ContinuousTerrainSurfaceBuilder.CreateTerrainChunks(map, chunkSize, FarColor,
+                        effectiveFarAppearance, 1, false);
                 ContinuousTerrainSurfaceBuilder.BuildResult nearBuild =
                     ContinuousTerrainSurfaceBuilder.CreateTerrainChunks(map, chunkSize, NearColor,
                         nearAppearance, continuousSurfaceSubdivisions, blendLandMaterials);
@@ -356,7 +433,7 @@ namespace Cultivation4X.WorldMap
             }
             else
             {
-                farMeshes = TerrainMeshGenerator.CreateTerrainChunks(map, chunkSize, NearColor,
+                farMeshes = TerrainMeshGenerator.CreateTerrainChunks(map, chunkSize, FarColor,
                     farAppearance);
                 nearMeshes = TerrainMeshGenerator.CreateTerrainChunks(map, chunkSize, NearColor,
                     nearAppearance);
@@ -371,8 +448,7 @@ namespace Cultivation4X.WorldMap
             CreateChunkObjects(nearMeshes, nearChunkObjects, materials);
 
             FitCamera();
-            activeTier = WorldMap3DPresentationPolicy.GetZoomTier(
-                TerrainPresentationModels.VisibleHexesAcross(Camera.main));
+            activeTier = (WorldMap3DZoomTier)(int)CurrentDetailLevel;
             ApplyTier(activeTier);
         }
 
@@ -431,10 +507,12 @@ namespace Cultivation4X.WorldMap
                 material.SetFloat("_Brightness", groundBrightness);
             if (material.HasProperty("_LinearColorLift"))
                 material.SetFloat("_LinearColorLift", groundLinearColorLift);
+            if (material.HasProperty("_Saturation"))
+                material.SetFloat("_Saturation", groundSaturation);
             if (material.HasProperty("_TerrainLightingStrength"))
                 material.SetFloat("_TerrainLightingStrength",
                     climateDebugView != WorldMapClimateDebugView.Normal ? 0f :
-                    TerrainMaterialProvider.IsWaterGroup(landform) ? 0.12f : 0.85f);
+                    TerrainMaterialProvider.IsWaterGroup(landform) ? 0.12f : groundLightingStrength);
             if (material.HasProperty("_TerrainNormalStrength"))
                 material.SetFloat("_TerrainNormalStrength", groundNormalStrength);
             return material;
@@ -597,12 +675,34 @@ namespace Cultivation4X.WorldMap
             cameraPivot = InitialPivot(width, height);
             float fitDistance = Mathf.Max(width, height) * Mathf.Max(0.5f, cameraDistanceFactor);
             maxCameraDistance = fitDistance * Mathf.Max(1f, maxZoomOutFactor);
-            float initialDistance = initialVisibleHexes > 0f
-                ? ZoomDistanceForVisibleHexes(camera, initialVisibleHexes)
-                : fitDistance;
-            cameraDistance = Mathf.Clamp(initialDistance,
-                ZoomDistanceForVisibleHexes(camera, minVisibleHexes), maxCameraDistance);
+            float nearDistance = ZoomDistanceForVisibleHexes(camera, minVisibleHexes);
+            CalibrateHeightCurve(nearDistance * 0.9f, maxCameraDistance);
+            currentZoom = zoomLevel;
+            zoomVelocity = 0f;
+            targetPivot = cameraPivot;
+            ClampPivotToMap();
+            cameraPivot = targetPivot;
+            focusVelocity = Vector3.zero;
+            cameraDistance = heightCurve.Evaluate(currentZoom);
             ApplyCameraTransform(camera);
+        }
+
+        private void CalibrateHeightCurve(float nearDistance, float farDistance)
+        {
+            if (heightCurve == null || heightCurve.keys.Length < 3)
+            {
+                heightCurve = new AnimationCurve(
+                    new Keyframe(0f, nearDistance),
+                    new Keyframe(0.45f, nearDistance + (farDistance - nearDistance) * 0.18f),
+                    new Keyframe(1f, farDistance));
+                return;
+            }
+            Keyframe[] keys = heightCurve.keys;
+            keys[0].value = nearDistance;
+            keys[keys.Length - 1].value = farDistance;
+            if (keys.Length >= 2)
+                keys[keys.Length / 2].value = nearDistance + (farDistance - nearDistance) * 0.18f;
+            heightCurve.keys = keys;
         }
 
         private Vector3 InitialPivot(float mapWidth, float mapHeight)
@@ -622,7 +722,19 @@ namespace Cultivation4X.WorldMap
             if (camera == null || map == null) return;
             HandleZoom(camera);
             HandlePan(camera);
-            RefreshTier(camera);
+            currentZoom = Mathf.SmoothDamp(currentZoom, zoomLevel, ref zoomVelocity, zoomSmoothTime);
+            cameraDistance = heightCurve.Evaluate(currentZoom);
+            cameraPivot = Vector3.SmoothDamp(cameraPivot, targetPivot, ref focusVelocity,
+                panSmoothTime, Mathf.Infinity, Time.deltaTime);
+            ApplyCameraTransform(camera);
+            RefreshDetailLevel();
+        }
+
+        private void RefreshDetailLevel()
+        {
+            WorldMap3DZoomTier tier = (WorldMap3DZoomTier)(int)CurrentDetailLevel;
+            if (tier == activeTier) return;
+            ApplyTier(tier);
         }
 
         private void RefreshTier(Camera camera)
@@ -637,6 +749,7 @@ namespace Cultivation4X.WorldMap
         public void ApplyTier(WorldMap3DZoomTier tier)
         {
             activeTier = tier;
+            ActiveDetailLevel = CurrentDetailLevel;
             foreach (GameObject chunk in farChunkObjects)
             {
                 if (chunk != null) chunk.SetActive(tier == WorldMap3DZoomTier.Far);
@@ -659,14 +772,15 @@ namespace Cultivation4X.WorldMap
 
         private void ApplyTextureTier(WorldMap3DZoomTier tier)
         {
+            // 远景只显示基础地形色块，不显示细节纹理与法线。
             float microWeight = tier == WorldMap3DZoomTier.Near ? 1f :
-                tier == WorldMap3DZoomTier.Mid ? 0.72f : 0.28f;
+                tier == WorldMap3DZoomTier.Mid ? 0.72f : 0f;
             float macroWeight = tier == WorldMap3DZoomTier.Near ? 0.55f :
-                tier == WorldMap3DZoomTier.Mid ? 0.85f : 1.15f;
+                tier == WorldMap3DZoomTier.Mid ? 0.85f : 0f;
             float colorWeight = tier == WorldMap3DZoomTier.Near ? 1f :
-                tier == WorldMap3DZoomTier.Mid ? 0.75f : 0.35f;
+                tier == WorldMap3DZoomTier.Mid ? 0.75f : 0f;
             float normalWeight = tier == WorldMap3DZoomTier.Near ? 1f :
-                tier == WorldMap3DZoomTier.Mid ? 0.48f : 0.08f;
+                tier == WorldMap3DZoomTier.Mid ? 0.48f : 0f;
             for (int submesh = 0; submesh < ownedMaterials.Count &&
                  submesh < TerrainMeshGenerator.SubmeshCount; submesh++)
             {
@@ -675,6 +789,12 @@ namespace Cultivation4X.WorldMap
                 LandformType landform = TerrainMaterialProvider.RepresentativeLandform(submesh);
                 bool textured = climateDebugView == WorldMapClimateDebugView.Normal &&
                                 !TerrainMaterialProvider.IsWaterGroup(landform);
+                if (material.HasProperty("_UseTerrainBlend"))
+                    material.SetFloat("_UseTerrainBlend",
+                        tier == WorldMap3DZoomTier.Far ? 0f :
+                        material.HasProperty("_UseTerrainBlend") &&
+                        useContinuousTerrainSurface && blendContinuousTerrainMaterials &&
+                        landform == LandformType.Plain ? 1f : 0f);
                 if (material.HasProperty("_TextureStrength"))
                     material.SetFloat("_TextureStrength", textured
                         ? groundTextureStrength * microWeight : 0f);
@@ -690,55 +810,59 @@ namespace Cultivation4X.WorldMap
             }
         }
 
-        /// <summary>鼠标滚轮缩放：以当前注视点为轴心放大/缩小。</summary>
+        /// <summary>鼠标滚轮缩放：归一化 zoom 0=最近、1=最远；两端更钝，避免跳过中景。</summary>
         private void HandleZoom(Camera camera)
         {
             if (pointerInputBlocked) return;
             float wheel = Input.mouseScrollDelta.y;
             if (Mathf.Abs(wheel) < 0.01f) return;
-            float ratio = wheel > 0f ? cameraZoomRatio : 1f / cameraZoomRatio;
-            float minDistance = ZoomDistanceForVisibleHexes(camera, minVisibleHexes);
-            cameraDistance = Mathf.Clamp(cameraDistance * ratio, minDistance, maxCameraDistance);
-            ApplyCameraTransform(camera);
+            float sensitivity = zoomSpeed;
+            if (zoomLevel < 0.2f || zoomLevel > 0.8f) sensitivity *= 0.6f;
+            zoomLevel = Mathf.Clamp01(zoomLevel - wheel * sensitivity * 3f);
         }
 
-        /// <summary>按住鼠标左键或右键拖动，平移注视点（限制在地图范围内）。</summary>
+        /// <summary>仅 WASD 平移；写入平滑焦点。</summary>
         private void HandlePan(Camera camera)
         {
-            if (pointerInputBlocked)
-            {
-                lastPointerPosition = Input.mousePosition;
-                return;
-            }
-            bool dragging = Input.GetMouseButton(0) || Input.GetMouseButton(1);
-            Vector3 current = Input.mousePosition;
-            if (!dragging)
-            {
-                lastPointerPosition = current;
-                return;
-            }
+            if (pointerInputBlocked) return;
 
-            Vector3 delta = current - lastPointerPosition;
-            lastPointerPosition = current;
-            if (delta.sqrMagnitude < 0.0001f) return;
+            Vector3 keyboardInput = Vector3.zero;
+            if (Input.GetKey(KeyCode.W)) keyboardInput.z += 1f;
+            if (Input.GetKey(KeyCode.S)) keyboardInput.z -= 1f;
+            if (Input.GetKey(KeyCode.A)) keyboardInput.x -= 1f;
+            if (Input.GetKey(KeyCode.D)) keyboardInput.x += 1f;
+            if (keyboardInput.sqrMagnitude < 0.01f) return;
 
-            float worldPerPixel = 2f * cameraDistance * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) /
-                                  Mathf.Max(1f, camera.pixelHeight);
-            Vector3 shift = (camera.transform.right * delta.x + camera.transform.up * delta.y) * worldPerPixel;
-            cameraPivot -= shift;
+            Vector3 forward = camera.transform.forward;
+            forward.y = 0f;
+            forward.Normalize();
+            Vector3 right = camera.transform.right;
+            right.y = 0f;
+            right.Normalize();
+            Vector3 move = (forward * keyboardInput.z + right * keyboardInput.x).normalized;
+            float heightFactor = Mathf.Max(0.25f, cameraDistance / 50f);
+            targetPivot += move * keyboardPanSpeed * heightFactor * Time.deltaTime;
             ClampPivotToMap();
-            ApplyCameraTransform(camera);
         }
 
-        /// <summary>把注视点限制在地图范围内，高度固定在地面。</summary>
+        /// <summary>把目标焦点限制在地图范围内，Y 跟随当前表现地表高度。</summary>
         private void ClampPivotToMap()
         {
             if (map == null) return;
             float width = (map.width + 0.5f) * Mathf.Sqrt(3f);
             float height = map.height * 1.5f;
-            cameraPivot.x = Mathf.Clamp(cameraPivot.x, 0f, width);
-            cameraPivot.y = 0f;
-            cameraPivot.z = Mathf.Clamp(cameraPivot.z, 0f, height);
+            targetPivot.x = Mathf.Clamp(targetPivot.x, 0f, width);
+            targetPivot.z = Mathf.Clamp(targetPivot.z, 0f, height);
+            targetPivot.y = GroundHeightAt(targetPivot.x, targetPivot.z) + focusHeightOffset;
+        }
+
+        private float GroundHeightAt(float x, float z)
+        {
+            if (map?.cells == null) return 0f;
+            if (!TerrainMeshGenerator.TryGetCellIndex(map, new Vector3(x, 0f, z), out int index) ||
+                index < 0 || index >= map.cells.Length || map.cells[index] == null)
+                return 0f;
+            return PresentationSurfaceHeight(map, map.cells[index]);
         }
 
         /// <summary>
@@ -772,26 +896,23 @@ namespace Cultivation4X.WorldMap
 
         private void ApplyCameraTransform(Camera camera)
         {
+            // Civ VI 风格：FOV 固定，高度与俯仰由归一化 zoom 的曲线驱动。
+            camera.fieldOfView = Mathf.Clamp(cameraFieldOfViewDegrees, 20f, 70f);
             float visibleHexes = VisibleHexesForCurrentCamera(camera);
-            float targetFieldOfView = FieldOfViewForVisibleHexes(visibleHexes);
-            if (Mathf.Abs(camera.fieldOfView - targetFieldOfView) > 0.0001f)
-            {
-                SetFieldOfViewPreservingCoverage(camera, targetFieldOfView, visibleHexes);
-                visibleHexes = VisibleHexesForCurrentCamera(camera);
-            }
             ActiveFieldOfViewDegrees = camera.fieldOfView;
             ActiveVisibleHexesAcross = visibleHexes;
-            float pitchDegrees = CameraPitchForVisibleHexes(visibleHexes);
-            float zoomT = Mathf.InverseLerp(minVisibleHexes,
-                Mathf.Max(minVisibleHexes + 0.01f, cameraCurveMaxVisibleHexes), visibleHexes);
-            float pitchRadians = Mathf.Clamp(pitchDegrees, 30f, 90f) * Mathf.Deg2Rad;
+            float pitchDegrees = pitchCurve.Evaluate(currentZoom);
+            float zoomT = currentZoom;
+            float pitchRadians = Mathf.Clamp(pitchDegrees, 20f, 90f) * Mathf.Deg2Rad;
             Vector3 baseOffset = new Vector3(0f, Mathf.Sin(pitchRadians),
                 -Mathf.Cos(pitchRadians)) * cameraDistance;
             Vector3 offset = Quaternion.Euler(0f, cameraYawDegrees, 0f) * baseOffset;
             camera.transform.position = cameraPivot + offset;
             camera.transform.rotation = Quaternion.LookRotation(cameraPivot - camera.transform.position);
-            SetCurveState(cameraPivot,
-                nearRadialCurvature * CurveWeightForVisibleHexes(visibleHexes));
+            // 近景禁用地面弯曲；中远景仅保留极轻的大气曲率。
+            float curvatureWeight = currentZoom < curvatureNearZoomThreshold ? 0f :
+                Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(curvatureNearZoomThreshold, 1f, currentZoom));
+            SetCurveState(cameraPivot, nearRadialCurvature * curvatureWeight);
             ApplyHorizonAtmosphere(zoomT, Mathf.Sin(pitchRadians) * cameraDistance);
         }
 
@@ -866,6 +987,11 @@ namespace Cultivation4X.WorldMap
             RenderSettings.fogColor = horizonFogColor;
             RenderSettings.fogStartDistance = fogStart;
             RenderSettings.fogEndDistance = fogEnd;
+            // 大气透视：远处地表颜色/对比向灰青色靠拢。
+            Shader.SetGlobalFloat("_TerrainDistanceFadeStart", fogStart * 0.75f);
+            Shader.SetGlobalFloat("_TerrainDistanceFadeEnd", fogEnd);
+            Shader.SetGlobalColor("_TerrainDistanceFadeColor", horizonFogColor);
+            Shader.SetGlobalFloat("_TerrainDistanceFadeStrength", groundAtmosphereStrength);
         }
 
         private void CaptureAtmosphereState()

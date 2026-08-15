@@ -77,8 +77,28 @@ namespace Cultivation4X.WorldMap
                     color = Color.Lerp(color, new Color(0.42f, 0.44f, 0.40f), 0.22f);
                     break;
             }
+            if (cell.landform == LandformType.Mountain && cell.isBuildable)
+                color = Color.Lerp(color, new Color(0.63f, 0.55f, 0.38f), 0.42f);
             color.a = 1f;
             return color;
+        }
+
+        /// <summary>
+        /// 远景色块专用：高辨识度纯色，不参与邻格混合，让选址阶段一眼可读。
+        /// </summary>
+        public static Color FarColorForCell(WorldCell cell)
+        {
+            if (cell == null) return Color.magenta;
+            switch (cell.landform)
+            {
+                case LandformType.DeepWater: return new Color(0.08f, 0.30f, 0.48f, 1f);
+                case LandformType.ShallowWater: return new Color(0.16f, 0.48f, 0.62f, 1f);
+                case LandformType.Coast: return new Color(0.86f, 0.78f, 0.52f, 1f);
+                case LandformType.Plain: return new Color(0.34f, 0.66f, 0.24f, 1f);
+                case LandformType.Hill: return new Color(0.54f, 0.48f, 0.24f, 1f);
+                case LandformType.Mountain: return new Color(0.52f, 0.44f, 0.36f, 1f);
+                default: return Color.magenta;
+            }
         }
 
         private static WorldMap climateDebugMap;

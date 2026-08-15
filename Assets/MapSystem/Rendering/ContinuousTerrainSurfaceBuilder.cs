@@ -225,6 +225,13 @@ namespace Cultivation4X.WorldMap
                     Transfer(ref weights.z, ref weights.w, weights.z * 0.42f);
                 }
 
+                if (cell.landform == LandformType.Mountain && cell.isBuildable)
+                {
+                    // 山地台地：表面更接近平台岩面，保持与普通山地的材质差异。
+                    Transfer(ref weights.y, ref weights.w, weights.y * 0.20f);
+                    Transfer(ref weights.z, ref weights.w, weights.z * 0.10f);
+                }
+
                 bool moistureSensitive = cell.biome != BiomeType.Desert &&
                                          cell.biome != BiomeType.Snowfield &&
                                          cell.biome != BiomeType.Alpine;
@@ -262,6 +269,7 @@ namespace Cultivation4X.WorldMap
             private readonly bool[] peaks;
             private readonly bool[] passes;
             private readonly bool preserveMountainSkeleton;
+            private readonly TerrainMeshAppearance appearance;
             private readonly Dictionary<SampleKey, SurfaceSample> cache =
                 new Dictionary<SampleKey, SurfaceSample>();
             private readonly float waterHeight;
@@ -269,6 +277,7 @@ namespace Cultivation4X.WorldMap
             public HeightField(WorldMap map, TerrainMeshAppearance appearance)
             {
                 this.map = map;
+                this.appearance = appearance;
                 int count = map?.cells?.Length ?? 0;
                 sourceHeights = new float[count];
                 detailAmplitudes = new float[count];
@@ -344,7 +353,27 @@ namespace Cultivation4X.WorldMap
                 return sample;
             }
 
-            public float HeightAt(Vector2 position, bool water) => Sample(position, water).height;
+            public float HeightAt(Vector2 position, bool water)
+            {
+                if (!water)
+                {
+                    int rowGuess = Mathf.RoundToInt(position.y / 1.5f);
+                    int colGuess = Mathf.RoundToInt(position.x / Mathf.Sqrt(3f) -
+                                                    ((rowGuess & 1) == 1 ? 0.5f : 0f));
+                    int nearest = NearestLandCell(position, colGuess, rowGuess);
+                    if (nearest >= 0 && map.cells[nearest].landform == LandformType.Mountain)
+                        return MountainLayerHeight(map.cells[nearest]);
+                }
+                return Sample(position, water).height;
+            }
+
+            /// <summary>山体平顶格使用数据层高度，保证同一台阶层内的格子顶面平行。</summary>
+            public float MountainLayerHeight(WorldCell cell)
+            {
+                if (cell == null || cell.landform != LandformType.Mountain) return 0f;
+                return RawLandHeight(map, cell, appearance);
+            }
+
 
             public float[] CopyCenterHeights()
             {
@@ -354,7 +383,9 @@ namespace Cultivation4X.WorldMap
                     WorldCell cell = map.cells[index];
                     if (cell == null) continue;
                     Vector2 center = TerrainMeshGenerator.HexCenter(cell.coord);
-                    result[index] = Sample(center, IsWater(cell)).height;
+                    result[index] = cell.landform == LandformType.Mountain
+                        ? MountainLayerHeight(cell)
+                        : Sample(center, IsWater(cell)).height;
                 }
                 return result;
             }
@@ -381,6 +412,17 @@ namespace Cultivation4X.WorldMap
                         if (distanceSquared > 12f) continue;
                         float weight = Mathf.Exp(-distanceSquared * 1.35f);
                         weight *= SkeletonBlendWeight(anchor, index);
+                        // 阶梯山体：非脊/峰/山口的山体平台格只与同层格混合，
+                        // 避免高斯插值把量化台阶重新抹成连续陡坡。
+                        if (preserveMountainSkeleton && anchor >= 0 && anchor < sourceHeights.Length &&
+                            index >= 0 && index < sourceHeights.Length &&
+                            map.cells[anchor].landform == LandformType.Mountain &&
+                            map.cells[index].landform == LandformType.Mountain &&
+                            !ridgeCore[anchor] && !peaks[anchor] && !passes[anchor] &&
+                            Mathf.Abs(sourceHeights[index] - sourceHeights[anchor]) > 0.02f)
+                        {
+                            weight *= 0.03f;
+                        }
                         weightedHeight += sourceHeights[index] * weight;
                         weightedAmplitude += detailAmplitudes[index] * weight;
                         totalWeight += weight;
@@ -519,7 +561,11 @@ namespace Cultivation4X.WorldMap
             float sideDarkenFactor, int subdivisions)
         {
             bool water = IsWater(cell);
+            // 用户定稿方向2：所有 Mountain 格都用平顶，层间由随机角度侧壁构成“乐高山”；
+            // 后续用纹理/模型装饰。非山体地形保持连续地表。
+            bool flatCell = !water && cell.landform == LandformType.Mountain;
             Vector2 center = TerrainMeshGenerator.HexCenter(cell.coord);
+            float flatTopHeight = flatCell ? field.MountainLayerHeight(cell) : 0f;
             var localVertices = new Dictionary<SampleKey, int>();
 
             for (int sector = 0; sector < 6; sector++)
@@ -532,13 +578,13 @@ namespace Cultivation4X.WorldMap
                     {
                         int a = AddSurfaceVertex(center, next, current, first, second, subdivisions,
                             cell, water, visualField, field, vertices, normals, colors,
-                            materialWeights, climateData, writeColors, localVertices);
+                            materialWeights, climateData, writeColors, localVertices, flatCell, flatTopHeight);
                         int b = AddSurfaceVertex(center, next, current, first + 1, second, subdivisions,
                             cell, water, visualField, field, vertices, normals, colors,
-                            materialWeights, climateData, writeColors, localVertices);
+                            materialWeights, climateData, writeColors, localVertices, flatCell, flatTopHeight);
                         int c = AddSurfaceVertex(center, next, current, first, second + 1, subdivisions,
                             cell, water, visualField, field, vertices, normals, colors,
-                            materialWeights, climateData, writeColors, localVertices);
+                            materialWeights, climateData, writeColors, localVertices, flatCell, flatTopHeight);
                         triangles.Add(a);
                         triangles.Add(b);
                         triangles.Add(c);
@@ -546,7 +592,7 @@ namespace Cultivation4X.WorldMap
                         if (first + second > subdivisions - 2) continue;
                         int d = AddSurfaceVertex(center, next, current, first + 1, second + 1,
                             subdivisions, cell, water, visualField, field, vertices, normals,
-                            colors, materialWeights, climateData, writeColors, localVertices);
+                            colors, materialWeights, climateData, writeColors, localVertices, flatCell, flatTopHeight);
                         triangles.Add(b);
                         triangles.Add(d);
                         triangles.Add(c);
@@ -555,26 +601,60 @@ namespace Cultivation4X.WorldMap
             }
 
             if (water) return;
+            if (!flatCell)
+            {
+                // 非山体保持连续地表；只给水面边补裙边。
+                for (int edge = 0; edge < 6; edge++)
+                {
+                    int neighborIndex = map.GetIndex(map.GetNeighbor(cell.coord, edge));
+                    WorldCell neighbor = neighborIndex >= 0 && neighborIndex < map.cells.Length
+                        ? map.cells[neighborIndex]
+                        : null;
+                    if (neighbor != null && !IsWater(neighbor)) continue;
+                    Vector2 from = Corner(center, edge);
+                    Vector2 to = Corner(center, edge + 1);
+                    float bottom = neighbor != null
+                        ? field.Sample((from + to) * 0.5f, true).height
+                        : 0f;
+                    for (int segment = 0; segment < subdivisions; segment++)
+                    {
+                        Vector2 topA = Vector2.Lerp(from, to, segment / (float)subdivisions);
+                        Vector2 topB = Vector2.Lerp(from, to, (segment + 1f) / subdivisions);
+                        AddSkirt(field, visualField, cell, topA, topB, bottom, vertices, normals,
+                            colors, materialWeights, climateData, triangles, writeColors,
+                            sideDarkenFactor);
+                    }
+                }
+                return;
+            }
+
+            // 山体格平顶：每个 Mountain 格使用单一高度，与相邻格的高度差走垂直侧壁。
             for (int edge = 0; edge < 6; edge++)
             {
                 int neighborIndex = map.GetIndex(map.GetNeighbor(cell.coord, edge));
                 WorldCell neighbor = neighborIndex >= 0 && neighborIndex < map.cells.Length
                     ? map.cells[neighborIndex]
                     : null;
-                if (neighbor != null && !IsWater(neighbor)) continue;
                 Vector2 from = Corner(center, edge);
                 Vector2 to = Corner(center, edge + 1);
-                float bottom = neighbor != null
-                    ? field.Sample((from + to) * 0.5f, true).height
-                    : 0f;
-                for (int segment = 0; segment < subdivisions; segment++)
+                if (neighbor == null || IsWater(neighbor))
                 {
-                    Vector2 topA = Vector2.Lerp(from, to, segment / (float)subdivisions);
-                    Vector2 topB = Vector2.Lerp(from, to, (segment + 1f) / subdivisions);
-                    AddSkirt(field, visualField, cell, topA, topB, bottom, vertices, normals,
-                        colors, materialWeights, climateData, triangles, writeColors,
-                        sideDarkenFactor);
+                    float bottom = neighbor != null
+                        ? field.Sample((from + to) * 0.5f, true).height
+                        : 0f;
+                    AddVerticalSide(visualField, cell, center, from, to, flatTopHeight, bottom,
+                        vertices, normals, colors, materialWeights, climateData, triangles,
+                        writeColors, sideDarkenFactor);
+                    continue;
                 }
+                Vector2 neighborCenter = TerrainMeshGenerator.HexCenter(neighbor.coord);
+                float neighborTop = neighbor.landform == LandformType.Mountain
+                    ? field.MountainLayerHeight(neighbor)
+                    : field.Sample((from + to) * 0.5f, false).height;
+                if (flatTopHeight <= neighborTop + 0.002f) continue;
+                AddVerticalSide(visualField, cell, center, from, to, flatTopHeight, neighborTop,
+                    vertices, normals, colors, materialWeights, climateData, triangles,
+                    writeColors, sideDarkenFactor);
             }
         }
 
@@ -583,7 +663,7 @@ namespace Cultivation4X.WorldMap
             VisualField visualField, HeightField field, List<Vector3> vertices,
             List<Vector3> normals, List<Color32> colors, List<Vector4> materialWeights,
             List<Vector2> climateData, bool writeColors,
-            Dictionary<SampleKey, int> localVertices)
+            Dictionary<SampleKey, int> localVertices, bool flatCell, float flatTopHeight)
         {
             float firstWeight = first / (float)subdivisions;
             float secondWeight = second / (float)subdivisions;
@@ -591,7 +671,9 @@ namespace Cultivation4X.WorldMap
                                (current - center) * secondWeight;
             var key = new SampleKey(position, water);
             if (localVertices.TryGetValue(key, out int existing)) return existing;
-            SurfaceSample sample = field.Sample(position, water);
+            SurfaceSample sample = flatCell
+                ? new SurfaceSample(flatTopHeight, Vector3.up)
+                : field.Sample(position, water);
             int index = vertices.Count;
             vertices.Add(new Vector3(position.x, sample.height, position.y));
             normals.Add(sample.normal);
@@ -620,6 +702,50 @@ namespace Cultivation4X.WorldMap
                 remaining * weights.y / nonRock,
                 remaining * weights.z / nonRock,
                 targetRock);
+        }
+
+        private static void AddVerticalSide(VisualField visualField, WorldCell cell,
+            Vector2 cellCenter, Vector2 positionA, Vector2 positionB, float top, float bottom,
+            List<Vector3> vertices, List<Vector3> normals, List<Color32> colors,
+            List<Vector4> materialWeights, List<Vector2> climateData, List<int> triangles,
+            bool writeColors, float darkenFactor)
+        {
+            Vector3 topA = new Vector3(positionA.x, top, positionA.y);
+            Vector3 topB = new Vector3(positionB.x, top, positionB.y);
+            // 先保证无缝隙：侧壁底边与高层顶边保持同一 XZ，纯垂直；
+            // 视觉丰富度先用逐边稳定随机明暗代替随机角度，后续用纹理/模型装饰。
+            float angleRoll = Mathf.Clamp01(Mathf.PerlinNoise(positionA.x * 1.7f + 13.1f,
+                positionA.y * 1.7f - 7.3f));
+            Vector3 bottomA = new Vector3(positionA.x, bottom, positionA.y);
+            Vector3 bottomB = new Vector3(positionB.x, bottom, positionB.y);
+            Vector3 sideNormal = Vector3.Cross(topB - topA, Vector3.down).normalized;
+            int start = vertices.Count;
+            vertices.Add(topA);
+            vertices.Add(topB);
+            vertices.Add(bottomA);
+            vertices.Add(bottomB);
+            for (int index = 0; index < 4; index++) normals.Add(sideNormal);
+            VisualSample visual = visualField.Sample((positionA + positionB) * 0.5f, cell);
+            for (int index = 0; index < 4; index++)
+                materialWeights.Add(new Vector4(0f, 0f, 0f, 1f));
+            for (int index = 0; index < 4; index++)
+                climateData.Add(new Vector2(visual.moisture, 0f));
+            if (writeColors)
+            {
+                float wallShade = 0.88f + 0.22f * angleRoll;
+                float factor = darkenFactor * wallShade;
+                Color32 side = visual.color;
+                side.r = (byte)Mathf.RoundToInt(side.r * factor);
+                side.g = (byte)Mathf.RoundToInt(side.g * factor);
+                side.b = (byte)Mathf.RoundToInt(side.b * factor);
+                for (int index = 0; index < 4; index++) colors.Add(side);
+            }
+            triangles.Add(start);
+            triangles.Add(start + 1);
+            triangles.Add(start + 2);
+            triangles.Add(start + 1);
+            triangles.Add(start + 3);
+            triangles.Add(start + 2);
         }
 
         private static void AddSkirt(HeightField field, VisualField visualField, WorldCell cell,

@@ -209,6 +209,7 @@ namespace Cultivation4X.WorldMap
             if (viewMode == WorldMapViewMode.SpiritVeinPaths) BuildVeins();
             BuildPresentationLayers();
             BuildInfluenceOverlay();
+            BuildSiteSelectionOverlay();
             RebuildSelection();
             RefreshRegionLabels();
         }

@@ -965,7 +965,7 @@ public class TerrainRenderingTests
             Assert.IsTrue(root.transform.GetChild(1).gameObject.activeSelf,
                 "近景档位应显示近景弱边网格");
             Assert.AreEqual(0.82f, plainMaterial.GetFloat("_TextureStrength"), 0.0001f);
-            Assert.AreEqual(0.088f, plainMaterial.GetFloat("_MacroStrength"), 0.0001f);
+            Assert.AreEqual(0.121f, plainMaterial.GetFloat("_MacroStrength"), 0.0001f);
             Assert.AreEqual(0.10f, plainMaterial.GetFloat("_TextureColorBlend"), 0.0001f);
             Assert.AreEqual(0.55f, plainMaterial.GetFloat("_TerrainNormalStrength"), 0.0001f);
 
@@ -974,10 +974,10 @@ public class TerrainRenderingTests
             Assert.AreEqual(1f, TerrainRenderer.ActiveAppearance.heightScale, 0.0001f);
             Assert.IsTrue(root.transform.GetChild(0).gameObject.activeSelf,
                 "远景档位应显示完整棱柱网格");
-            Assert.AreEqual(0.2296f, plainMaterial.GetFloat("_TextureStrength"), 0.0001f);
-            Assert.AreEqual(0.184f, plainMaterial.GetFloat("_MacroStrength"), 0.0001f);
-            Assert.AreEqual(0.035f, plainMaterial.GetFloat("_TextureColorBlend"), 0.0001f);
-            Assert.AreEqual(0.044f, plainMaterial.GetFloat("_TerrainNormalStrength"), 0.0001f);
+            Assert.AreEqual(0f, plainMaterial.GetFloat("_TextureStrength"), 0.0001f);
+            Assert.AreEqual(0f, plainMaterial.GetFloat("_MacroStrength"), 0.0001f);
+            Assert.AreEqual(0f, plainMaterial.GetFloat("_TextureColorBlend"), 0.0001f);
+            Assert.AreEqual(0f, plainMaterial.GetFloat("_TerrainNormalStrength"), 0.0001f);
         }
         finally
         {
@@ -1031,6 +1031,50 @@ public class TerrainRenderingTests
     }
 
     [Test]
+    public void CivStyleCamera_ZoomClampsAndFocusTargetClampsToMapGround()
+    {
+        GameObject root = new GameObject("CivCameraContractTest");
+        TerrainRenderer renderer = root.AddComponent<TerrainRenderer>();
+        try
+        {
+            renderer.SetZoomLevel(-0.5f);
+            Assert.AreEqual(0f, renderer.ZoomLevel, 0.0001f);
+            renderer.SetZoomLevel(1.5f);
+            Assert.AreEqual(1f, renderer.ZoomLevel, 0.0001f);
+            renderer.SetZoomLevel(0.4f);
+            Assert.AreEqual(0.4f, renderer.ZoomLevel, 0.0001f);
+
+            const System.Reflection.BindingFlags detailFlags = System.Reflection.BindingFlags.Instance |
+                                                                System.Reflection.BindingFlags.NonPublic;
+            typeof(TerrainRenderer).GetField("currentZoom", detailFlags).SetValue(renderer, 0.1f);
+            Assert.AreEqual(TerrainRenderer.MapDetailLevel.Near, renderer.CurrentDetailLevel);
+            typeof(TerrainRenderer).GetField("currentZoom", detailFlags).SetValue(renderer, 0.30f);
+            Assert.AreEqual(TerrainRenderer.MapDetailLevel.Mid, renderer.CurrentDetailLevel);
+            typeof(TerrainRenderer).GetField("currentZoom", detailFlags).SetValue(renderer, 0.60f);
+            Assert.AreEqual(TerrainRenderer.MapDetailLevel.Far, renderer.CurrentDetailLevel);
+
+            WorldMap map = BuildMap(LandformType.Plain, LandformType.Plain);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
+                                                           System.Reflection.BindingFlags.NonPublic;
+            typeof(TerrainRenderer).GetField("map", flags).SetValue(renderer, map);
+            typeof(TerrainRenderer).GetField("targetPivot", flags)
+                .SetValue(renderer, new Vector3(-50f, 99f, 0.2f));
+            typeof(TerrainRenderer).GetMethod("ClampPivotToMap", flags)
+                .Invoke(renderer, null);
+            Vector3 target = renderer.TargetPivot;
+            Assert.GreaterOrEqual(target.x, 0f);
+            Assert.GreaterOrEqual(target.z, 0f);
+            Assert.AreEqual(TerrainMeshGenerator.StrategicSurfaceHeight(LandformType.Plain),
+                target.y, 0.0001f);
+        }
+        finally
+        {
+            renderer.Clear();
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
     public void Renderer_WorldMapVisualProfileUsesSketchCameraAndOperationalScale()
     {
         GameObject root = new GameObject("TerrainRendererVisualProfileTest");
@@ -1050,24 +1094,30 @@ public class TerrainRenderingTests
             Assert.AreEqual(12f, yaw, 0.0001f);
             Assert.AreEqual(12f, visibleHexes, 0.0001f);
             Assert.AreEqual(5f, minimumVisibleHexes, 0.0001f);
-            Assert.AreEqual(30f, ReadInternalFloat(renderer, "CameraFieldOfViewDegrees"), 0.0001f);
+            Assert.AreEqual(40f, ReadInternalFloat(renderer, "CameraFieldOfViewDegrees"), 0.0001f);
             Assert.AreEqual(45f, ReadInternalFloat(renderer, "NearFieldOfViewDegrees"), 0.0001f);
+            Assert.AreEqual(0.35f, renderer.ZoomLevel, 0.0001f);
+            Assert.AreEqual(40f, renderer.CameraPitchForZoom(0f), 0.0001f);
+            Assert.AreEqual(42f, renderer.CameraPitchForZoom(0.5f), 0.0001f);
+            Assert.AreEqual(45f, renderer.CameraPitchForZoom(1f), 0.0001f);
+            Assert.Greater(renderer.CameraHeightForZoom(1f),
+                renderer.CameraHeightForZoom(0f));
             Assert.AreEqual(45f, InvokeInternalFloat(renderer, "FieldOfViewForVisibleHexes", 5f), 0.0001f);
-            Assert.AreEqual(30f, InvokeInternalFloat(renderer, "FieldOfViewForVisibleHexes", 24f), 0.0001f);
+            Assert.AreEqual(40f, InvokeInternalFloat(renderer, "FieldOfViewForVisibleHexes", 24f), 0.0001f);
             Assert.AreEqual(55f, ReadInternalFloat(renderer, "CameraNearPitchDegrees"), 0.0001f);
             Assert.AreEqual(45f, ReadInternalFloat(renderer, "CameraFarPitchDegrees"), 0.0001f);
             Assert.AreEqual(16f, ReadInternalFloat(renderer, "CameraCurveMaxVisibleHexes"), 0.0001f);
-            Assert.AreEqual(0.0035f, ReadInternalFloat(renderer, "NearRadialCurvature"), 0.0001f);
+            Assert.AreEqual(0f, ReadInternalFloat(renderer, "NearRadialCurvature"), 0.0001f);
             Assert.AreEqual(0.82f, ReadInternalFloat(renderer, "GroundTextureStrength"), 0.0001f);
             Assert.AreEqual(1.55f, ReadInternalFloat(renderer, "GroundTextureContrast"), 0.0001f);
             Assert.AreEqual(0.46f, ReadInternalFloat(renderer, "GroundTextureTiling"), 0.0001f);
-            Assert.AreEqual(0.16f, ReadInternalFloat(renderer, "GroundMacroStrength"), 0.0001f);
-            Assert.AreEqual(0.065f, ReadInternalFloat(renderer, "GroundMacroScale"), 0.0001f);
+            Assert.AreEqual(0.22f, ReadInternalFloat(renderer, "GroundMacroStrength"), 0.0001f);
+            Assert.AreEqual(0.055f, ReadInternalFloat(renderer, "GroundMacroScale"), 0.0001f);
             Assert.AreEqual(0.10f, ReadInternalFloat(renderer, "GroundTextureColorBlend"), 0.0001f);
             Assert.AreEqual(0.55f, ReadInternalFloat(renderer, "GroundNormalStrength"), 0.0001f);
             Assert.AreEqual(2, ReadInternalInt(renderer, "ContinuousSurfaceSubdivisions"));
             Assert.AreEqual(1f, ReadInternalFloat(renderer, "TerrainReliefScale"), 0.0001f);
-            Assert.AreEqual(400f / 180f, ReadInternalFloat(renderer, "NearFogStartHeightFactor"), 0.0001f);
+            Assert.AreEqual(5.5f, ReadInternalFloat(renderer, "NearFogStartHeightFactor"), 0.0001f);
             Assert.AreEqual(1300f / 880f, ReadInternalFloat(renderer, "FarFogStartHeightFactor"), 0.0001f);
             Assert.AreEqual(55f, InvokeInternalFloat(renderer, "CameraPitchForVisibleHexes", 5f), 0.0001f);
             Assert.AreEqual(45f, InvokeInternalFloat(renderer, "CameraPitchForVisibleHexes", 16f), 0.0001f);
@@ -1085,7 +1135,7 @@ public class TerrainRenderingTests
             InvokeInternalVoidFloat(renderer, "SetNearFieldOfView", 90f);
             Assert.AreEqual(70f, ReadInternalFloat(renderer, "NearFieldOfViewDegrees"), 0.0001f);
             Assert.AreEqual(70f, InvokeInternalFloat(renderer, "FieldOfViewForVisibleHexes", 5f), 0.0001f);
-            Assert.AreEqual(30f, InvokeInternalFloat(renderer, "FieldOfViewForVisibleHexes", 24f), 0.0001f);
+            Assert.AreEqual(40f, InvokeInternalFloat(renderer, "FieldOfViewForVisibleHexes", 24f), 0.0001f);
             InvokeInternalVoidFloat(renderer, "SetNearFieldOfView", 45f);
             InvokeInternalVoidFloat(renderer, "SetNearRadialCurvature", 0.03f);
             Assert.AreEqual(0.02f, ReadInternalFloat(renderer, "NearRadialCurvature"), 0.0001f);

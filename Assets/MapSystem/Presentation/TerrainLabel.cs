@@ -12,6 +12,8 @@ namespace Cultivation4X.WorldMap
         private TextMesh textMesh;
         private Material ownedMaterial;
         private bool flatOnPlane;
+        private bool yAxisBillboard;
+        private bool groundFixed;
 
         public void Set(string text, Color color)
         {
@@ -21,7 +23,28 @@ namespace Cultivation4X.WorldMap
         }
 
         /// <summary>平铺在地图平面上（区域名使用）；否则每帧朝向相机。</summary>
-        public void SetFlat(bool flat) => flatOnPlane = flat;
+        public void SetFlat(bool flat)
+        {
+            flatOnPlane = flat;
+            yAxisBillboard = false;
+            groundFixed = false;
+        }
+
+        /// <summary>只绕 Y 轴朝向相机，不上下倾斜（世界空间区域名推荐）。</summary>
+        public void SetYAxisBillboard(bool enabled)
+        {
+            yAxisBillboard = enabled;
+            flatOnPlane = false;
+            groundFixed = false;
+        }
+
+        /// <summary>完全固定贴在地面上，像印在地表的名字，不随相机旋转。</summary>
+        public void SetGroundFixed(bool enabled)
+        {
+            groundFixed = enabled;
+            flatOnPlane = false;
+            yAxisBillboard = false;
+        }
 
         public void SetCharacterSize(float size)
         {
@@ -30,6 +53,8 @@ namespace Cultivation4X.WorldMap
         }
 
         public bool IsFlat => flatOnPlane;
+        public bool IsYAxisBillboard => yAxisBillboard;
+        public bool IsGroundFixed => groundFixed;
 
         private void EnsureMesh()
         {
@@ -54,6 +79,22 @@ namespace Cultivation4X.WorldMap
         {
             Camera camera = Camera.main;
             if (camera == null) return;
+            if (groundFixed)
+            {
+                // 完全锁死，像印在地表上的字。
+                transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                transform.localScale = Vector3.one;
+                return;
+            }
+            if (yAxisBillboard)
+            {
+                Vector3 lookPosition = camera.transform.position - transform.position;
+                lookPosition.y = 0f;
+                transform.localScale = Vector3.one;
+                if (lookPosition.sqrMagnitude > 0.01f)
+                    transform.rotation = Quaternion.LookRotation(-lookPosition);
+                return;
+            }
             if (flatOnPlane)
             {
                 transform.rotation = Quaternion.Euler(-90f, 0f, 0f);

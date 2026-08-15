@@ -23,7 +23,8 @@ Shader "Cultivation4X/StrategicTerrain"
         _TextureColorBlend ("Authored Texture Color Blend", Range(0,0.5)) = 0.12
         _Brightness ("Brightness", Range(0.75,1.35)) = 1.08
         _LinearColorLift ("Linear Color Lift", Range(0,1)) = 0.30
-        _TerrainLightingStrength ("Terrain Lighting Strength", Range(0,1)) = 0.85
+        _Saturation ("Saturation", Range(0,1)) = 0.78
+        _TerrainLightingStrength ("Terrain Lighting Strength", Range(0,1)) = 0.72
     }
     SubShader
     {
@@ -56,9 +57,14 @@ Shader "Cultivation4X/StrategicTerrain"
         float _TextureColorBlend;
         float _Brightness;
         float _LinearColorLift;
+        float _Saturation;
         float _TerrainLightingStrength;
         float3 _WorldMapCurveOrigin;
         float _WorldMapCurveStrength;
+        float _TerrainDistanceFadeStart;
+        float _TerrainDistanceFadeEnd;
+        fixed4 _TerrainDistanceFadeColor;
+        float _TerrainDistanceFadeStrength;
 
         struct Input
         {
@@ -170,6 +176,17 @@ Shader "Cultivation4X/StrategicTerrain"
                     terrainWeights.x * 0.72 + soilExposure * 0.12));
             biomeTextured = lerp(biomeTextured, authoredTextured, localTextureColorBlend);
             biomeTextured = lerp(biomeTextured, textureColor, _TextureOnly);
+
+            // 低饱和哑光：颜色向亮度靠拢，避免“塑料草绿”。
+            float terrainLuminance = dot(biomeTextured, fixed3(0.299, 0.587, 0.114));
+            biomeTextured = lerp(fixed3(terrainLuminance, terrainLuminance, terrainLuminance),
+                biomeTextured, _Saturation);
+
+            // 大气透视：距离越远越向雾色靠拢。
+            float viewDistance = distance(input.worldPos, _WorldSpaceCameraPos);
+            float distanceFade = smoothstep(_TerrainDistanceFadeStart, _TerrainDistanceFadeEnd,
+                viewDistance) * saturate(_TerrainDistanceFadeStrength);
+            biomeTextured = lerp(biomeTextured, _TerrainDistanceFadeColor.rgb, distanceFade);
 
             float litWeight = saturate(_TerrainLightingStrength);
             output.Albedo = biomeTextured * litWeight;

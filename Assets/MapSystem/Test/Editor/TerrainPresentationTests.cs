@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Cultivation4X.WorldMap;
 using NUnit.Framework;
 using UnityEngine;
@@ -260,10 +261,10 @@ public class TerrainPresentationTests
                 .Any(textMesh => textMesh.text == "苍梧山脉"));
             foreach (TerrainLabel label in root.GetComponentsInChildren<TerrainLabel>())
             {
-                Assert.IsTrue(label.IsFlat);
+                Assert.IsTrue(label.IsGroundFixed);
                 Assert.Greater(label.GetComponent<TextMesh>().characterSize, 0.2f);
             }
-            Assert.Greater(root.GetComponentsInChildren<TerrainLabel>()[0].transform.position.y, 0.6f);
+            Assert.Greater(root.GetComponentsInChildren<TerrainLabel>()[0].transform.position.y, 0.2f);
 
             renderer.SetLabelsActive(false);
             foreach (Transform child in root.transform)
@@ -915,6 +916,62 @@ public class TerrainPresentationTests
             UnityEngine.Object.DestroyImmediate(nameRoot);
             UnityEngine.Object.DestroyImmediate(overlayRoot);
         }
+    }
+
+    [Test]
+    public void ColorForCell_DistinguishesBuildableMountainPlateau()
+    {
+        WorldCell ordinary = Cell(0, LandformType.Mountain, BiomeType.Alpine);
+        WorldCell plateau = Cell(1, LandformType.Mountain, BiomeType.Alpine);
+        plateau.isBuildable = true;
+
+        Color ordinaryColor = TerrainPresentationModels.ColorForCell(ordinary);
+        Color plateauColor = TerrainPresentationModels.ColorForCell(plateau);
+
+        Assert.AreNotEqual(ordinaryColor, plateauColor, "台地必须与普通山地有颜色差异");
+        Assert.Greater(plateauColor.r, ordinaryColor.r, "台地应更暖");
+        Assert.Less(plateauColor.b, ordinaryColor.b, "台地应更暖");
+    }
+
+    [Test]
+    public void LandformFillColor_UsesUnifiedWarmPlateauTone()
+    {
+        MethodInfo method = typeof(WorldMapPresenter).GetMethod("LandformFillColor",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.IsNotNull(method);
+
+        WorldCell ordinaryAlpine = Cell(0, LandformType.Mountain, BiomeType.Alpine);
+        WorldCell plateauAlpine = Cell(1, LandformType.Mountain, BiomeType.Alpine);
+        plateauAlpine.isBuildable = true;
+        WorldCell plateauSnowfield = Cell(2, LandformType.Mountain, BiomeType.Snowfield);
+        plateauSnowfield.isBuildable = true;
+
+        Color ordinaryColor = (Color)method.Invoke(null, new object[] { ordinaryAlpine });
+        Color alpinePlateauColor = (Color)method.Invoke(null, new object[] { plateauAlpine });
+        Color snowfieldPlateauColor = (Color)method.Invoke(null, new object[] { plateauSnowfield });
+
+        Assert.AreNotEqual(ordinaryColor, alpinePlateauColor, "2D 台地色必须区别于普通山地");
+        Assert.AreEqual(alpinePlateauColor, snowfieldPlateauColor,
+            "2D 台地必须使用统一暖岩色，不受 Alpine/Snowfield 群系染色影响");
+    }
+
+    [Test]
+    public void IsSelectablePlateau_AcceptsOnlyBuildableMountain()
+    {
+        MethodInfo method = typeof(WorldMapPresenter).GetMethod("IsSelectablePlateau",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.IsNotNull(method);
+
+        WorldCell plateau = Cell(0, LandformType.Mountain, BiomeType.Alpine);
+        plateau.isBuildable = true;
+        WorldCell ordinaryMountain = Cell(1, LandformType.Mountain, BiomeType.Alpine);
+        WorldCell buildablePlain = Cell(2, LandformType.Plain, BiomeType.Grassland);
+        buildablePlain.isBuildable = true;
+
+        Assert.IsTrue((bool)method.Invoke(null, new object[] { plateau }));
+        Assert.IsFalse((bool)method.Invoke(null, new object[] { ordinaryMountain }));
+        Assert.IsFalse((bool)method.Invoke(null, new object[] { buildablePlain }));
+        Assert.IsFalse((bool)method.Invoke(null, new object[] { null }));
     }
 
     private static bool PointInTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)

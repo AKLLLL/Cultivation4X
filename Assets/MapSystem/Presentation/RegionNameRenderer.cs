@@ -42,17 +42,16 @@ namespace Cultivation4X.WorldMap
                 Vector2 center = TerrainMeshGenerator.HexCenter(centerCell.coord);
                 GameObject labelObject = new GameObject("RegionLabel_" + region.regionId);
                 labelObject.transform.SetParent(transform, false);
-                // 区域名印在地形表面（跟随区域中心地形高度），不浮空。
+                // 固定锚在区域中心格子的实际表现地表高度，不随相机俯仰上下浮动。
+                float groundHeight = TerrainRenderer.PresentationSurfaceHeight(map, centerCell);
                 labelObject.transform.position =
-                    new Vector3(center.x,
-                        TerrainPresentationModels.RegionOverlayBaseHeight(map, region) + labelHeightOffset,
-                        center.y);
+                    new Vector3(center.x, groundHeight + labelHeightOffset, center.y);
                 TerrainLabel label = labelObject.AddComponent<TerrainLabel>();
                 string text = string.IsNullOrEmpty(region.regionName)
                     ? TerrainPresentationModels.RegionLabel(region.regionType)
                     : region.regionName;
                 label.Set(text, TerrainPresentationModels.ColorForRegion(region.regionType));
-                label.SetFlat(true);
+                label.SetGroundFixed(true);
                 label.SetCharacterSize(0.22f);
                 labels.Add(labelObject);
             }
@@ -84,12 +83,18 @@ namespace Cultivation4X.WorldMap
                 SetLabelsActive(false);
                 return;
             }
-            float hexes = TerrainPresentationModels.VisibleHexesAcross(Camera.main);
-            bool showFar = WorldMap3DPresentationPolicy.ShowRegionLabels(
-                WorldMap3DPresentationPolicy.GetZoomTier(hexes));
+            Camera camera = Camera.main;
+            if (camera == null)
+            {
+                SetLabelsActive(false);
+                return;
+            }
+            // 只在远景层显示区域名；中景/近景交给地形、图标与详情表现。
+            bool showFar = TerrainRenderer.ActiveDetailLevel == TerrainRenderer.MapDetailLevel.Far;
             SetLabelsActive(showFar);
             if (showFar)
             {
+                float hexes = TerrainPresentationModels.VisibleHexesAcross(camera);
                 // 字号随缩放自适应但保持克制：最远约半格宽，不会糊满地图。
                 float size = Mathf.Clamp(hexes * 0.004f, 0.25f, 0.6f);
                 foreach (GameObject labelObject in labels)
