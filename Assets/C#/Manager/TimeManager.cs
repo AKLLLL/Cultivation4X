@@ -53,22 +53,33 @@ public class TimeManager : MonoBehaviour
             Debug.LogWarning($"无法结束今天: {reason}");
             return;
         }
-        DayStartSnapshot before = CaptureDayStart();
-        CurrentDay++;
-        isAdvancingDay = true;
+        try
+        {
+            DayStartSnapshot before = CaptureDayStart();
+            CurrentDay++;
+            isAdvancingDay = true;
 
-        Debug.Log($"今天是第 {CurrentDay} 天");
+            Debug.Log($"今天是第 {CurrentDay} 天");
 
-        // 固定顺序：角色恢复/修炼 -> 任务推进 -> 外部威胁 -> 事件抽取 -> 结算 -> 自动保存。
-        NPCManager.Instance?.OnDayPassed();
-        Cultivation4X.WorldMap.WorldMapContentEffects.ApplyDaily(CurrentDay);
-        OnDayPassed?.Invoke(CurrentDay);
-        ExternalThreatRules.ProcessDay(CurrentDay);
-        EventManager.Instance?.ProcessDay(CurrentDay);
-        isAdvancingDay = false;
-        UnreadDaySettlement = BuildSettlement(before);
-        SaveManager.Instance?.AutoSave();
-        OnDaySettlementReady?.Invoke(UnreadDaySettlement);
+            // 固定顺序：角色恢复/修炼 -> 任务推进 -> 外部威胁 -> 事件抽取 -> 结算 -> 自动保存。
+            NPCManager.Instance?.OnDayPassed();
+            Cultivation4X.WorldMap.WorldMapContentEffects.ApplyDaily(CurrentDay);
+            OnDayPassed?.Invoke(CurrentDay);
+            ExternalThreatRules.ProcessDay(CurrentDay);
+            EventManager.Instance?.ProcessDay(CurrentDay);
+            isAdvancingDay = false;
+            UnreadDaySettlement = BuildSettlement(before);
+            SaveManager.Instance?.AutoSave();
+            OnDaySettlementReady?.Invoke(UnreadDaySettlement);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError($"结束今天失败: {exception}");
+        }
+        finally
+        {
+            isAdvancingDay = false;
+        }
     }
 
     public void RecordFacilityUpgrade(FacilityType facility, int newLevel)

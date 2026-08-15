@@ -211,6 +211,13 @@ public class Mission
             return;
         }
 
+        if (!PreflightEffects(option))
+        {
+            // 效果预检失败：不执行任何效果，任务保持等待并重新弹出节点面板展示原因。
+            MissionManager.Instance?.OnMissionNodeTriggered(this);
+            return;
+        }
+
         if (!ApplyEffects(option))
         {
             // 效果执行失败（如物品不足）：不结算任务、不关闭选择，重新弹出节点面板并展示原因。
@@ -257,6 +264,93 @@ public class Mission
         return true;
 
     }
+    // 效果预检；用仓库物品投影按效果顺序模拟 RemoveItem/AddItem，不修改真实数据。
+    private bool PreflightEffects(
+    MissionOptionData option)
+    {
+        if (option.effects == null)
+            return true;
+
+        WarehouseManager warehouse = WarehouseManager.Instance;
+        if (warehouse == null)
+        {
+            foreach (MissionEffectData effect in option.effects)
+            {
+                if (effect == null)
+                {
+                    NodeFailureReason = "节点效果配置无效";
+                    return false;
+                }
+                if (effect.type == "RemoveItem" || effect.type == "AddItem")
+                {
+                    NodeFailureReason = "仓库系统尚未初始化，无法执行节点效果";
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        System.Collections.Generic.Dictionary<string, int> projection =
+            new System.Collections.Generic.Dictionary<string, int>();
+        foreach (ItemStack item in warehouse.warehouseData == null
+            ? new System.Collections.Generic.List<ItemStack>()
+            : warehouse.warehouseData.items)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(item.itemId) || item.count <= 0)
+                continue;
+            projection.TryGetValue(item.itemId, out int current);
+            projection[item.itemId] = current + item.count;
+        }
+
+        foreach (MissionEffectData effect in option.effects)
+        {
+            if (effect == null)
+            {
+                NodeFailureReason = "节点效果配置无效";
+                return false;
+            }
+
+            if (effect.type == "RemoveItem")
+            {
+                if (string.IsNullOrWhiteSpace(effect.itemId) || effect.count <= 0 ||
+                    !projection.TryGetValue(effect.itemId, out int available) || available < effect.count)
+                {
+                    NodeFailureReason = $"材料不足，无法执行：{effect.itemId}";
+                    return false;
+                }
+                available -= effect.count;
+                if (available <= 0) projection.Remove(effect.itemId);
+                else projection[effect.itemId] = available;
+            }
+            else if (effect.type == "AddItem")
+            {
+                if (string.IsNullOrWhiteSpace(effect.itemId) || effect.count <= 0)
+                {
+                    NodeFailureReason = $"仓库无法添加物品：{effect.itemId} x {effect.count}";
+                    return false;
+                }
+                if (ItemDatabase.Instance != null && ItemDatabase.Instance.GetItem(effect.itemId) == null)
+                {
+                    NodeFailureReason = $"仓库无法添加未知物品：{effect.itemId}";
+                    return false;
+                }
+                projection.TryGetValue(effect.itemId, out int available);
+                if (available <= 0)
+                {
+                    int level = PlayerManager.Instance == null ? 1 :
+                        PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse);
+                    if (projection.Count >= FacilityRules.WarehouseSlots(level))
+                    {
+                        NodeFailureReason = $"仓库容量不足，无法添加物品：{effect.itemId}";
+                        return false;
+                    }
+                }
+                projection[effect.itemId] = available + effect.count;
+            }
+        }
+
+        return true;
+    }
     //效果执行；返回是否全部成功。
     private bool ApplyEffects(
     MissionOptionData option)
@@ -295,10 +389,15 @@ public class Mission
                 //获得物品
                 case "AddItem":
 
-                    WarehouseManager.Instance.AddItem(
+                    if (!WarehouseManager.Instance.TryAddItem(
                         effect.itemId,
                         effect.count
-                    );
+                    ))
+                    {
+                        Debug.LogWarning($"任务效果失败，无法添加物品: {effect.itemId} x {effect.count}");
+                        NodeFailureReason = $"仓库无法添加物品：{effect.itemId} x {effect.count}";
+                        return false;
+                    }
 
                     Debug.Log(
                     $"获得物品:{effect.itemId} x {effect.count}"
@@ -377,6 +476,12 @@ public class Mission
 
         CurrentNode = null;
         CheckNode();
+
+        if (State == MissionState.Active && RemainingDays <= 0)
+        {
+            MissionManager.Instance.EvaluateMission(this);
+            return;
+        }
 
     }
     /// <summary>

@@ -83,10 +83,16 @@ public class ExternalThreatPanel : MonoBehaviour
         ActiveThreatState threat = ExternalThreatRules.GetState();
         bool visible = threat != null &&
             (threat.status == ExternalThreatStatus.Active || threat.status == ExternalThreatStatus.Resolved);
-        if (launcher.gameObject.activeSelf) launcher.gameObject.SetActive(false);
         if (visible)
+        {
             launcher.GetComponentInChildren<TMP_Text>().text =
                 threat.status == ExternalThreatStatus.Resolved ? "上次威胁记录" : "外部威胁：青石村";
+            if (!launcher.gameObject.activeSelf) launcher.gameObject.SetActive(true);
+        }
+        else if (launcher.gameObject.activeSelf)
+        {
+            launcher.gameObject.SetActive(false);
+        }
     }
 
     private void Open()

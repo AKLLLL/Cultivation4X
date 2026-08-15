@@ -44,14 +44,22 @@ public class SaveManager : MonoBehaviour
         }
         else
         {
-            int seed = unchecked(Environment.TickCount ^ DateTime.UtcNow.Millisecond);
-            PlayerManager.Instance?.InitializeNewFoundingGame(seed);
-            NPCManager.Instance?.ClearCharacters();
-            if (WarehouseManager.Instance != null) WarehouseManager.Instance.warehouseData = new WarehouseData();
-            MissionManager.Instance?.RestoreDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-                new System.Collections.Generic.List<string>());
-            LoadedExistingSave = false;
-            Save();
+            try
+            {
+                int seed = unchecked(Environment.TickCount ^ DateTime.UtcNow.Millisecond);
+                PlayerManager.Instance?.InitializeNewFoundingGame(seed);
+                NPCManager.Instance?.ClearCharacters();
+                if (WarehouseManager.Instance != null) WarehouseManager.Instance.warehouseData = new WarehouseData();
+                MissionManager.Instance?.RestoreDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                    new System.Collections.Generic.List<string>());
+                LoadedExistingSave = false;
+                Save();
+            }
+            catch (Exception exception)
+            {
+                InitializationFailed = true;
+                Debug.LogError($"初始化新存档失败: {exception}");
+            }
         }
         IsInitializationComplete = true;
         OnInitializationCompleted?.Invoke(LoadedExistingSave);
@@ -98,6 +106,11 @@ public class SaveManager : MonoBehaviour
 
     public void Save()
     {
+        if (InitializationFailed)
+        {
+            Debug.LogWarning("存档初始化失败，已阻止覆盖存档");
+            return;
+        }
         try
         {
             string json = JsonConvert.SerializeObject(CaptureState(), Formatting.Indented);
