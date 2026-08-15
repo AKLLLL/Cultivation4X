@@ -116,7 +116,7 @@ namespace Cultivation4X.WorldMap
         public float deepWaterThreshold = 0.31f;
         public float seaLevel = 0.43f;
         public float plainUpperThreshold = 0.57f;
-        public float hillUpperThreshold = 0.75f;
+        public float hillUpperThreshold = 0.635f;
 
         public TerrainGenerationParameters Clone() => new TerrainGenerationParameters
         {
@@ -130,7 +130,7 @@ namespace Cultivation4X.WorldMap
     [Serializable]
     public class ClimateGenerationParameters
     {
-        public float latitudeCoolingStrength = 0.78f;
+        public float latitudeCoolingStrength = 0.94f;
         public float temperatureNoiseStrength = 0.25f;
         public float elevationCoolingStrength = 0.9f;
         public float moistureNoiseStrength = 0.75f;

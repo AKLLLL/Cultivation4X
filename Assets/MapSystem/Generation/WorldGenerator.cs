@@ -114,18 +114,129 @@ namespace Cultivation4X.WorldMap
             {
                 int effectiveSeed = SeedDerivation.Derive(snapshot.seed, "attempt-" + attempt);
                 WorldMap map = CreateEmptyMap(snapshot, effectiveSeed);
-                TerrainGenerator.Generate(map, SeedDerivation.Derive(effectiveSeed, "terrain"),
-                    snapshot.terrain, snapshot.climate);
+                int terrainSeed = SeedDerivation.Derive(effectiveSeed, "terrain");
+                TerrainGenerator.Generate(map, terrainSeed, snapshot.terrain, snapshot.climate);
                 RiverGenerator.Generate(map, snapshot.rivers, snapshot.climate.riverMoistureBoost);
+                TerrainGenerator.RelaxMoistureField(map, 8);
+                foreach (WorldCell cell in map.cells) TerrainGenerator.ClassifyBiome(cell);
+                TerrainGenerator.LimitDesertCoverage(map, 0.04f, terrainSeed);
+                WorldGenerationDiagnosticsStore.FinalizeMap(map);
                 SpiritVeinGenerator.Generate(map, SeedDerivation.Derive(effectiveSeed, "spirit-veins"),
                     snapshot.spiritVeins);
                 SpiritCalculator.Calculate(map);
                 WorldMapRegionRules.Assign(map);
+                AssignMountainTerraces(map);
                 ExplorationRegionMapper.Assign(map);
                 if (map.cells.Any(cell => cell.isBuildable)) return map;
             }
             throw new InvalidOperationException("连续四次生成均未找到合法洞府选址。");
         }
+
+        private static void AssignMountainTerraces(WorldMap map)
+        {
+            if (map?.cells == null || map.regions == null ||
+                !WorldGenerationDiagnosticsStore.TryGet(map,
+                    out WorldGenerationDiagnostics diagnostics) ||
+                diagnostics.mountainRidgeCore.Length != map.cells.Length ||
+                diagnostics.mountainPeaks.Length != map.cells.Length ||
+                diagnostics.mountainPasses.Length != map.cells.Length ||
+                diagnostics.terrainSlope.Length != map.cells.Length)
+                return;
+
+            TerrainGenerationParameters terrain = map.generationSettings?.terrain ??
+                                                  new TerrainGenerationParameters();
+            float targetHeight = terrain.hillUpperThreshold +
+                                 (0.86f - terrain.hillUpperThreshold) * 0.42f;
+            foreach (MapRegionData region in map.regions
+                         .Where(item => item != null && item.regionType == MapRegionType.MountainRange &&
+                                        item.cellIndices != null && item.cellIndices.Count >= 8)
+                         .OrderBy(item => item.regionId, StringComparer.Ordinal))
+            {
+                HashSet<int> candidates = new HashSet<int>(region.cellIndices.Where(index =>
+                {
+                    WorldCell cell = map.cells[index];
+                    return cell != null && cell.landform == LandformType.Mountain &&
+                           cell.internalPositionTag == MapInternalPositionTag.Mountainside &&
+                           !diagnostics.mountainRidgeCore[index] &&
+                           !diagnostics.mountainPeaks[index] &&
+                           !diagnostics.mountainPasses[index] &&
+                           diagnostics.terrainSlope[index] <= 0.16f &&
+                           cell.height > terrain.hillUpperThreshold && cell.height <= 0.88f;
+                }));
+                if (candidates.Count < 2) continue;
+
+                List<List<int>> components = CollectTerraceComponents(map, candidates);
+                List<int> component = components.Where(item => item.Count >= 2)
+                    .OrderBy(item => item.Average(index => diagnostics.terrainSlope[index]))
+                    .ThenBy(item => item.Min(index => StableTerraceOrder(map, region, index)))
+                    .FirstOrDefault();
+                if (component == null) continue;
+
+                int seed = component.OrderBy(index => diagnostics.terrainSlope[index])
+                    .ThenBy(index => Math.Abs(map.cells[index].height - targetHeight))
+                    .ThenBy(index => StableTerraceOrder(map, region, index))
+                    .First();
+                int desiredSize = 2 + (int)((uint)StableTerraceOrder(map, region, seed) % 3u);
+                List<int> terrace = GrowTerraceCluster(map, component, seed, desiredSize,
+                    diagnostics.terrainSlope, targetHeight, region);
+                if (terrace.Count < 2) continue;
+                foreach (int index in terrace) map.cells[index].isBuildable = true;
+            }
+        }
+
+        private static List<List<int>> CollectTerraceComponents(WorldMap map, HashSet<int> candidates)
+        {
+            var result = new List<List<int>>();
+            var remaining = new HashSet<int>(candidates);
+            while (remaining.Count > 0)
+            {
+                int start = remaining.Min();
+                var component = new List<int>();
+                var queue = new Queue<int>();
+                remaining.Remove(start);
+                queue.Enqueue(start);
+                while (queue.Count > 0)
+                {
+                    int current = queue.Dequeue();
+                    component.Add(current);
+                    foreach (int neighbor in map.GetNeighborIndices(current))
+                    {
+                        if (!remaining.Remove(neighbor)) continue;
+                        queue.Enqueue(neighbor);
+                    }
+                }
+                component.Sort();
+                result.Add(component);
+            }
+            return result;
+        }
+
+        private static List<int> GrowTerraceCluster(WorldMap map, List<int> component, int seed,
+            int desiredSize, float[] slopes, float targetHeight, MapRegionData region)
+        {
+            var allowed = new HashSet<int>(component);
+            var selected = new List<int> { seed };
+            var selectedSet = new HashSet<int> { seed };
+            while (selected.Count < desiredSize)
+            {
+                int next = selected.SelectMany(index => map.GetNeighborIndices(index))
+                    .Where(index => allowed.Contains(index) && !selectedSet.Contains(index))
+                    .Distinct()
+                    .OrderBy(index => slopes[index])
+                    .ThenBy(index => Math.Abs(map.cells[index].height - targetHeight))
+                    .ThenBy(index => StableTerraceOrder(map, region, index))
+                    .DefaultIfEmpty(-1).First();
+                if (next < 0) break;
+                selected.Add(next);
+                selectedSet.Add(next);
+            }
+            selected.Sort();
+            return selected;
+        }
+
+        private static int StableTerraceOrder(WorldMap map, MapRegionData region, int index) =>
+            SeedDerivation.Derive(map.effectiveSeed,
+                $"mountain-terrace-{region.regionId}-{index}");
 
         private static WorldMap CreateEmptyMap(MapGenerationSettings settings, int effectiveSeed)
         {
@@ -151,9 +262,28 @@ namespace Cultivation4X.WorldMap
 
     public static class TerrainGenerator
     {
+        internal const float DesertMoistureThreshold = 0.18f;
+        private static readonly float[] BiomeTemperatureBreaks =
+            { 0.17f, 0.32f, 0.40f, 0.48f, 0.58f, 0.68f };
+        private static readonly float[] BiomeMoistureBreaks =
+            { 0.18f, 0.20f, 0.40f, 0.42f, 0.58f, 0.60f };
+        private static readonly BiomeType[,] LandBiomeMatrix =
+        {
+            // moisture: <.18       <.20       <.40       <.42       <.58       <.60       >=.60
+            { BiomeType.Snowfield,  BiomeType.Snowfield, BiomeType.Snowfield, BiomeType.Snowfield, BiomeType.Snowfield, BiomeType.Snowfield,       BiomeType.Snowfield },
+            { BiomeType.Tundra,     BiomeType.Tundra,    BiomeType.Tundra,    BiomeType.Tundra,    BiomeType.Tundra,    BiomeType.TemperateForest, BiomeType.TemperateForest },
+            { BiomeType.Tundra,     BiomeType.Tundra,    BiomeType.Tundra,    BiomeType.Tundra,    BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.TemperateForest },
+            { BiomeType.Grassland,  BiomeType.Grassland, BiomeType.Grassland, BiomeType.Grassland, BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.TemperateForest },
+            { BiomeType.Grassland,  BiomeType.Grassland, BiomeType.Grassland, BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.TemperateForest },
+            { BiomeType.Desert,     BiomeType.Grassland, BiomeType.Grassland, BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.TemperateForest },
+            { BiomeType.Desert,     BiomeType.Desert,    BiomeType.Grassland, BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.TemperateForest, BiomeType.Rainforest }
+        };
+
         public static void Generate(WorldMap map, int seed, TerrainGenerationParameters terrain,
             ClimateGenerationParameters climate)
         {
+            float[] baseHeights = new float[map.cells.Length];
+            float[] mountainPotential = new float[map.cells.Length];
             foreach (WorldCell cell in map.cells)
             {
                 float x = cell.coord.col / (float)(map.width - 1);
@@ -163,21 +293,39 @@ namespace Cultivation4X.WorldMap
                 float nx = x + warpX * 0.14f;
                 float ny = y + warpY * 0.14f;
                 float broad = Noise.Fractal(nx * 5.2f, ny * 5.2f, seed ^ 0x632be59b, 5);
-                float ridged = 1f - Math.Abs(Noise.Fractal(nx * 9.5f, ny * 9.5f, seed ^ 0x1b873593, 4) * 2f - 1f);
+                float ridged = 1f - Math.Abs(Noise.Fractal(nx * 9.5f, ny * 9.5f,
+                    seed ^ 0x1b873593, 4) * 2f - 1f);
                 float localDetail = Noise.Fractal(nx * 14f, ny * 14f, seed ^ 0x4cf5ad2, 3) - 0.5f;
                 float dx = (x - 0.5f) / 0.72f;
                 float dy = (y - 0.5f) / 0.66f;
                 float edge = Math.Max(0f, 1f - (float)Math.Sqrt(dx * dx + dy * dy));
+                // The continental field deliberately stays broad and quiet. Mountains are added
+                // later from an explicit peak/ridge skeleton instead of being hidden in noise.
                 cell.height = Clamp01(broad * 0.50f + ridged * 0.18f + localDetail * 0.18f +
                                       edge * 0.40f - 0.13f);
+                baseHeights[cell.index] = cell.height;
+
+                float province = Noise.Fractal(nx * 3.1f + 17.3f, ny * 3.1f - 9.1f,
+                    seed ^ 0x6d2b79f5, 4);
+                float ridgeGuide = 1f - Math.Abs(Noise.Fractal(nx * 7.2f - 3.7f, ny * 7.2f + 11.9f,
+                    seed ^ 0x27d4eb2d, 3) * 2f - 1f);
+                mountainPotential[cell.index] = Clamp01(province * 0.62f + ridgeGuide * 0.30f +
+                    Math.Max(0f, cell.height - terrain.seaLevel) * 0.45f);
             }
+
+            MountainField mountainField = BuildMountainField(map, seed, terrain, baseHeights,
+                mountainPotential);
             foreach (WorldCell cell in map.cells)
             {
                 if (cell.height < terrain.deepWaterThreshold) cell.landform = LandformType.DeepWater;
                 else if (cell.height < terrain.seaLevel) cell.landform = LandformType.ShallowWater;
-                else if (cell.height < terrain.plainUpperThreshold) cell.landform = LandformType.Plain;
-                else if (cell.height < terrain.hillUpperThreshold) cell.landform = LandformType.Hill;
-                else cell.landform = LandformType.Mountain;
+                else if (mountainField.mountain[cell.index] && !mountainField.valley[cell.index] &&
+                         cell.height >= terrain.hillUpperThreshold)
+                    cell.landform = LandformType.Mountain;
+                else if (cell.height >= terrain.plainUpperThreshold ||
+                         mountainField.influence[cell.index] >= 0.08f)
+                    cell.landform = LandformType.Hill;
+                else cell.landform = LandformType.Plain;
             }
             foreach (WorldCell cell in map.cells)
             {
@@ -199,10 +347,526 @@ namespace Cultivation4X.WorldMap
                 float moistureNoise = Noise.Fractal(cell.coord.col * 0.095f, cell.coord.row * 0.095f,
                     seed ^ 0x165667b1, 4);
                 float coastalMoisture = 1f - Math.Min(waterDistance[cell.index], 6) / 6f;
-                cell.moisture = Clamp01(moistureNoise * climate.moistureNoiseStrength +
-                                        coastalMoisture * climate.waterProximityMoistureStrength);
-                ClassifyBiome(cell);
+                float continentalDryness = Clamp01((waterDistance[cell.index] - 4f) / 20f);
+                float aridityNoise = Noise.Fractal(cell.coord.col * 0.028f, cell.coord.row * 0.028f,
+                    seed ^ 0x7f4a7c15, 3);
+                float broadAridity = Clamp01((aridityNoise - 0.46f) / 0.32f);
+                // 距水纵深必须形成可感知的气候梯度；中尺度噪声只负责打散边界，
+                // 不能让深内陆仅凭一个高噪声采样就比湖岸更湿。
+                float noiseMoisture = 0.14f +
+                                      moistureNoise * climate.moistureNoiseStrength * 0.68f;
+                cell.moisture = Clamp01(noiseMoisture +
+                                        coastalMoisture * climate.waterProximityMoistureStrength -
+                                        continentalDryness * 0.13f - broadAridity * 0.06f);
             }
+            ApplyEastToWestRainShadow(map);
+            foreach (WorldCell cell in map.cells) ClassifyBiome(cell);
+        }
+
+        private sealed class MountainField
+        {
+            public readonly bool[] ridgeCore;
+            public readonly bool[] peak;
+            public readonly bool[] mountain;
+            public readonly bool[] valley;
+            public readonly float[] ridgeStrength;
+            public readonly float[] influence;
+
+            public MountainField(int count)
+            {
+                ridgeCore = new bool[count];
+                peak = new bool[count];
+                mountain = new bool[count];
+                valley = new bool[count];
+                ridgeStrength = new float[count];
+                influence = new float[count];
+            }
+        }
+
+        /// <summary>
+        /// 先选取成片的山系候选区，再在每个候选区内选峰、用最小生成树连接山脊，
+        /// 最后从峰脊向外衰减形成山体。所有中间结果都是生成期数组，WorldCell.height
+        /// 仍是气候、排水和表现层共用的唯一逻辑高度。
+        /// </summary>
+        private static MountainField BuildMountainField(WorldMap map, int seed,
+            TerrainGenerationParameters terrain, float[] baseHeights, float[] potential)
+        {
+            int count = map.cells.Length;
+            MountainField result = new MountainField(count);
+            bool[] candidate = new bool[count];
+            for (int index = 0; index < count; index++)
+                candidate[index] = baseHeights[index] >= terrain.seaLevel + 0.025f &&
+                                   potential[index] >= 0.50f;
+
+            int maximumSystems = Math.Max(1, Math.Min(4, count / 2800));
+            List<List<int>> provinces = ConnectedComponents(map, candidate)
+                .Where(component => component.Count >= 18)
+                .OrderByDescending(component => ProvinceScore(component, potential))
+                .ThenBy(component => component[0])
+                .Take(maximumSystems)
+                .ToList();
+
+            // Sparse seeds still need at least one coherent range. Use the strongest inland area
+            // as a fallback province, never a post-hoc quota of disconnected Mountain cells.
+            if (provinces.Count == 0)
+            {
+                int fallbackCenter = Enumerable.Range(0, count)
+                    .Where(index => baseHeights[index] >= terrain.seaLevel + 0.04f)
+                    .OrderByDescending(index => potential[index])
+                    .ThenBy(index => index)
+                    .FirstOrDefault();
+                List<int> fallback = Enumerable.Range(0, count)
+                    .Where(index => baseHeights[index] >= terrain.seaLevel + 0.02f &&
+                                    HexCoord.Distance(map.cells[index].coord,
+                                        map.cells[fallbackCenter].coord) <= 14)
+                    .ToList();
+                if (fallback.Count >= 2) provinces.Add(fallback);
+            }
+
+            float[] ridgeTarget = new float[count];
+            List<int> peakIndices = new List<int>();
+            foreach (List<int> province in provinces)
+            {
+                HashSet<int> provinceSet = new HashSet<int>(province);
+                List<int> peaks = SelectPeaks(map, province, potential, baseHeights);
+                if (peaks.Count < 2) continue;
+                peakIndices.AddRange(peaks);
+                foreach (int peak in peaks)
+                {
+                    result.ridgeCore[peak] = true;
+                    result.peak[peak] = true;
+                    ridgeTarget[peak] = Math.Max(ridgeTarget[peak],
+                        0.87f + potential[peak] * 0.10f);
+                }
+
+                foreach (Tuple<int, int> edge in MinimumSpanningTree(map, peaks, potential))
+                {
+                    List<int> path = TraceRidgePath(map, edge.Item1, edge.Item2, provinceSet,
+                        baseHeights, potential, terrain.seaLevel, seed);
+                    for (int position = 0; position < path.Count; position++)
+                    {
+                        int index = path[position];
+                        result.ridgeCore[index] = true;
+                        float along = path.Count <= 1 ? 0f : position / (float)(path.Count - 1);
+                        float endBlend = Math.Abs(along * 2f - 1f);
+                        float target = 0.72f + potential[index] * 0.09f + endBlend * 0.025f;
+                        ridgeTarget[index] = Math.Max(ridgeTarget[index], target);
+                    }
+
+                    // One controlled saddle per connection creates a readable pass without
+                    // globally smoothing the ridge into a rubber sheet.
+                    if (path.Count >= 7)
+                    {
+                        int middle = path.Count / 2;
+                        for (int offset = -1; offset <= 1; offset++)
+                        {
+                            int position = middle + offset;
+                            if (position <= 0 || position >= path.Count - 1) continue;
+                            int index = path[position];
+                            result.valley[index] = true;
+                            ridgeTarget[index] = Math.Min(ridgeTarget[index],
+                                terrain.hillUpperThreshold - 0.012f + Math.Abs(offset) * 0.012f);
+                        }
+                    }
+                }
+            }
+
+            List<int> ridgeSources = Enumerable.Range(0, count)
+                .Where(index => result.ridgeCore[index])
+                .ToList();
+            foreach (int source in ridgeSources) result.ridgeStrength[source] = ridgeTarget[source];
+            HashSet<int> peakSet = new HashSet<int>(peakIndices);
+            for (int index = 0; index < count; index++)
+            {
+                if (baseHeights[index] < terrain.seaLevel) continue;
+                float raised = baseHeights[index];
+                foreach (int source in ridgeSources)
+                {
+                    int distance = HexCoord.Distance(map.cells[index].coord, map.cells[source].coord);
+                    int radius = peakSet.Contains(source) ? 6 : 4;
+                    if (distance > radius) continue;
+                    float t = 1f - distance / (float)radius;
+                    float falloff = (float)Math.Pow(t, 2.20f);
+                    float candidateHeight = baseHeights[index] +
+                                            (ridgeTarget[source] - baseHeights[index]) * falloff;
+                    raised = Math.Max(raised, candidateHeight);
+                }
+                result.influence[index] = Math.Max(0f, raised - baseHeights[index]);
+                map.cells[index].height = Clamp01(raised);
+            }
+
+            foreach (int index in Enumerable.Range(0, count).Where(index => result.valley[index]))
+            {
+                map.cells[index].height = Math.Max(baseHeights[index],
+                    Math.Min(map.cells[index].height, terrain.hillUpperThreshold - 0.012f));
+            }
+            for (int index = 0; index < count; index++)
+            {
+                if (result.valley[index]) continue;
+                bool touchesSpine = result.ridgeCore[index] ||
+                                    map.GetNeighborIndices(index).Any(neighbor => result.ridgeCore[neighbor]);
+                result.mountain[index] = touchesSpine &&
+                                         map.cells[index].height >= terrain.hillUpperThreshold;
+            }
+            float[] slopes = new float[count];
+            for (int index = 0; index < count; index++)
+                slopes[index] = map.GetNeighborIndices(index)
+                    .Select(neighbor => Math.Abs(map.cells[index].height - map.cells[neighbor].height))
+                    .DefaultIfEmpty(0f)
+                    .Max();
+            WorldGenerationDiagnosticsStore.RecordMountainField(map, result.ridgeCore, result.peak,
+                result.valley, result.ridgeStrength, result.influence, slopes);
+            return result;
+        }
+
+        private static List<List<int>> ConnectedComponents(WorldMap map, bool[] included)
+        {
+            bool[] visited = new bool[included.Length];
+            List<List<int>> result = new List<List<int>>();
+            for (int start = 0; start < included.Length; start++)
+            {
+                if (!included[start] || visited[start]) continue;
+                List<int> component = new List<int>();
+                Queue<int> queue = new Queue<int>();
+                queue.Enqueue(start);
+                visited[start] = true;
+                while (queue.Count > 0)
+                {
+                    int current = queue.Dequeue();
+                    component.Add(current);
+                    foreach (int neighbor in map.GetNeighborIndices(current))
+                    {
+                        if (!included[neighbor] || visited[neighbor]) continue;
+                        visited[neighbor] = true;
+                        queue.Enqueue(neighbor);
+                    }
+                }
+                component.Sort();
+                result.Add(component);
+            }
+            return result;
+        }
+
+        private static float ProvinceScore(List<int> component, float[] potential)
+        {
+            float maximum = component.Max(index => potential[index]);
+            return maximum + Math.Min(component.Count, 240) / 240f;
+        }
+
+        private static List<int> SelectPeaks(WorldMap map, List<int> province, float[] potential,
+            float[] baseHeights)
+        {
+            HashSet<int> members = new HashSet<int>(province);
+            List<int> candidates = province
+                .Where(index => map.GetNeighborIndices(index)
+                    .Where(members.Contains)
+                    .All(neighbor => potential[index] >= potential[neighbor]))
+                .OrderByDescending(index => potential[index] + baseHeights[index] * 0.18f)
+                .ThenBy(index => index)
+                .ToList();
+            if (candidates.Count < 2)
+                candidates = province.OrderByDescending(index => potential[index] + baseHeights[index] * 0.18f)
+                    .ThenBy(index => index).ToList();
+
+            int maximumPeaks = Math.Min(6, Math.Max(2, province.Count / 52));
+            List<int> peaks = new List<int>();
+            foreach (int candidate in candidates)
+            {
+                if (peaks.Any(peak => HexCoord.Distance(map.cells[peak].coord,
+                    map.cells[candidate].coord) < 7)) continue;
+                peaks.Add(candidate);
+                if (peaks.Count >= maximumPeaks) break;
+            }
+            if (peaks.Count == 1)
+            {
+                int second = province.OrderByDescending(index =>
+                        HexCoord.Distance(map.cells[peaks[0]].coord, map.cells[index].coord) * 2f +
+                        potential[index])
+                    .ThenBy(index => index).First();
+                if (second != peaks[0]) peaks.Add(second);
+            }
+            return peaks;
+        }
+
+        private static List<Tuple<int, int>> MinimumSpanningTree(WorldMap map, List<int> peaks,
+            float[] potential)
+        {
+            List<Tuple<int, int>> edges = new List<Tuple<int, int>>();
+            HashSet<int> connected = new HashSet<int> { peaks[0] };
+            while (connected.Count < peaks.Count)
+            {
+                int bestFrom = -1;
+                int bestTo = -1;
+                float bestWeight = float.MaxValue;
+                foreach (int from in connected.OrderBy(index => index))
+                foreach (int to in peaks.Where(index => !connected.Contains(index)).OrderBy(index => index))
+                {
+                    float weight = HexCoord.Distance(map.cells[from].coord, map.cells[to].coord) -
+                                   (potential[from] + potential[to]) * 0.75f;
+                    if (weight >= bestWeight) continue;
+                    bestWeight = weight;
+                    bestFrom = from;
+                    bestTo = to;
+                }
+                if (bestTo < 0) break;
+                edges.Add(Tuple.Create(bestFrom, bestTo));
+                connected.Add(bestTo);
+            }
+            return edges;
+        }
+
+        private static List<int> TraceRidgePath(WorldMap map, int start, int target,
+            HashSet<int> province, float[] baseHeights, float[] potential, float seaLevel, int seed)
+        {
+            int[] parent = Enumerable.Repeat(-1, map.cells.Length).ToArray();
+            Queue<int> queue = new Queue<int>();
+            queue.Enqueue(start);
+            parent[start] = start;
+            while (queue.Count > 0 && parent[target] < 0)
+            {
+                int current = queue.Dequeue();
+                foreach (int next in map.GetNeighborIndices(current)
+                    .Where(index => parent[index] < 0 && province.Contains(index) &&
+                                    baseHeights[index] >= seaLevel)
+                    .OrderByDescending(index => (province.Contains(index) ? 1.2f : 0f) +
+                                                potential[index] * 0.8f + StableJitter(seed, index))
+                    .ThenBy(index => index))
+                {
+                    parent[next] = current;
+                    queue.Enqueue(next);
+                }
+            }
+
+            if (parent[target] < 0) return new List<int> { start };
+            List<int> path = new List<int>();
+            for (int current = target;; current = parent[current])
+            {
+                path.Add(current);
+                if (current == start) break;
+            }
+            path.Reverse();
+            return path;
+        }
+
+        private static float StableJitter(int seed, int index)
+        {
+            unchecked
+            {
+                uint value = (uint)(seed ^ index * 0x45d9f3b);
+                value ^= value >> 16;
+                value *= 0x7feb352d;
+                value ^= value >> 15;
+                return (value & 1023u) / 1023f * 0.035f;
+            }
+        }
+
+        /// <summary>
+        /// 保留旧入口供现有测试与工具调用；默认盛行风仍从东向西。
+        /// 实际计算使用风向投影排序、海洋蒸发、水汽输送与地形降雨。
+        /// </summary>
+        internal static void ApplyEastToWestRainShadow(WorldMap map)
+        {
+            ApplyWindDrivenClimate(map, -1f, 0f);
+        }
+
+        /// <summary>
+        /// 沿风向投影建立无环处理顺序。每格只读取已经处理的上风邻格，
+        /// 海洋补充水汽，陆地按空气含湿量、海拔和迎风坡抬升凝结降雨。
+        /// 思路参考 mapgen4 humidity.ts 的风向排序与地形降雨模型。
+        /// </summary>
+        internal static void ApplyWindDrivenClimate(WorldMap map, float windX, float windY)
+        {
+            if (map?.cells == null || map.cells.Length == 0) return;
+            float windLength = (float)Math.Sqrt(windX * windX + windY * windY);
+            if (windLength < 0.0001f)
+            {
+                windX = -1f;
+                windY = 0f;
+            }
+            else
+            {
+                windX /= windLength;
+                windY /= windLength;
+            }
+
+            const float boundaryAirMoisture = 0.48f;
+            const float minimumOceanAirMoisture = 0.92f;
+            const float landTransportLoss = 0.008f;
+            float[] projection = new float[map.cells.Length];
+            float[] transportedMoisture = new float[map.cells.Length];
+            float[] rainfall = new float[map.cells.Length];
+            foreach (WorldCell cell in map.cells)
+            {
+                float x = cell.coord.col + ((cell.coord.row & 1) == 0 ? 0f : 0.5f);
+                float y = cell.coord.row * 0.8660254f;
+                projection[cell.index] = x * windX + y * windY;
+            }
+
+            WorldCell[] windOrder = map.cells
+                .OrderBy(cell => projection[cell.index])
+                .ThenBy(cell => cell.index)
+                .ToArray();
+            foreach (WorldCell cell in windOrder)
+            {
+                float weightedMoisture = 0f;
+                float weightedHeight = 0f;
+                float totalWeight = 0f;
+                foreach (int neighborIndex in map.GetNeighborIndices(cell.index))
+                {
+                    float projectionStep = projection[cell.index] - projection[neighborIndex];
+                    if (projectionStep <= 0.00001f) continue;
+                    // 更正对风向的邻格权重；侧上风邻格仍可扩散水汽，避免单行通道。
+                    float weight = projectionStep * projectionStep;
+                    weightedMoisture += transportedMoisture[neighborIndex] * weight;
+                    weightedHeight += map.cells[neighborIndex].height * weight;
+                    totalWeight += weight;
+                }
+
+                float carried = totalWeight > 0f
+                    ? weightedMoisture / totalWeight
+                    : boundaryAirMoisture;
+                float meanUpwindHeight = totalWeight > 0f
+                    ? weightedHeight / totalWeight
+                    : cell.height;
+
+                bool water = cell.landform == LandformType.DeepWater ||
+                             cell.landform == LandformType.ShallowWater;
+                if (water)
+                {
+                    cell.moisture = Math.Max(cell.moisture, 0.90f);
+                    float waterDepth = Math.Max(0f, 0.43f - cell.height) / 0.43f;
+                    float evaporation = 0.24f + waterDepth * 0.18f;
+                    transportedMoisture[cell.index] = Math.Min(1.20f,
+                        Math.Max(minimumOceanAirMoisture, carried + evaporation));
+                    continue;
+                }
+
+                float normalizedElevation = Clamp01((cell.height - 0.43f) / 0.57f);
+                float rise = Math.Max(0f, cell.height - meanUpwindHeight);
+                float saturationCapacity = 0.82f - normalizedElevation * 0.45f;
+                float advectiveRain = carried * 0.012f;
+                float saturationRain = Math.Max(0f, carried - saturationCapacity) * 0.72f;
+                float terrainRain = rise * carried * 0.90f;
+                float localRainfall = Math.Min(0.35f,
+                    advectiveRain + saturationRain + terrainRain);
+                rainfall[cell.index] = localRainfall;
+                transportedMoisture[cell.index] = Math.Max(0f,
+                    Math.Min(1.20f, carried - localRainfall - landTransportLoss));
+
+                // 原噪声湿度作为土壤底色；输送水汽和实际降雨决定大尺度气候。
+                // Explicit high ridges create stronger, longer rain shadows than the former
+                // scattered mountain labels. A small soil baseline keeps their lee side
+                // semi-arid instead of letting one range turn a third of the continent barren.
+                cell.moisture = Clamp01(cell.moisture * 0.54f +
+                    Math.Min(1f, carried) * 0.31f + localRainfall * 0.85f + 0.012f);
+            }
+            WorldGenerationDiagnosticsStore.RecordClimate(map, rainfall, transportedMoisture);
+        }
+
+        /// <summary>
+        /// 在真实六邻域内做少量受限松弛，消除单格宽水汽通道和局部湿度断崖。
+        /// 山地边界降低交换权重，避免把迎风/背风差异整体抹平。
+        /// </summary>
+        internal static void RelaxMoistureField(WorldMap map, int iterations)
+        {
+            if (map?.cells == null || map.cells.Length == 0 || iterations <= 0) return;
+            const float relaxationStrength = 0.39f;
+            const float maximumChangePerIteration = 0.04f;
+            for (int iteration = 0; iteration < iterations; iteration++)
+            {
+                float[] current = map.cells.Select(cell => cell.moisture).ToArray();
+                float[] next = (float[])current.Clone();
+                foreach (WorldCell cell in map.cells)
+                {
+                    bool water = cell.landform == LandformType.DeepWater ||
+                                 cell.landform == LandformType.ShallowWater;
+                    if (water) continue;
+
+                    float weightedSum = 0f;
+                    float totalWeight = 0f;
+                    foreach (int neighborIndex in map.GetNeighborIndices(cell.index))
+                    {
+                        WorldCell neighbor = map.cells[neighborIndex];
+                        if (neighbor.landform == LandformType.DeepWater ||
+                            neighbor.landform == LandformType.ShallowWater) continue;
+                        float weight = cell.landform == LandformType.Mountain ||
+                                       neighbor.landform == LandformType.Mountain
+                            ? 0.25f
+                            : 1f;
+                        weightedSum += current[neighborIndex] * weight;
+                        totalWeight += weight;
+                    }
+                    if (totalWeight <= 0f) continue;
+
+                    float neighborMean = weightedSum / totalWeight;
+                    float desiredChange = (neighborMean - current[cell.index]) * relaxationStrength;
+                    float limitedChange = Math.Max(-maximumChangePerIteration,
+                        Math.Min(maximumChangePerIteration, desiredChange));
+                    next[cell.index] = Clamp01(current[cell.index] + limitedChange);
+                }
+
+                for (int i = 0; i < map.cells.Length; i++) map.cells[i].moisture = next[i];
+            }
+        }
+
+        /// <summary>
+        /// 限制极端干燥种子的沙漠面积。保留顺序以低频大陆干旱为主、最终湿度为辅，
+        /// 避免面积上限反而只留下贴山的雨影最低点；被收缩部分作为半干旱草原表现。
+        /// </summary>
+        internal static void LimitDesertCoverage(WorldMap map, float maximumLandFraction, int terrainSeed)
+        {
+            if (map?.cells == null || map.cells.Length == 0 || maximumLandFraction <= 0f) return;
+            int landCount = map.cells.Count(cell => cell.landform != LandformType.DeepWater &&
+                                                   cell.landform != LandformType.ShallowWater);
+            int maximumDeserts = Math.Max(1, (int)Math.Floor(landCount * maximumLandFraction));
+            int[] waterDistance = MapDistanceFields.WaterDistance(map);
+            int[] mountainDistance = MapDistanceFields.MountainDistance(map);
+            var desertCandidates = map.cells
+                .Where(cell => cell.biome == BiomeType.Desert)
+                .Select(cell => new
+                {
+                    Cell = cell,
+                    Priority = DesertClimatePriority(cell, waterDistance[cell.index], terrainSeed),
+                    MountainDistance = mountainDistance[cell.index],
+                    WaterDistance = waterDistance[cell.index]
+                })
+                .ToList();
+
+            // Rain shadow alone should create dry grassland, not automatically a desert.
+            // Require a continental or independent low-frequency aridity signal for the
+            // high-contrast desert biome. Two complete non-desert rings are required between
+            // mountains and desert, while the stronger mountain rain shadow now requires a
+            // deeper inland buffer before it may become a high-contrast desert.
+            const float minimumDesertClimatePriority = 0.16f;
+            foreach (var candidate in desertCandidates)
+                ClassifyRejectedDesert(candidate.Cell);
+
+            var eligible = desertCandidates
+                .Where(candidate => candidate.MountainDistance >= 4 &&
+                                    candidate.WaterDistance >= 8)
+                .OrderByDescending(candidate => candidate.Priority)
+                .ThenBy(candidate => candidate.Cell.index)
+                .ToList();
+            var retained = eligible
+                .Where(candidate => candidate.Priority >= minimumDesertClimatePriority)
+                .Take(maximumDeserts)
+                .ToList();
+            foreach (var candidate in retained.Take(maximumDeserts))
+            {
+                candidate.Cell.biome = BiomeType.Desert;
+                candidate.Cell.isBuildable = candidate.Cell.landform != LandformType.Mountain;
+            }
+        }
+
+        private static float DesertClimatePriority(WorldCell cell, int waterDistance, int terrainSeed)
+        {
+            float continentalDryness = Clamp01((waterDistance - 4f) / 20f);
+            float aridityNoise = Noise.Fractal(cell.coord.col * 0.028f, cell.coord.row * 0.028f,
+                terrainSeed ^ 0x7f4a7c15, 3);
+            float broadAridity = Clamp01((aridityNoise - 0.46f) / 0.32f);
+            float moistureDeficit = Clamp01((DesertMoistureThreshold - cell.moisture) /
+                                             DesertMoistureThreshold);
+            return broadAridity * 0.42f + continentalDryness * 0.43f + moistureDeficit * 0.15f;
         }
 
         internal static void ClassifyBiome(WorldCell cell)
@@ -212,18 +876,37 @@ namespace Cultivation4X.WorldMap
             else if (cell.landform == LandformType.Coast) cell.biome = BiomeType.Coast;
             else if (cell.landform == LandformType.Mountain)
                 cell.biome = cell.temperature < 0.38f ? BiomeType.Snowfield : BiomeType.Alpine;
-            else if (cell.temperature < 0.17f) cell.biome = BiomeType.Snowfield;
-            else if (cell.temperature < 0.32f) cell.biome = BiomeType.Tundra;
-            else if (cell.moisture < 0.22f) cell.biome = BiomeType.Desert;
-            else if (cell.moisture > 0.78f && cell.landform == LandformType.Plain) cell.biome = BiomeType.Wetland;
-            else if (cell.moisture > 0.66f && cell.temperature > 0.68f) cell.biome = BiomeType.Rainforest;
-            else if (cell.moisture > 0.48f) cell.biome = BiomeType.TemperateForest;
-            else cell.biome = BiomeType.Grassland;
+            else if (cell.landform == LandformType.Plain &&
+                     cell.temperature >= 0.36f &&
+                     cell.moisture >= 0.70f &&
+                     cell.height <= 0.60f)
+                cell.biome = BiomeType.Wetland;
+            else
+                cell.biome = LandBiomeMatrix[
+                    FindBiomeBand(cell.temperature, BiomeTemperatureBreaks),
+                    FindBiomeBand(cell.moisture, BiomeMoistureBreaks)];
             cell.isBuildable = cell.landform != LandformType.DeepWater &&
                                cell.landform != LandformType.ShallowWater &&
                                cell.landform != LandformType.Mountain &&
                                cell.biome != BiomeType.Wetland &&
                                cell.biome != BiomeType.Snowfield;
+        }
+
+        private static int FindBiomeBand(float value, float[] breaks)
+        {
+            for (int index = 0; index < breaks.Length; index++)
+                if (value < breaks[index]) return index;
+            return breaks.Length;
+        }
+
+        private static void ClassifyRejectedDesert(WorldCell cell)
+        {
+            // 沙漠上限淘汰的是高对比荒漠外观，不代表所有格子都应回退为温暖草原。
+            // 较冷的半干旱区保留为苔原；其余作为草原/稀树草原语义处理。
+            cell.biome = cell.temperature < 0.40f
+                ? BiomeType.Tundra
+                : BiomeType.Grassland;
+            cell.isBuildable = cell.landform != LandformType.Mountain;
         }
         private static float Clamp01(float value) => Math.Max(0f, Math.Min(1f, value));
     }
@@ -269,7 +952,8 @@ namespace Cultivation4X.WorldMap
                 }
             }
 
-            float[] flow = Enumerable.Repeat(1f, count).ToArray();
+            float[] runoffInput = BuildRainfallRunoff(map);
+            float[] flow = (float[])runoffInput.Clone();
             float[] upstreamMaximumHeight = map.cells.Select(cell => cell.height).ToArray();
             for (int i = order.Count - 1; i >= 0; i--)
             {
@@ -279,6 +963,8 @@ namespace Cultivation4X.WorldMap
                 upstreamMaximumHeight[parent[cell]] = Math.Max(
                     upstreamMaximumHeight[parent[cell]], upstreamMaximumHeight[cell]);
             }
+            WorldGenerationDiagnosticsStore.RecordDrainage(map, parent, filledHeight,
+                runoffInput, flow);
 
             bool[] channel = new bool[count];
             int[] channelChildren = new int[count];
@@ -310,6 +996,12 @@ namespace Cultivation4X.WorldMap
                 foreach (int index in branch) channel[index] = false;
             }
 
+            // A strong ridge network can split every threshold channel into several short head
+            // branches. If branch pruning removes all of them, preserve the best complete main
+            // stem from high catchment to water instead of returning a riverless valid world.
+            if (!channel.Any(value => value))
+                RestoreBestMainStem(map, parameters, parent, flow, upstreamMaximumHeight, channel);
+
             List<RiverSegment> rivers = new List<RiverSegment>();
             for (int index = 0; index < count; index++)
             {
@@ -327,14 +1019,98 @@ namespace Cultivation4X.WorldMap
             }
             map.rivers = rivers.OrderBy(segment => segment.fromCellIndex).ToList();
 
+            int[] riverDistance = Enumerable.Repeat(-1, count).ToArray();
+            Queue<int> moistureQueue = new Queue<int>();
             foreach (int index in rivers.SelectMany(segment =>
-                new[] { segment.fromCellIndex, segment.toCellIndex }).Distinct())
+                         new[] { segment.fromCellIndex, segment.toCellIndex }).Distinct())
             {
+                if (IsWater(map.cells[index])) continue;
+                riverDistance[index] = 0;
+                moistureQueue.Enqueue(index);
+            }
+            while (moistureQueue.Count > 0)
+            {
+                int current = moistureQueue.Dequeue();
+                if (riverDistance[current] >= 2) continue;
+                foreach (int neighbor in map.GetNeighborIndices(current))
+                {
+                    if (riverDistance[neighbor] >= 0 || IsWater(map.cells[neighbor])) continue;
+                    riverDistance[neighbor] = riverDistance[current] + 1;
+                    moistureQueue.Enqueue(neighbor);
+                }
+            }
+            for (int index = 0; index < count; index++)
+            {
+                float boostFactor;
+                switch (riverDistance[index])
+                {
+                    case 0: boostFactor = 0.625f; break;
+                    case 1: boostFactor = 0.3125f; break;
+                    case 2: boostFactor = 0.125f; break;
+                    default: continue;
+                }
                 WorldCell cell = map.cells[index];
-                if (IsWater(cell)) continue;
-                cell.moisture = Math.Min(1f, cell.moisture + riverMoistureBoost);
+                cell.moisture = Math.Min(1f, cell.moisture + riverMoistureBoost * boostFactor);
                 TerrainGenerator.ClassifyBiome(cell);
             }
+        }
+
+        private static void RestoreBestMainStem(WorldMap map, RiverGenerationParameters parameters,
+            int[] parent, float[] flow, float[] upstreamMaximumHeight, bool[] channel)
+        {
+            List<int> bestPath = null;
+            float bestScore = float.MinValue;
+            for (int start = 0; start < map.cells.Length; start++)
+            {
+                if (IsWater(map.cells[start]) || parent[start] < 0 ||
+                    flow[start] < parameters.minimumAccumulatedFlow ||
+                    upstreamMaximumHeight[start] < parameters.minimumSourceHeight) continue;
+                List<int> path = new List<int>();
+                HashSet<int> visited = new HashSet<int>();
+                int current = start;
+                while (current >= 0 && !IsWater(map.cells[current]) && visited.Add(current))
+                {
+                    path.Add(current);
+                    current = parent[current];
+                }
+                if (path.Count < Math.Max(4, parameters.minimumBranchLength / 2)) continue;
+                float score = path.Count * 1000f + upstreamMaximumHeight[start] * 10f + flow[start];
+                if (score <= bestScore) continue;
+                bestScore = score;
+                bestPath = path;
+            }
+            if (bestPath == null) return;
+            foreach (int index in bestPath) channel[index] = true;
+        }
+
+        private static float[] BuildRainfallRunoff(WorldMap map)
+        {
+            int count = map.cells.Length;
+            float[] runoff = new float[count];
+            if (!WorldGenerationDiagnosticsStore.TryGet(map,
+                    out WorldGenerationDiagnostics diagnostics) ||
+                diagnostics.rainfall.Length != count)
+                return runoff;
+
+            // 以实际降雨量作为初始流量，并按陆地平均降雨归一化为 1。
+            // 这样保留 minimumAccumulatedFlow 既有的“平均汇水格数”量级，
+            // 同时让湿润流域贡献更多、干旱流域贡献更少。
+            float meanRainfall = map.cells
+                .Where(cell => !IsWater(cell))
+                .Select(cell => Math.Max(0f, diagnostics.rainfall[cell.index]))
+                .DefaultIfEmpty(0f)
+                .Average();
+            if (meanRainfall <= 0.00000001f) return runoff;
+
+            foreach (WorldCell cell in map.cells)
+            {
+                if (IsWater(cell)) continue;
+                float rain = Math.Max(0f, diagnostics.rainfall[cell.index]);
+                // 保留少量广布基流，避免低雨量格把连续排水树截成孤立短段；
+                // 其余 65% 初始流量仍由本格降雨相对值决定。
+                runoff[cell.index] = 2f * (0.35f + 0.65f * rain / meanRainfall);
+            }
+            return runoff;
         }
 
         private static int FindMouth(WorldMap map, int[] parent, int start)
@@ -576,6 +1352,29 @@ namespace Cultivation4X.WorldMap
                 {
                     if (distance[neighbor] <= distance[current] + 1) continue;
                     distance[neighbor] = distance[current] + 1; queue.Enqueue(neighbor);
+                }
+            }
+            return distance;
+        }
+
+        public static int[] MountainDistance(WorldMap map)
+        {
+            int[] distance = Enumerable.Repeat(int.MaxValue, map.cells.Length).ToArray();
+            Queue<int> queue = new Queue<int>();
+            foreach (WorldCell cell in map.cells)
+            {
+                if (cell.landform != LandformType.Mountain) continue;
+                distance[cell.index] = 0;
+                queue.Enqueue(cell.index);
+            }
+            while (queue.Count > 0)
+            {
+                int current = queue.Dequeue();
+                foreach (int neighbor in map.GetNeighborIndices(current))
+                {
+                    if (distance[neighbor] <= distance[current] + 1) continue;
+                    distance[neighbor] = distance[current] + 1;
+                    queue.Enqueue(neighbor);
                 }
             }
             return distance;

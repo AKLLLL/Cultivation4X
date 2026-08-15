@@ -8,6 +8,18 @@ using UnityEngine.SceneManagement;
 public static class MapTestBootstrap
 {
     public const string SceneName = "TerrainTest";
+    public const string ArtAuditionSceneName = "DreamscapeArtAudition";
 
-    public static bool IsTestScene => SceneManager.GetActiveScene().name == SceneName;
+    public static bool IsTestScene
+    {
+        get
+        {
+            return IsIsolatedSceneName(SceneManager.GetActiveScene().name);
+        }
+    }
+
+    private static bool IsIsolatedSceneName(string sceneName)
+    {
+        return sceneName == SceneName || sceneName == ArtAuditionSceneName;
+    }
 }

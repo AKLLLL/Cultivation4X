@@ -100,6 +100,29 @@ public class WorldMapRegionTests
     }
 
     [Test]
+    public void ApprovedLargeMapSeed_ContainsMultiCellMountainRangesAndValleyFloors()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
+        {
+            width = 128,
+            height = 96,
+            seed = 20260806
+        });
+
+        Assert.That(map.regions.Any(region =>
+                region.regionType == MapRegionType.MountainRange && region.cellIndices.Count >= 6),
+            Is.True, "冻结用大地图必须包含多格山脉 Region");
+        List<MapRegionData> valleys = map.regions
+            .Where(region => region.regionType == MapRegionType.Valley)
+            .ToList();
+        Assert.That(valleys.Any(region => region.cellIndices.Count >= 4), Is.True,
+            "冻结用大地图必须包含可辨识的多格山谷 Region");
+        Assert.That(valleys.SelectMany(region => region.cellIndices)
+            .Any(index => map.cells[index].internalPositionTag == MapInternalPositionTag.ValleyFloor),
+            Is.True, "山谷 Region 内必须存在谷底而不只是入口标签");
+    }
+
+    [Test]
     public void HandcraftedTerrain_ProducesLakeForestAndMountainSemantics()
     {
         WorldMap map = CreatePlainMap(12, 12, 6106);

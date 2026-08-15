@@ -310,7 +310,7 @@ namespace Cultivation4X.WorldMap
             if (influence.knowledge == KnowledgeState.Unknown)
                 return $"坐标 {cell.coord.col},{cell.coord.row}\n认知：未知\n{regionSummary}";
 
-            string terrain = $"{LandformLabel(cell.landform)}/{BiomeLabel(cell.biome)}";
+            string terrain = $"{CellLandformLabel(cell)}/{BiomeLabel(cell.biome)}";
             string markerText = string.Join("、", (markers ?? Enumerable.Empty<WorldMapPresentationMarker>())
                 .Where(marker => marker != null && marker.cellIndex == cellIndex).Select(marker => marker.label));
             if (string.IsNullOrEmpty(markerText)) markerText = "无";
@@ -398,7 +398,7 @@ namespace Cultivation4X.WorldMap
             if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
                 return "点击地图格查看详情。";
             WorldCell cell = map.cells[cellIndex];
-            string terrain = $"{LandformLabel(cell.landform)}/{BiomeLabel(cell.biome)}";
+            string terrain = $"{CellLandformLabel(cell)}/{BiomeLabel(cell.biome)}";
             if (siteSelectionMode)
             {
                 return $"格 {cell.coord.col},{cell.coord.row}｜{terrain}\n灵气：{AuraBand(cell.totalAura)}｜可建设：{(cell.isBuildable ? "是" : "否")}";
@@ -441,6 +441,11 @@ namespace Cultivation4X.WorldMap
                 default: return landform.ToString();
             }
         }
+
+        private static string CellLandformLabel(WorldCell cell) =>
+            cell != null && cell.landform == LandformType.Mountain && cell.isBuildable
+                ? "山地台地"
+                : LandformLabel(cell?.landform ?? LandformType.Plain);
 
         public static string BiomeLabel(BiomeType biome)
         {

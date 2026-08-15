@@ -179,6 +179,8 @@ namespace Cultivation4X.WorldMap
                 else if (cell.landform == LandformType.Hill) types[cell.index] = MapRegionType.Hills;
                 else types[cell.index] = IsValley(map, cell, riverCells) ? MapRegionType.Valley : MapRegionType.Plain;
             }
+            StrengthenValleyCorridors(map, types, riverCells);
+            CompleteShortValleyCorridors(map, types);
             foreach (List<int> component in Components(map, types, MapRegionType.MountainRange))
                 if (component.Count < SmallMountainComponentThreshold)
                     foreach (int index in component) types[index] = MapRegionType.SmallHill;
@@ -210,6 +212,94 @@ namespace Cultivation4X.WorldMap
             int higher = neighbors.Count(item => item.height >= cell.height + 0.06f);
             bool nearHighland = neighbors.Any(item => item.landform == LandformType.Hill || item.landform == LandformType.Mountain);
             return (higher >= 3 && nearHighland) || (riverCells.Contains(cell.index) && nearHighland);
+        }
+
+        /// <summary>
+        /// 将零散低点连接成沿丘陵/山脉延伸的谷地走廊。只转换原本的 Plain Region
+        /// 语义，不修改 WorldCell.landform、高度或可建造规则。
+        /// </summary>
+        private static void StrengthenValleyCorridors(WorldMap map, MapRegionType[] types,
+            HashSet<int> riverCells)
+        {
+            for (int iteration = 0; iteration < 2; iteration++)
+            {
+                var additions = new List<int>();
+                foreach (WorldCell cell in map.cells)
+                {
+                    if (cell == null || types[cell.index] != MapRegionType.Plain) continue;
+                    int highlandMask = 0;
+                    int higher = 0;
+                    int valleyNeighbors = 0;
+                    bool nearHighland = false;
+                    for (int direction = 0; direction < 6; direction++)
+                    {
+                        int neighborIndex = map.GetIndex(map.GetNeighbor(cell.coord, direction));
+                        if (neighborIndex < 0) continue;
+                        WorldCell neighbor = map.cells[neighborIndex];
+                        bool highland = neighbor.landform == LandformType.Hill ||
+                                        neighbor.landform == LandformType.Mountain;
+                        if (highland)
+                        {
+                            highlandMask |= 1 << direction;
+                            nearHighland = true;
+                        }
+                        if (neighbor.height >= cell.height + 0.045f) higher++;
+                        if (types[neighborIndex] == MapRegionType.Valley) valleyNeighbors++;
+                    }
+
+                    bool separatedHighlands = HasSeparatedDirections(highlandMask);
+                    bool localChannel = separatedHighlands && higher >= 2;
+                    bool extendsChannel = valleyNeighbors >= 2 && nearHighland && higher >= 1;
+                    bool riverChannel = riverCells.Contains(cell.index) && nearHighland && higher >= 1;
+                    if (localChannel || extendsChannel || riverChannel) additions.Add(cell.index);
+                }
+                if (additions.Count == 0) break;
+                foreach (int index in additions) types[index] = MapRegionType.Valley;
+            }
+        }
+
+        private static bool HasSeparatedDirections(int mask)
+        {
+            for (int first = 0; first < 6; first++)
+            {
+                if ((mask & (1 << first)) == 0) continue;
+                for (int second = first + 1; second < 6; second++)
+                {
+                    if ((mask & (1 << second)) == 0) continue;
+                    int separation = Math.Min(second - first, 6 - (second - first));
+                    if (separation >= 2) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 山谷候选常以 1~3 格低点出现，若直接进入小区域合并会被平原吞并。
+        /// 沿相邻低地补足到 Region 最小尺寸，保留一条可识别的谷地走廊。
+        /// </summary>
+        private static void CompleteShortValleyCorridors(WorldMap map, MapRegionType[] types)
+        {
+            foreach (List<int> component in Components(map, types, MapRegionType.Valley))
+            {
+                var members = new HashSet<int>(component);
+                while (members.Count < MinimumRegionSize)
+                {
+                    int candidate = members
+                        .SelectMany(map.GetNeighborIndices)
+                        .Where(index => types[index] == MapRegionType.Plain && !members.Contains(index))
+                        .Distinct()
+                        .OrderByDescending(index => map.GetNeighborIndices(index).Count(members.Contains))
+                        .ThenBy(index => map.cells[index].height)
+                        .ThenBy(index => StableUnsigned(map.effectiveSeed,
+                            "valley-corridor-" + component[0] + "-" + index))
+                        .ThenBy(index => index)
+                        .DefaultIfEmpty(-1)
+                        .First();
+                    if (candidate < 0) break;
+                    types[candidate] = MapRegionType.Valley;
+                    members.Add(candidate);
+                }
+            }
         }
 
         private static List<RegionSeed> SplitConnectedComponents(WorldMap map, MapRegionType[] types)
@@ -447,7 +537,13 @@ namespace Cultivation4X.WorldMap
                     if (edge && cell.moisture >= 0.62f && maxNeighborHeight - minNeighborHeight >= 0.08f) return MapInternalPositionTag.HerbSlope;
                     if (!edge && centerDistance <= 2 && cell.moisture <= 0.32f) return MapInternalPositionTag.ForestClearing;
                     return edge ? MapInternalPositionTag.ForestEdge : MapInternalPositionTag.DeepForest;
-                case MapRegionType.Valley: return edge ? MapInternalPositionTag.ValleyEntrance : MapInternalPositionTag.ValleyFloor;
+                case MapRegionType.Valley:
+                    int valleyNeighbors = neighbors.Count(neighbor => members.Contains(neighbor));
+                    bool floor = valleyNeighbors >= 2 &&
+                                 (cell.height <= averageHeight + 0.025f || !edge);
+                    return floor
+                        ? MapInternalPositionTag.ValleyFloor
+                        : MapInternalPositionTag.ValleyEntrance;
                 case MapRegionType.Plain: return river ? MapInternalPositionTag.Riverbank : MapInternalPositionTag.OpenPlain;
                 case MapRegionType.Desert: return edge ? MapInternalPositionTag.DesertEdge : MapInternalPositionTag.Dune;
                 case MapRegionType.Swamp: return edge ? MapInternalPositionTag.MarshEdge : MapInternalPositionTag.DeepMarsh;

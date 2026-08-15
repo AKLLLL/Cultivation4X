@@ -48,6 +48,8 @@ namespace Cultivation4X.WorldMap
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
         {
+            // TerrainTest 场景使用 3D 表现，跳过 2D Presenter，保持场景隔离。
+            if (MapTestBootstrap.IsTestScene) return;
             if (FindObjectOfType<WorldMapPresenter>() == null)
                 new GameObject("WorldMapPresenter").AddComponent<WorldMapPresenter>();
         }
@@ -553,11 +555,11 @@ namespace Cultivation4X.WorldMap
             switch (cell.biome)
             {
                 case BiomeType.Ocean: return cell.landform == LandformType.DeepWater ? new Color(0.05f, 0.19f, 0.34f) : new Color(0.09f, 0.34f, 0.52f);
-                case BiomeType.Coast: return new Color(0.72f, 0.66f, 0.42f);
+                case BiomeType.Coast: return new Color(0.78f, 0.75f, 0.60f);
                 case BiomeType.TemperateForest: return new Color(0.16f, 0.42f, 0.20f);
                 case BiomeType.Rainforest: return new Color(0.08f, 0.32f, 0.18f);
                 case BiomeType.Wetland: return new Color(0.22f, 0.38f, 0.31f);
-                case BiomeType.Desert: return new Color(0.72f, 0.57f, 0.30f);
+                case BiomeType.Desert: return new Color(0.74f, 0.48f, 0.20f);
                 case BiomeType.Tundra: return new Color(0.50f, 0.56f, 0.48f);
                 case BiomeType.Snowfield: return new Color(0.84f, 0.89f, 0.91f);
                 case BiomeType.Alpine: return new Color(0.38f, 0.39f, 0.40f);
