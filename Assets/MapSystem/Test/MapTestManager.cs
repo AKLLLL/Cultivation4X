@@ -170,6 +170,9 @@ public sealed class MapTestManager : MonoBehaviour
         DrawClimateDebugButton("淡水距", WorldMapClimateDebugView.FreshWaterDistance);
         DrawClimateDebugButton("汇流", WorldMapClimateDebugView.DrainageFlow);
         DrawClimateDebugButton("海拔", WorldMapClimateDebugView.Elevation);
+        DrawClimateDebugButton("灵气", WorldMapClimateDebugView.Aura);
+        DrawClimateDebugButton("五行", WorldMapClimateDebugView.DominantElement);
+        DrawClimateDebugButton("灵脉", WorldMapClimateDebugView.SpiritVeinPaths);
         GUILayout.EndHorizontal();
     }
 
@@ -199,6 +202,9 @@ public sealed class MapTestManager : MonoBehaviour
             case WorldMapClimateDebugView.FreshWaterDistance: return "淡水距离（河流/内陆水体）";
             case WorldMapClimateDebugView.DrainageFlow: return "排水累计汇流（对数）";
             case WorldMapClimateDebugView.Elevation: return "海拔";
+            case WorldMapClimateDebugView.Aura: return "灵气浓度";
+            case WorldMapClimateDebugView.DominantElement: return "五行主属性";
+            case WorldMapClimateDebugView.SpiritVeinPaths: return "灵脉路径";
             default: return "正常地图";
         }
     }

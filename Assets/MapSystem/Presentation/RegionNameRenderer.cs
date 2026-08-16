@@ -39,7 +39,7 @@ namespace Cultivation4X.WorldMap
                 WorldCell centerCell = map.cells[region.centerCellIndex];
                 if (centerCell == null) continue;
 
-                Vector2 center = TerrainMeshGenerator.HexCenter(centerCell.coord);
+                Vector2 center = HexGeometry.GetCenter(centerCell);
                 GameObject labelObject = new GameObject("RegionLabel_" + region.regionId);
                 labelObject.transform.SetParent(transform, false);
                 // 固定锚在区域中心格子的实际表现地表高度，不随相机俯仰上下浮动。

@@ -76,6 +76,7 @@ public class FoundingState
     public int candidateSeed;
     public int worldSeed;
     public int selectedWorldCellIndex = -1;
+    public string pendingSectName;
     public List<FounderCandidateData> candidates = new List<FounderCandidateData>();
     public List<string> selectedFounderIds = new List<string>();
     public string selectedTechniqueId;

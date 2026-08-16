@@ -70,6 +70,34 @@ namespace Cultivation4X.WorldMap
             };
         }
 
+        /// <summary>
+        /// 表现层统一的“已知格”集合：显式揭示格 ∪ 非零影响格。
+        /// 调试/选址的全知模式由 includeAll 控制。这是未来 MapSnapshot
+        /// 中 knowledge 字段的唯一计算入口，渲染器不应自行推导。
+        /// </summary>
+        internal static HashSet<int> CollectKnownCellIndices(WorldMap map,
+            WorldMapProgressState progress, bool includeAll)
+        {
+            var known = new HashSet<int>();
+            if (map?.cells == null) return known;
+            if (includeAll)
+            {
+                foreach (WorldCell cell in map.cells) known.Add(cell.index);
+                return known;
+            }
+
+            EnsureCurrent(map, progress);
+            if (progress?.revealedCellIndices != null)
+                foreach (int index in progress.revealedCellIndices)
+                    if (index >= 0 && index < map.cells.Length) known.Add(index);
+            if (progress?.cellInfluences != null)
+                foreach (CellInfluenceState influence in progress.cellInfluences)
+                    if (influence != null && influence.cellIndex >= 0 &&
+                        influence.cellIndex < map.cells.Length)
+                        known.Add(influence.cellIndex);
+            return known;
+        }
+
         public static void EnsureCurrent(WorldMap map, WorldMapProgressState progress)
         {
             if (progress == null) return;

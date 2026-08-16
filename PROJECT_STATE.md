@@ -1,84 +1,87 @@
-# Cultivation4X 项目当前状态（2026-08-16）
+# Cultivation4X 项目当前状态（2026-08-16 更新）
 
-本文档记录地图生成系统优化完成时的项目状态：分支、提交、测试证据、已冻结的技术方案与遗留问题。
+本文档记录 3D 世界地图接入 SampleScene、建宗选址流程重构完成时的项目状态。
 
 ## 1. 概览
 
-- 当前分支：`agent/influence-integration`，与 `origin/agent/influence-integration` 同步。
-- 本次工作产出两个提交：
-  - `e32a422` fix: 修复每日推进/存档/任务结算/威胁面板稳定性并补测试
-  - `a88f2fe` feat: 完成地图生成系统优化并冻结表现层技术方案
-- 地图生成系统优化已成功完成，下述技术方案**冻结**。后续除非提出专门方案并获得确认，不再随意调整六边形拓扑、山体形态、相机曲线、细节分层与森林表现策略。
-- 工作区：仅保留本文件更新，随后单独提交。
+- 当前分支：`agent/influence-integration`，远端：`https://github.com/AKLLLL/Cultivation4X.git`
+- 本次提交：`6b34d5f`
+  `feat: 接入3D世界地图并重构建宗选址新游戏流程`
+- 全量 EditMode：**375/375 通过**（`Logs/worldmap3d-editmode-results.xml`，failed=0 / skipped=0）
+- 工作区应仅保留本文件更新与 AGENTS.md 的协作规则沉淀，随后与代码一起提交。
 
-## 2. 版本控制状态
+## 2. 本轮完成内容
 
-远端：`https://github.com/AKLLLL/Cultivation4X.git`
+### 2.1 SampleScene 3D 世界地图接入
+
+- 旧 2D `WorldMapPresenter` 不再运行时自举，仅作为兼容层保留。
+- `WorldMap3DController` + `WorldMapRenderPipeline` + `WorldMapHudController` +
+  `WorldMapInteractionController` 接管 SampleScene 表现层，由 `Resources/Prefab/WorldMap3D.prefab` 实例化。
+- 地形渲染复用既有 `TerrainRenderer` / `ContinuousTerrainSurfaceBuilder` / `HexGeometry`；
+  `WorldMapRenderPipeline.SetPresentationsActive` 统一启停真实 renderer 节点。
+- 覆盖层统一使用 `MapPresentationLayer` 高度服务与 `Unlit/VertexColorOverlay`，避免各自采样高度。
+
+### 2.2 山体网格与旧档校验
+
+- Mountain 使用 LEGO 平顶 + 垂直侧壁；新增 PlateauMask，把被 Mountain 围住的内陆低地压平。
+- 增加 winding 与跨角大三角测试，侧壁/角点封口逻辑保持不变。
+- 地图快照版本 `WorldMapGenerationVersion.Current = 5`；旧 `generationVersion=4` 存档按规则自动舍弃并创建新档。
+- 存档版本 `SaveDataVersion.Current = 15`：弟子/功法/宗门名称先于选址完成，选址确认后才创建驻地。
+
+### 2.3 新游戏流程
 
 ```text
-a88f2fe (HEAD -> agent/influence-integration, origin/agent/influence-integration) feat: 完成地图生成系统优化并冻结表现层技术方案
-e32a422 fix: 修复每日推进/存档/任务结算/威胁面板稳定性并补测试
-a1ba38c fix: 修复集成测试引用已重命名的地形详情格式化类
-0afa77a chore: 停止跟踪生成的 TMP 字体资产并配置 Git LFS 规则
-f91e317 feat: 世界地图地形渲染与美术呈现，引入 Polyart 资源并扩充测试
-50749a6 refactor: organize world map into MapSystem module and add TerrainTest scene
+MainMenu
+  → CharacterSetup（选3名真传弟子 → 初始功法 → 宗门名称）
+  → SectPlacement（同一张世界地图的建宗选址状态）
+  → 确认建宗（短文字过场）
+  → WorldExplore（正式世界地图）
 ```
 
-`main` 分支为 `9345061 Merge branch 'agent/influence-integration' into main`。
+- 新增 `GameFlowStateManager`：`MainMenu / CharacterSetup / SectPlacement / WorldMap`。
+- 新增 `WorldMapViewMode` 流程值：`SectPlacement / WorldExplore / SectManagement`。
+- `SectPlacement` 复用 `WorldMapRenderer + WorldMapData + Terrain生成 + Hex Grid + 世界相机`，
+  **不创建独立地图、独立 Renderer、独立 Camera**。
+- 选址相机固定接近垂直俯仰（78°），仅支持滚轮缩放与 WASD 平移；鼠标拖拽不拉扯镜头，点击格子不自动聚焦。
+- 选址面板只显示地点/地貌/环境描述与“建立宗门”，隐藏灵气、灵脉、资源、推荐指数、五行。
+- 顶部资源栏与事件收件箱 UI 在 MainMenu/CharacterSetup/SectPlacement 隐藏，成功建宗进入 WorldExplore 后恢复。
 
-## 3. 本轮已完成内容
+### 2.4 UI 分层
 
-### 3.1 P0 稳定性修复（e32a422）
+| GameFlowState | UI |
+|---|---|
+| MainMenu | MainMenuPanel |
+| CharacterSetup | FoundingPanel |
+| SectPlacement | 世界地形 + Hex Grid + 精简 PlacementPanel（WorldHUD 的选址模式） |
+| WorldExplore | 完整 WorldHUD + ResourceBar + 事件收件箱 + 探索/影响/灵脉覆盖层 |
 
-- `TimeManager.EndDay()` 防重入；`SaveManager` 初始化失败保护。
-- 任务结算：节点 `RemoveItem` 失败保持 `WaitingNode` 并重新弹出面板；弟子死亡取消其全部 AwaitingReward 任务；最终日结算保护。
-- `ExternalThreatPanel` 按钮可见性修正。
-- 新增 `Assets/Tests/Editor/StabilityFixTests.cs` 覆盖上述场景。
-
-### 3.2 地图生成系统优化（a88f2fe，方案已冻结）
-
-**山体**
-- 山体采用台阶式“LEGO 山”：Mountain 格顶面平坦、侧壁垂直，宽厚台地可生成多层平台。
-- 前脸朝向相机（行号更小 / -Z 一侧），前宽后窄非对称；山体总高控制在约 2 个六角格。
-- 连续地表构建器对 Mountain 使用平顶 + 垂直侧墙，同级台地高度一致。
-
-**相机与细节分层**
-- Civ6 风格相机：归一化 zoom 0..1，高度/俯仰 AnimationCurve，固定 FOV，仅 WASD 平移，焦点平滑与地面跟随。
-- 三层细节：Near(<0.25) / Mid(0.25–0.60) / Far(≥0.60)。
-- Far = 高亮纯地形色块 + 区域名，不显示纹理、网格与模型；Mid = 正常地形；Near 预留给高细节。
-
-**地表与标签**
-- 地表低饱和、哑光，带宏观色斑变化与大气透视，叠加轻量六边形网格；山体区域跳过网格。
-- 区域名固定在地面（`SetGroundFixed`），只在 Far 显示。
-- 曲率保持关闭（`nearRadialCurvature = 0`）。
-
-**森林表现（本轮重点）**
-- 森林树模型簇只在 `WorldMapDecorationRenderer` 中程序化生成，不再依赖 Dreamscape 高模树预制体。
-- 单树为 16 三角面的低模“圆锥树冠 + 粗树干”，`Unlit/VertexColor` 平涂。
-- 每个森林格对应 1 个树簇，每簇 8～19 棵；簇按区域中心权重衰减（中心密、边缘疏），簇中心随机偏移 0.12～0.85 格半径，允许跨格分布。
-- 每棵缩放 `0.22～0.36`（世界高度约 0.24～0.40 格）。
-- 每个森林区域合并为**单一 Mesh + 单一 GameObject**，全图森林渲染对象从约 1443 降到约 104。
-- `MapTestManager.TerrainOnlyEvaluationMode` 仍为 true，纯地形验收只选择性加回森林树簇，其余模型/图标/区域覆盖保持关闭。
-
-**地图拓扑**
-- 保持 odd-r pointy-top 六边形；Flat-top 转换已回滚并推迟，除非有专门重构提案否则不再尝试。
-
-## 4. 测试与验证
+## 3. 测试与验证
 
 | 项目 | 状态 |
 |---|---|
-| EditMode 全量 | **350/350 通过**（`Logs/forest-region-merged-results.xml`，failed=0 / skipped=0） |
-| 场景批处理渲染 | TerrainTest 生成 + 渲染成功（`Logs/forest-region-merged-preview.log`） |
-| diff 清洁度 | `git diff --check` 通过，无 TMP/Logs 噪音 |
-| 配置/场景/包 | 本轮未修改存档结构、场景、Prefab GUID 或 Resources 配置 |
+| EditMode 全量 | **375/375 通过**（`Logs/worldmap3d-editmode-results.xml`） |
+| 编译 | Assembly-CSharp / Assembly-CSharp-Editor 0 错误 |
+| diff 清洁度 | `git diff --check` 通过 |
+| 地图数据 | 未修改 Hex 拓扑、WorldCell 结构或 Terrain 生成语义 |
 
-## 5. 已知问题与未验证项
+## 4. 已冻结的架构决策
 
-1. **生物群系疑似问题（暂不处理）**：当前生成结果中森林格明显集中出现在海边/湖边，疑为温度/湿度/淡水距离权重使然。用户确认本轮不修，留作下一轮独立排查。
-2. 手动视觉验收未做：打开 TerrainTest 确认森林中心密边缘疏、树簇跨格、树干可见、远景隐藏；确认帧率改善。
-3. 玩法闭环手测（选址 → 立宗 → 世界地图 → 探索 → 事件/威胁）仍按 PROJECT_ARCHITECTURE.md 的既有清单执行。
+1. 世界地图数据是唯一数据源；任何新视图只能切换表现模式，不得复制地图数据或另建 Renderer。
+2. 建宗选址是 `WorldMapViewMode.SectPlacement`，不是新场景、不是新地图系统。
+3. 世界空间 Mesh 不得挂在 ScreenSpaceOverlay Canvas 根节点下；UI Canvas 与地图 Renderer 必须分离节点。
+4. GameFlow UI 启停集中在 `WorldMap3DController` 的状态路由中，不在各 UI 自行监听流程状态。
+
+## 5. 已知问题与待办
+
+1. 选址阶段地形可见、数据层隐藏；尚未做“全图未知”的信息模糊表现（如隐藏区域名外的地形细节），当前仅隐藏数据覆盖层。
+2. 建宗短过场为固定 2.4 秒文字遮罩，未做可跳过/分镜。
+3. `SectManagement` 仅枚举预留，无实现。
+4. 手测清单：
+   - 新游戏主菜单 → 选弟子/功法 → 宗门名称 → 同地图选址 → WASD/滚轮观察 → 点击格显示简单信息 → 确认 → 短过场 → 正式地图完整 HUD。
+   - 旧存档删除/自动舍弃后能直接进入新流程。
 
 ## 6. 下一步建议
 
-1. 单独排查生物群系分类中“森林贴水”的问题：检查 `WorldMapBiomeRules`/温度-湿度-淡水距离权重，以及区域归并时对海岸/湖岸格的吸收策略。
-2. 地图表现层冻结期内，只在 TerrainTest 做数值调参（树缩放、簇密度、中心衰减权重），不引入新渲染架构。
+1. 选址信息层的“未知天地”表现：确认是否需要对未认知区域做更明显的未知化处理。
+2. 建宗过场支持点击跳过，并记录首次建宗事件。
+3. 在 `WorldExplore` 恢复探索/事件/影响力完整闭环手测后，再考虑 `SectManagement`。

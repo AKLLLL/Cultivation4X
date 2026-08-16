@@ -73,6 +73,34 @@ public class TerrainRenderingTests
         return map;
     }
 
+    private static WorldMap BuildHexPlateauHoleMap()
+    {
+        const int width = 3;
+        const int height = 3;
+        WorldMap map = new WorldMap
+        {
+            width = width,
+            height = height,
+            cells = new WorldCell[width * height]
+        };
+        for (int row = 0; row < height; row++)
+        {
+            for (int col = 0; col < width; col++)
+            {
+                bool hole = col == 1 && row == 1;
+                bool openPlain = col == 0 && row == 0;
+                map.cells[row * width + col] = new WorldCell
+                {
+                    index = row * width + col,
+                    coord = new HexCoord(col, row),
+                    landform = hole || openPlain ? LandformType.Plain : LandformType.Mountain,
+                    height = hole || openPlain ? 0.5f : 0.8f
+                };
+            }
+        }
+        return map;
+    }
+
     [Test]
     public void CreateTerrainChunk_BuildsSingleMeshWithFiveSubmeshes()
     {
@@ -255,6 +283,57 @@ public class TerrainRenderingTests
     }
 
     [Test]
+    public void PlateauMask_MarksMountainCellsAndEnclosedLandHoles()
+    {
+        WorldMap map = BuildHexPlateauHoleMap();
+        int centerIndex = map.GetIndex(new HexCoord(1, 1));
+        bool[] mask = ContinuousTerrainSurfaceBuilder.BuildPlateauMask(map);
+
+        Assert.IsTrue(mask[centerIndex],
+            "被 Mountain 完全围住的内陆格必须进入平顶遮罩");
+        Assert.IsTrue(mask[map.GetIndex(new HexCoord(0, 1))],
+            "Mountain 格自身必须进入平顶遮罩");
+        Assert.IsFalse(mask[map.GetIndex(new HexCoord(0, 0))],
+            "与地图边缘相连的普通地形不应被误判为山内低地");
+    }
+
+    [Test]
+    public void ContinuousTerrainSurface_RendersEnclosedMountainHoleFlat()
+    {
+        WorldMap map = BuildHexPlateauHoleMap();
+        WorldCell hole = map.cells[map.GetIndex(new HexCoord(1, 1))];
+        GameObject root = new GameObject("PlateauHoleFlatTest");
+        TerrainRenderer renderer = root.AddComponent<TerrainRenderer>();
+        try
+        {
+            renderer.Render(map);
+            float expected = TerrainRenderer.PresentationSurfaceHeight(map, hole);
+            Vector2 center = TerrainMeshGenerator.HexCenter(hole.coord);
+            var surfaceHeights = new List<float>();
+            foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Mesh mesh = filter.sharedMesh;
+                if (mesh == null || !mesh.name.StartsWith("ContinuousTerrainChunk")) continue;
+                Vector3[] vertices = mesh.vertices;
+                for (int index = 0; index < vertices.Length; index++)
+                {
+                    Vector2 xz = new Vector2(vertices[index].x, vertices[index].z);
+                    if ((xz - center).magnitude <= HexGeometry.Radius * 0.8f)
+                        surfaceHeights.Add(vertices[index].y);
+                }
+            }
+            Assert.IsNotEmpty(surfaceHeights);
+            Assert.IsTrue(surfaceHeights.All(height => Mathf.Abs(height - expected) <= 0.001f),
+                "山内被围住的非 Mountain 格必须整体平顶，不能继续采样连续高度场");
+        }
+        finally
+        {
+            renderer.Clear();
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
     public void ContinuousTerrainSurface_KeepsOpenWaterFlat()
     {
         WorldMap map = BuildMap(LandformType.DeepWater, LandformType.DeepWater,
@@ -408,7 +487,13 @@ public class TerrainRenderingTests
                                   $"{Mathf.RoundToInt(vertices[index].z * 10000f)}")
                 .Where(group => group.Count() > 1)
                 .ToArray();
-            Assert.IsNotEmpty(sharedTopSamples, "相邻 Hex 应在同一 XZ 边缘留下可核对的表面采样");
+            int topVertexCount = 0;
+            for (int index = 0; index < vertices.Length; index++)
+            {
+                if (normals[index].y > 0.01f) topVertexCount++;
+            }
+            Assert.Less(topVertexCount, 38,
+                "两个相邻格应共享同一边缘的表面顶点；未共享时顶面顶点应为 2×(3×2×3+1)=38");
             foreach (IGrouping<string, int> group in sharedTopSamples)
             {
                 int first = group.First();
@@ -699,6 +784,103 @@ public class TerrainRenderingTests
         finally
         {
             UnityEngine.Object.DestroyImmediate(mesh);
+        }
+    }
+
+    [Test]
+    public void ContinuousTerrainSurface_TriangleWindingsMatchVertexNormals()
+    {
+        WorldMap map = BuildMap(LandformType.Mountain, LandformType.Plain);
+        map.cells[0].height = 0.90f;
+        map.cells[1].height = 0.50f;
+        GameObject root = new GameObject("ContinuousTerrainWindingTest");
+        TerrainRenderer renderer = root.AddComponent<TerrainRenderer>();
+        try
+        {
+            renderer.Render(map);
+            MeshFilter[] filters = root.GetComponentsInChildren<MeshFilter>(true);
+            int reversed = 0;
+            int inspected = 0;
+            foreach (MeshFilter filter in filters)
+            {
+                Mesh mesh = filter.sharedMesh;
+                if (mesh == null) continue;
+                Vector3[] vertices = mesh.vertices;
+                Vector3[] normals = mesh.normals;
+                for (int submesh = 0; submesh < mesh.subMeshCount; submesh++)
+                {
+                    int[] triangles = mesh.GetTriangles(submesh);
+                    for (int index = 0; index + 2 < triangles.Length; index += 3)
+                    {
+                        int a = triangles[index];
+                        int b = triangles[index + 1];
+                        int c = triangles[index + 2];
+                        Vector3 faceNormal = Vector3.Cross(
+                            vertices[b] - vertices[a],
+                            vertices[c] - vertices[a]);
+                        Vector3 vertexNormal = (normals[a] + normals[b] + normals[c]) / 3f;
+                        inspected++;
+                        if (Vector3.Dot(faceNormal.normalized, vertexNormal.normalized) < -0.05f)
+                            reversed++;
+                    }
+                }
+            }
+            Assert.Greater(inspected, 0);
+            Assert.AreEqual(0, reversed,
+                "连续地表三角形的 winding 必须与顶点法线一致，否则 addshadow/光照会生成黑色三角面");
+        }
+        finally
+        {
+            renderer.Clear();
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
+    public void ContinuousTerrainSurface_HasNoCrossCornerOversizedTriangles()
+    {
+        WorldMap generated = WorldGenerator.Generate(new MapGenerationSettings
+        {
+            width = 32,
+            height = 24,
+            seed = 6102
+        });
+        string json = Newtonsoft.Json.JsonConvert.SerializeObject(generated);
+        WorldMap map = Newtonsoft.Json.JsonConvert.DeserializeObject<WorldMap>(json);
+        GameObject root = new GameObject("ContinuousTerrainOversizeTest");
+        TerrainRenderer renderer = root.AddComponent<TerrainRenderer>();
+        try
+        {
+            renderer.Render(map);
+            foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Mesh mesh = filter.sharedMesh;
+                if (mesh == null || !mesh.name.StartsWith("ContinuousTerrainChunk")) continue;
+                Vector3[] vertices = mesh.vertices;
+                for (int submesh = 0; submesh < mesh.subMeshCount; submesh++)
+                {
+                    int[] triangles = mesh.GetTriangles(submesh);
+                    for (int index = 0; index + 2 < triangles.Length; index += 3)
+                    {
+                        Vector3 a = vertices[triangles[index]];
+                        Vector3 b = vertices[triangles[index + 1]];
+                        Vector3 c = vertices[triangles[index + 2]];
+                        float minX = Mathf.Min(a.x, Mathf.Min(b.x, c.x));
+                        float maxX = Mathf.Max(a.x, Mathf.Max(b.x, c.x));
+                        float minZ = Mathf.Min(a.z, Mathf.Min(b.z, c.z));
+                        float maxZ = Mathf.Max(a.z, Mathf.Max(b.z, c.z));
+                        float span = new Vector2(maxX - minX, maxZ - minZ).magnitude;
+                        Assert.LessOrEqual(span, HexGeometry.Radius * 2f + 0.05f,
+                            $"存在跨越六角角的错误大三角：submesh={submesh} " +
+                            $"tri={index / 3} a={a} b={b} c={c}");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            renderer.Clear();
+            UnityEngine.Object.DestroyImmediate(root);
         }
     }
 

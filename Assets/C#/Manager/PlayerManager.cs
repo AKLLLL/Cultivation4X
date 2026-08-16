@@ -45,7 +45,7 @@ public class PlayerManager : MonoBehaviour
             {
                 initialized = true,
                 completed = false,
-                stage = FoundingStage.WorldSelection,
+                stage = FoundingStage.CandidateSelection,
                 candidateSeed = seed,
                 worldSeed = seed,
                 selectedWorldCellIndex = -1,
@@ -90,18 +90,10 @@ public class PlayerManager : MonoBehaviour
     public bool ConfirmSectFounding(string requestedName, out string reason)
     {
         FoundingState state = playerData?.founding;
-        WorldMap map = WorldMapSession.Current;
-        WorldMapProgressState progress = WorldMapSession.Progress;
-        string sectName = requestedName?.Trim();
+        string sectName = NormalizeSectName(requestedName, out string nameReason);
         if (state == null || state.completed || state.stage != FoundingStage.SectConfirmation)
         { reason = "当前不能确认建立宗门"; return false; }
-        if (string.IsNullOrEmpty(sectName) || sectName.Length < 2 || sectName.Length > 12 ||
-            sectName.Any(char.IsControl))
-        { reason = "宗门名称应为 2–12 个字符，且不能包含控制字符"; return false; }
-        if (map?.cells == null || state.selectedWorldCellIndex < 0 ||
-            state.selectedWorldCellIndex >= map.cells.Length ||
-            !map.cells[state.selectedWorldCellIndex].isBuildable)
-        { reason = "宗门落点无效"; return false; }
+        if (nameReason != null) { reason = nameReason; return false; }
         if (state.selectedFounderIds == null || state.selectedFounderIds.Distinct().Count() != 3 ||
             state.candidates == null ||
             state.selectedFounderIds.Any(id => state.candidates.All(candidate => candidate?.candidateId != id)))
@@ -111,61 +103,32 @@ public class PlayerManager : MonoBehaviour
         { reason = "初始弟子运行时数据缺失"; return false; }
         if (FoundingRules.GetTechnique(state.selectedTechniqueId) == null)
         { reason = "初始功法数据无效"; return false; }
-        if (WorldMapProgressRules.GetSectBase(progress) != null || !string.IsNullOrEmpty(playerData.sectId) ||
-            (progress?.influenceSources?.Count ?? 0) != 0 || (progress?.cellInfluences?.Count ?? 0) != 0)
+        if (WorldMapProgressRules.GetSectBase(WorldMapSession.Progress) != null || !string.IsNullOrEmpty(playerData.sectId) ||
+            (WorldMapSession.Progress?.influenceSources?.Count ?? 0) != 0 ||
+            (WorldMapSession.Progress?.cellInfluences?.Count ?? 0) != 0)
         { reason = "宗门驻地已经建立"; return false; }
 
-        MapSiteData sectBase = new MapSiteData
-        {
-            siteId = WorldMapProgressRules.PlayerSectBaseId,
-            cellIndex = state.selectedWorldCellIndex,
-            siteType = MapSiteType.SectBase,
-            siteName = sectName,
-            isRevealed = true,
-            canInteract = true,
-            revealState = MapContentRevealState.Discovered,
-            siteState = MapSiteState.Developed,
-            ownerSectId = "player_sect",
-            discoveredDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-            lastUpdatedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay
-        };
-        if (!WorldMapContentRules.TryPrepareSectBasePlacement(map, progress,
-                state.selectedWorldCellIndex, out reason)) return false;
-        InfluenceSourceData sectBaseSource = new InfluenceSourceData
-        {
-            sourceId = sectBase.siteId,
-            sourceType = InfluenceSourceType.SectBase,
-            cellIndex = sectBase.cellIndex,
-            controllerSectId = "player_sect",
-            baseStrength = WorldMapInfluenceRules.SectBaseStrength,
-            radius = WorldMapInfluenceRules.SectBaseRadius,
-            isActive = true
-        };
-        WorldMapProgressState updatedProgress = new WorldMapProgressState
-        {
-            revealedCellIndices = new List<int>(progress?.revealedCellIndices ?? new List<int>()),
-            exploredCellIndices = new List<int>(progress?.exploredCellIndices ?? new List<int>()),
-            mapSites = new List<MapSiteData>(progress?.mapSites ?? new List<MapSiteData>()) { sectBase },
-            influenceSources = new List<InfluenceSourceData>(progress?.influenceSources ?? new List<InfluenceSourceData>())
-                { sectBaseSource },
-            cellInfluences = new List<CellInfluenceState>(),
-            isInfluenceDirty = true
-        };
-        WorldMapInfluenceRules.Recalculate(map, updatedProgress);
-        WorldMapContentRules.RefreshHints(map, updatedProgress);
-
-        playerData.sectId = "player_sect";
-        playerData.sectName = sectName;
-        playerData.foundedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
-        playerData.influenceRadius = 2;
-        state.stage = FoundingStage.Cave;
-        WorldMapSession.Set(map, updatedProgress);
-        // 建宗同时替换地图进度；显式通知地图表现层立即重绘影响力覆盖。
-        WorldMapSession.NotifyProgressChanged();
+        // 只确认身份，不创建驻地；选址完成后由 ConfirmWorldSite 统一落址。
+        state.pendingSectName = sectName;
+        state.selectedWorldCellIndex = -1;
+        state.stage = FoundingStage.WorldSelection;
         reason = null;
         OnFoundingChanged?.Invoke();
         SaveManager.Instance?.AutoSave();
         return true;
+    }
+
+    private static string NormalizeSectName(string requestedName, out string reason)
+    {
+        string sectName = requestedName?.Trim();
+        if (string.IsNullOrEmpty(sectName) || sectName.Length < 2 || sectName.Length > 12 ||
+            sectName.Any(char.IsControl))
+        {
+            reason = "宗门名称应为 2–12 个字符，且不能包含控制字符";
+            return null;
+        }
+        reason = null;
+        return sectName;
     }
 
     /// <summary>
@@ -317,14 +280,76 @@ public class PlayerManager : MonoBehaviour
     {
         FoundingState state = playerData?.founding;
         WorldMap map = WorldMapSession.Current;
+        WorldMapProgressState progress = WorldMapSession.Progress;
         if (state == null || state.completed || state.stage != FoundingStage.WorldSelection)
         { reason = "当前不能选择洞府位置"; return false; }
         if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
         { reason = "地图格不存在"; return false; }
         if (!map.cells[cellIndex].isBuildable)
         { reason = "该地形不能建立洞府"; return false; }
+        string sectName = NormalizeSectName(state.pendingSectName, out string nameReason);
+        if (nameReason != null) { reason = nameReason; return false; }
+        if (state.selectedFounderIds == null || state.selectedFounderIds.Distinct().Count() != 3 ||
+            state.candidates == null ||
+            state.selectedFounderIds.Any(id => state.candidates.All(candidate => candidate?.candidateId != id)))
+        { reason = "初始弟子数据无效"; return false; }
+        if (NPCManager.Instance == null ||
+            state.selectedFounderIds.Any(id => NPCManager.Instance.GetRuntime(id) == null))
+        { reason = "初始弟子运行时数据缺失"; return false; }
+        if (FoundingRules.GetTechnique(state.selectedTechniqueId) == null)
+        { reason = "初始功法数据无效"; return false; }
+        if (WorldMapProgressRules.GetSectBase(progress) != null || !string.IsNullOrEmpty(playerData.sectId) ||
+            (progress?.influenceSources?.Count ?? 0) != 0 || (progress?.cellInfluences?.Count ?? 0) != 0)
+        { reason = "宗门驻地已经建立"; return false; }
+
         state.selectedWorldCellIndex = cellIndex;
-        state.stage = FoundingStage.CandidateSelection;
+        MapSiteData sectBase = new MapSiteData
+        {
+            siteId = WorldMapProgressRules.PlayerSectBaseId,
+            cellIndex = cellIndex,
+            siteType = MapSiteType.SectBase,
+            siteName = sectName,
+            isRevealed = true,
+            canInteract = true,
+            revealState = MapContentRevealState.Discovered,
+            siteState = MapSiteState.Developed,
+            ownerSectId = "player_sect",
+            discoveredDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            lastUpdatedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay
+        };
+        if (!WorldMapContentRules.TryPrepareSectBasePlacement(map, progress, cellIndex, out reason))
+            return false;
+        InfluenceSourceData sectBaseSource = new InfluenceSourceData
+        {
+            sourceId = sectBase.siteId,
+            sourceType = InfluenceSourceType.SectBase,
+            cellIndex = sectBase.cellIndex,
+            controllerSectId = "player_sect",
+            baseStrength = WorldMapInfluenceRules.SectBaseStrength,
+            radius = WorldMapInfluenceRules.SectBaseRadius,
+            isActive = true
+        };
+        WorldMapProgressState updatedProgress = new WorldMapProgressState
+        {
+            revealedCellIndices = new List<int>(progress?.revealedCellIndices ?? new List<int>()),
+            exploredCellIndices = new List<int>(progress?.exploredCellIndices ?? new List<int>()),
+            mapSites = new List<MapSiteData>(progress?.mapSites ?? new List<MapSiteData>()) { sectBase },
+            influenceSources = new List<InfluenceSourceData>(progress?.influenceSources ?? new List<InfluenceSourceData>())
+                { sectBaseSource },
+            cellInfluences = new List<CellInfluenceState>(),
+            isInfluenceDirty = true
+        };
+        WorldMapInfluenceRules.Recalculate(map, updatedProgress);
+        WorldMapContentRules.RefreshHints(map, updatedProgress);
+
+        playerData.sectId = "player_sect";
+        playerData.sectName = sectName;
+        playerData.foundedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+        playerData.influenceRadius = 2;
+        state.stage = FoundingStage.Cave;
+        WorldMapSession.Set(map, updatedProgress);
+        // 建宗同时替换地图进度；显式通知地图表现层立即重绘影响力覆盖。
+        WorldMapSession.NotifyProgressChanged();
         reason = null;
         OnFoundingChanged?.Invoke();
         SaveManager.Instance?.AutoSave();

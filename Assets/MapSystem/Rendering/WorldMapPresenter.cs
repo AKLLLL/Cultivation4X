@@ -18,7 +18,11 @@ namespace Cultivation4X.WorldMap
         Biome,
         AuraConcentration,
         DominantElement,
-        SpiritVeinPaths
+        SpiritVeinPaths,
+        // 新游戏流程状态：同一张世界地图，切换观察/交互语义，不创建新地图。
+        SectPlacement,
+        WorldExplore,
+        SectManagement
     }
 
     public partial class WorldMapPresenter : MonoBehaviour
@@ -45,15 +49,8 @@ namespace Cultivation4X.WorldMap
         private GameObject selectionBlocker;
         private Vector3 dragOrigin;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
-        {
-            // TerrainTest 场景使用 3D 表现，跳过 2D Presenter，保持场景隔离。
-            if (MapTestBootstrap.IsTestScene) return;
-            if (FindObjectOfType<WorldMapPresenter>() == null)
-                new GameObject("WorldMapPresenter").AddComponent<WorldMapPresenter>();
-        }
-
+        // 2D Presenter 已由 WorldMap3DController 接管 SampleScene 表现层。
+        // 本类保留为兼容层与既有测试目标，不再注册运行时自动启动。
         private void Awake()
         {
             material = new Material(Shader.Find("Sprites/Default"));
@@ -177,8 +174,9 @@ namespace Cultivation4X.WorldMap
 
         private void SelectAtWorld(Vector3 world)
         {
-            int rowGuess = Mathf.RoundToInt(world.y / 1.5f);
-            int colGuess = Mathf.RoundToInt(world.x / Sqrt3 - ((rowGuess & 1) == 1 ? 0.5f : 0f));
+            HexCoord guess = HexGeometry.GetCoordFromWorld(new Vector3(world.x, 0f, world.y));
+            int rowGuess = guess.row;
+            int colGuess = guess.col;
             int bestIndex = -1;
             float bestDistance = float.MaxValue;
             for (int row = rowGuess - 1; row <= rowGuess + 1; row++)
@@ -547,8 +545,7 @@ namespace Cultivation4X.WorldMap
             else DestroyImmediate(value);
         }
 
-        private static Vector2 Center(HexCoord coord) =>
-            new Vector2(Sqrt3 * (coord.col + ((coord.row & 1) == 1 ? 0.5f : 0f)), 1.5f * coord.row);
+        private static Vector2 Center(HexCoord coord) => HexGeometry.GetCenter(coord);
         private static Color AuraColor(float value) =>
             Color.Lerp(new Color(0.06f, 0.09f, 0.16f), new Color(0.85f, 0.27f, 0.94f), Mathf.Clamp01(value));
         private static Color TerrainColor(WorldCell cell)

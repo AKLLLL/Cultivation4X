@@ -31,6 +31,18 @@ public class CharacterEventPanel : MonoBehaviour
         inboxPanel.gameObject.SetActive(false);
     }
 
+    /// <summary>事件与收件箱 UI 只在正式世界地图（成功建宗后）显示。</summary>
+    public void SetUiVisible(bool visible)
+    {
+        if (canvas == null) return;
+        if (!visible)
+        {
+            CloseManaged(panel.gameObject);
+            CloseManaged(inboxPanel.gameObject);
+        }
+        canvas.gameObject.SetActive(visible);
+    }
+
     private void Start()
     {
         if (EventManager.Instance != null)

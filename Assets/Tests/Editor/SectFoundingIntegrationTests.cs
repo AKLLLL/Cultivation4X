@@ -33,17 +33,17 @@ public class SectFoundingIntegrationTests
     }
 
     [Test]
-    public void FoundingFlow_CreatesExactlyOneSectBaseAfterExplicitConfirmation()
+    public void FoundingFlow_CreatesExactlyOneSectBaseAfterPlacementConfirmation()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         NPCManager npcs = Add<NPCManager>("NPCs");
         PlayerManager.Instance = player;
         NPCManager.Instance = npcs;
         player.InitializeNewFoundingGame(801);
+        Assert.AreEqual(FoundingStage.CandidateSelection, player.playerData.founding.stage);
         WorldMap map = WorldMapSession.Current;
         int buildable = map.cells.First(cell => cell.isBuildable).index;
 
-        Assert.IsTrue(player.ConfirmWorldSite(buildable, out string siteReason), siteReason);
         List<string> founders = player.playerData.founding.candidates.Take(3)
             .Select(candidate => candidate.candidateId).ToList();
         Assert.IsTrue(player.ConfirmFounderSelection(founders, out string founderReason), founderReason);
@@ -53,6 +53,13 @@ public class SectFoundingIntegrationTests
         Assert.IsNull(WorldMapProgressRules.GetSectBase(WorldMapSession.Progress));
 
         Assert.IsTrue(player.ConfirmSectFounding("  青云宗  ", out string reason), reason);
+        Assert.AreEqual(FoundingStage.WorldSelection, player.playerData.founding.stage,
+            "确认宗门身份后应进入 SectPlacement，而不是直接创建驻地");
+        Assert.AreEqual("青云宗", player.playerData.founding.pendingSectName);
+        Assert.IsNull(player.playerData.sectId);
+        Assert.IsNull(WorldMapProgressRules.GetSectBase(WorldMapSession.Progress));
+
+        Assert.IsTrue(player.ConfirmWorldSite(buildable, out string siteReason), siteReason);
         Assert.AreEqual(FoundingStage.Cave, player.playerData.founding.stage);
         Assert.AreEqual("青云宗", player.playerData.sectName);
         Assert.AreEqual(2, player.playerData.influenceRadius);
@@ -72,6 +79,7 @@ public class SectFoundingIntegrationTests
         Assert.AreEqual(19, WorldMapSession.Progress.cellInfluences.Count);
         Assert.IsFalse(WorldMapSession.Progress.isInfluenceDirty);
         Assert.IsFalse(player.ConfirmSectFounding("第二宗门", out _));
+        Assert.IsFalse(player.ConfirmWorldSite(buildable, out _));
         Assert.AreEqual(1, WorldMapSession.Progress.mapSites.Count(site =>
             site.siteType == MapSiteType.SectBase));
     }
@@ -120,6 +128,8 @@ public class SectFoundingIntegrationTests
         NPCManager.Instance = npcs;
         AdvanceToConfirmation(player, 803);
         Assert.IsTrue(player.ConfirmSectFounding("玄霄宗", out string reason), reason);
+        int buildable = WorldMapSession.Current.cells.First(cell => cell.isBuildable).index;
+        Assert.IsTrue(player.ConfirmWorldSite(buildable, out string siteReason), siteReason);
         GameState state = new GameState
         {
             worldMap = WorldMapSession.Current,
@@ -135,6 +145,7 @@ public class SectFoundingIntegrationTests
             JsonConvert.SerializeObject(state));
         Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(restored));
         Assert.AreEqual("玄霄宗", restored.sect.sectName);
+        Assert.AreEqual("玄霄宗", restored.sect.founding.pendingSectName);
         Assert.AreEqual(player.playerData.founding.selectedWorldCellIndex,
             restored.worldMapProgress.mapSites.Single(site => site.siteType == MapSiteType.SectBase).cellIndex);
         Assert.AreEqual(state.worldMap.pointsOfInterest.Select(point => point.cellIndex),
@@ -162,6 +173,8 @@ public class SectFoundingIntegrationTests
             JsonConvert.SerializeObject(state));
         missingTechnique.sect.founding.stage = FoundingStage.SectConfirmation;
         missingTechnique.sect.founding.selectedTechniqueId = null;
+        missingTechnique.sect.founding.pendingSectName = null;
+        missingTechnique.sect.founding.selectedWorldCellIndex = -1;
         missingTechnique.sect.sectId = null;
         missingTechnique.sect.sectName = null;
         missingTechnique.sect.influenceRadius = 0;
@@ -243,6 +256,8 @@ public class SectFoundingIntegrationTests
         NPCManager.Instance = npcs;
         AdvanceToConfirmation(player, dirty ? 805 : 806);
         Assert.IsTrue(player.ConfirmSectFounding("归元宗", out string reason), reason);
+        int buildable = WorldMapSession.Current.cells.First(cell => cell.isBuildable).index;
+        Assert.IsTrue(player.ConfirmWorldSite(buildable, out string siteReason), siteReason);
         GameState state = new GameState
         {
             worldMap = WorldMapSession.Current,
@@ -276,8 +291,6 @@ public class SectFoundingIntegrationTests
     private void AdvanceToConfirmation(PlayerManager player, int seed)
     {
         player.InitializeNewFoundingGame(seed);
-        int buildable = WorldMapSession.Current.cells.First(cell => cell.isBuildable).index;
-        Assert.IsTrue(player.ConfirmWorldSite(buildable, out string siteReason), siteReason);
         List<string> founders = player.playerData.founding.candidates.Take(3)
             .Select(candidate => candidate.candidateId).ToList();
         Assert.IsTrue(player.ConfirmFounderSelection(founders, out string founderReason), founderReason);

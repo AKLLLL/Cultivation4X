@@ -42,7 +42,7 @@ namespace Cultivation4X.WorldMap
             foreach (WorldCell cell in map.cells)
             {
                 if (cell == null || cell.landform == LandformType.Mountain) continue;
-                Vector2 center = TerrainMeshGenerator.HexCenter(cell.coord);
+                Vector2 center = HexGeometry.GetCenter(cell);
                 for (int edge = 0; edge < 6; edge++)
                 {
                     int neighbor = map.GetIndex(map.GetNeighbor(cell.coord, edge));

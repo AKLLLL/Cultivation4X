@@ -184,13 +184,23 @@ namespace Cultivation4X.WorldMap
         };
     }
 
+    /// <summary>
+    /// 地图静态数据快照的版本。只要 WorldGenerator 的输出语义发生变化
+    /// （山体、台地、灵脉、区域、可建格等），必须 +1，使旧存档的
+    /// WorldMap 快照被 SaveManager 明确拒绝，避免旧地形数据用新渲染器加载。
+    /// </summary>
+    public static class WorldMapGenerationVersion
+    {
+        public const int Current = 5;
+    }
+
     [Serializable]
     public class MapGenerationSettings
     {
         public int width = 128;
         public int height = 96;
         public int seed = 48621;
-        public int generationVersion = 4;
+        public int generationVersion = WorldMapGenerationVersion.Current;
         public TerrainGenerationParameters terrain = new TerrainGenerationParameters();
         public ClimateGenerationParameters climate = new ClimateGenerationParameters();
         public RiverGenerationParameters rivers = new RiverGenerationParameters();

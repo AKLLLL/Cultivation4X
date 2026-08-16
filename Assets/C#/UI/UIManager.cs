@@ -198,6 +198,20 @@ public class UIManager : MonoBehaviour
         return removed;
     }
 
+    /// <summary>
+    /// 关闭所有模态面板。进入 SectPlacement 时调用，避免非选址 UI 残留。
+    /// </summary>
+    public void CloseAllPanels()
+    {
+        while (panelStack.Count > 0)
+        {
+            PanelEntry entry = panelStack.Pop();
+            if (entry.panel != null) entry.panel.SetActive(false);
+            RestoreCanvas(entry);
+            entry.onClose?.Invoke();
+        }
+    }
+
     private static Canvas EnsurePanelCanvas(GameObject panel)
     {
         Canvas canvas = panel.GetComponent<Canvas>();

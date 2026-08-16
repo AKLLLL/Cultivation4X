@@ -112,6 +112,11 @@ public class FoundingPanel : MonoBehaviour
             OpenManagedPanel();
             Refresh();
         }
+        else if (panel.gameObject.activeSelf)
+        {
+            // 角色创建完成进入 SectPlacement 后，立宗面板必须收起，让选址视图全屏。
+            CloseManagedPanel();
+        }
     }
 
     private void Open()

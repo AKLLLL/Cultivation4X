@@ -6,12 +6,21 @@ using Cultivation4X.WorldMap;
 using Newtonsoft.Json;
 using UnityEngine;
 
+internal sealed class SaveVersionMismatchException : Exception
+{
+    public SaveVersionMismatchException(string message) : base(message)
+    {
+    }
+}
+
 public class SaveManager : MonoBehaviour
 {
     public static SaveManager Instance { get; private set; }
+    private bool lastLoadFailedWithVersionMismatch;
     public bool IsInitializationComplete { get; private set; }
     public bool LoadedExistingSave { get; private set; }
     public bool InitializationFailed { get; private set; }
+    public bool HasGameSession { get; private set; }
     public event Action<bool> OnInitializationCompleted;
     private const string SaveFileName = "cultivation4x-save.json";
     private string SavePath => Path.Combine(Application.persistentDataPath, SaveFileName);
@@ -35,34 +44,72 @@ public class SaveManager : MonoBehaviour
         if (MapTestBootstrap.IsTestScene)
         {
             IsInitializationComplete = true;
+            HasGameSession = false;
             yield break;
         }
+        lastLoadFailedWithVersionMismatch = false;
         if (File.Exists(SavePath))
         {
-            LoadedExistingSave = Load();
-            InitializationFailed = !LoadedExistingSave;
+            if (Load())
+            {
+                LoadedExistingSave = true;
+                InitializationFailed = false;
+                HasGameSession = true;
+            }
+            else if (lastLoadFailedWithVersionMismatch)
+            {
+                Debug.LogWarning("检测到旧版本存档，将自动舍弃并创建新档");
+                LoadedExistingSave = false;
+                InitializationFailed = !InitializeNewGame();
+            }
+            else
+            {
+                LoadedExistingSave = false;
+                InitializationFailed = true;
+                HasGameSession = false;
+            }
         }
         else
         {
-            try
-            {
-                int seed = unchecked(Environment.TickCount ^ DateTime.UtcNow.Millisecond);
-                PlayerManager.Instance?.InitializeNewFoundingGame(seed);
-                NPCManager.Instance?.ClearCharacters();
-                if (WarehouseManager.Instance != null) WarehouseManager.Instance.warehouseData = new WarehouseData();
-                MissionManager.Instance?.RestoreDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-                    new System.Collections.Generic.List<string>());
-                LoadedExistingSave = false;
-                Save();
-            }
-            catch (Exception exception)
-            {
-                InitializationFailed = true;
-                Debug.LogError($"初始化新存档失败: {exception}");
-            }
+            // 无存档停在主菜单，等待 MainMenuPanel 调用 StartNewGame。
+            LoadedExistingSave = false;
+            InitializationFailed = false;
+            HasGameSession = false;
         }
         IsInitializationComplete = true;
         OnInitializationCompleted?.Invoke(LoadedExistingSave);
+    }
+
+    /// <summary>主菜单开始新游戏：创建新档并让 GameFlowState 进入角色创建。</summary>
+    public bool StartNewGame()
+    {
+        if (!IsInitializationComplete || InitializationFailed) return false;
+        LoadedExistingSave = false;
+        InitializationFailed = !InitializeNewGame();
+        OnInitializationCompleted?.Invoke(LoadedExistingSave);
+        return !InitializationFailed;
+    }
+
+    private bool InitializeNewGame()
+    {
+        try
+        {
+            int seed = unchecked(Environment.TickCount ^ DateTime.UtcNow.Millisecond);
+            PlayerManager.Instance?.InitializeNewFoundingGame(seed);
+            NPCManager.Instance?.ClearCharacters();
+            if (WarehouseManager.Instance != null) WarehouseManager.Instance.warehouseData = new WarehouseData();
+            MissionManager.Instance?.RestoreDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                new System.Collections.Generic.List<string>());
+            Save();
+            HasGameSession = true;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            HasGameSession = false;
+            Debug.LogError($"初始化新存档失败: {exception}");
+            return false;
+        }
     }
 
     public GameState CaptureState()
@@ -167,8 +214,15 @@ public class SaveManager : MonoBehaviour
             TimeManager.Instance?.RestoreUnreadSettlement(state.unreadDaySettlement);
             return true;
         }
+        catch (SaveVersionMismatchException exception)
+        {
+            lastLoadFailedWithVersionMismatch = true;
+            Debug.LogWarning($"旧版本存档不兼容，将自动舍弃并创建新档: {exception.Message}");
+            return false;
+        }
         catch (Exception exception)
         {
+            lastLoadFailedWithVersionMismatch = false;
             Debug.LogError($"读取存档失败: {exception}");
             return false;
         }
@@ -181,10 +235,10 @@ public class SaveManager : MonoBehaviour
     {
         GameState state = JsonConvert.DeserializeObject<GameState>(json);
         int version = state?.version ?? -1;
-        if (version > SaveDataVersion.Current || version < 0)
-            throw new InvalidDataException("存档版本不受支持");
+        if (version > SaveDataVersion.Current)
+            throw new InvalidDataException("存档版本高于当前游戏版本，拒绝读取");
         if (version < SaveDataVersion.Current)
-            throw new InvalidDataException("世界地图生成版本更新不兼容旧档，请删除旧存档并开始新游戏");
+            throw new SaveVersionMismatchException("存档版本低于当前游戏版本");
         return state;
     }
 
@@ -314,8 +368,11 @@ public class SaveManager : MonoBehaviour
         if (map.width < 8 || map.height < 8 || expectedCellCount > int.MaxValue ||
             map.cells == null || map.cells.Length != expectedCellCount)
             throw new InvalidDataException("世界地图尺寸或格子数量无效");
-        if (map.generationVersion != 4 || map.generationSettings == null)
-            throw new InvalidDataException("世界地图生成版本或参数快照无效");
+        if (map.generationVersion < WorldMapGenerationVersion.Current)
+            throw new SaveVersionMismatchException("世界地图生成版本低于当前游戏版本");
+        if (map.generationVersion != WorldMapGenerationVersion.Current ||
+            map.generationSettings == null)
+            throw new InvalidDataException("世界地图生成版本与当前游戏不兼容");
         if (MapGenerationSettingsValidator.Validate(map.generationSettings).Count > 0 ||
             map.generationSettings.width != map.width ||
             map.generationSettings.height != map.height ||
@@ -400,6 +457,7 @@ public class SaveManager : MonoBehaviour
 
         bool foundersSelected = founding.stage == FoundingStage.TechniqueSelection ||
                                 founding.stage == FoundingStage.SectConfirmation ||
+                                founding.stage == FoundingStage.WorldSelection ||
                                 founding.stage == FoundingStage.Cave ||
                                 founding.stage == FoundingStage.Completed;
         if (!foundersSelected)
@@ -423,6 +481,7 @@ public class SaveManager : MonoBehaviour
         }
 
         bool techniqueSelected = founding.stage == FoundingStage.SectConfirmation ||
+                                 founding.stage == FoundingStage.WorldSelection ||
                                  founding.stage == FoundingStage.Cave ||
                                  founding.stage == FoundingStage.Completed;
         if (techniqueSelected)
@@ -436,11 +495,28 @@ public class SaveManager : MonoBehaviour
         int selected = founding.selectedWorldCellIndex;
         if (selected < -1 || selected >= map.cells.Length)
             throw new InvalidDataException("洞府选址索引无效");
-        if (founding.stage == FoundingStage.WorldSelection && selected != -1)
-            throw new InvalidDataException("选址阶段不应已有洞府落点");
-        if (founding.initialized && founding.stage != FoundingStage.WorldSelection &&
-            (selected < 0 || !map.cells[selected].isBuildable))
+        bool siteChosen = founding.stage == FoundingStage.Cave ||
+                          founding.stage == FoundingStage.Completed;
+        if (!siteChosen && selected != -1)
+            throw new InvalidDataException("选址完成前不应已有洞府落点");
+        if (siteChosen && (selected < 0 || !map.cells[selected].isBuildable))
             throw new InvalidDataException("存档缺少有效的洞府选址");
+
+        bool identityConfirmed = founding.stage == FoundingStage.WorldSelection ||
+                                 founding.stage == FoundingStage.Cave ||
+                                 founding.stage == FoundingStage.Completed;
+        if (identityConfirmed)
+        {
+            if (string.IsNullOrWhiteSpace(founding.pendingSectName) ||
+                founding.pendingSectName.Length < 2 ||
+                founding.pendingSectName.Length > 12 ||
+                founding.pendingSectName.Any(char.IsControl))
+                throw new InvalidDataException("存档缺少有效的待确认宗门名称");
+        }
+        else if (!string.IsNullOrEmpty(founding.pendingSectName))
+        {
+            throw new InvalidDataException("确认宗门名称前存在残留的宗门名称");
+        }
 
         System.Collections.Generic.List<MapSiteData> sectBases = progress.mapSites
             .Where(site => site.siteType == MapSiteType.SectBase).ToList();
@@ -476,6 +552,7 @@ public class SaveManager : MonoBehaviour
             string.IsNullOrWhiteSpace(state.sect.sectName) ||
             state.sect.sectName.Length < 2 || state.sect.sectName.Length > 12 ||
             state.sect.sectName.Any(char.IsControl) ||
+            state.sect.sectName != founding.pendingSectName ||
             state.sect.sectName != sectBase.siteName ||
             state.sect.influenceRadius != 2 ||
             state.sect.foundedDay < 0 ||

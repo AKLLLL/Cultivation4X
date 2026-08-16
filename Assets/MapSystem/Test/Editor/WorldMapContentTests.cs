@@ -284,9 +284,9 @@ public class WorldMapContentTests
     }
 
     [Test]
-    public void VersionFourteen_RoundTripsAndRejectsIllegalContentState()
+    public void VersionFifteen_RoundTripsAndRejectsIllegalContentState()
     {
-        Assert.AreEqual(14, SaveDataVersion.Current);
+        Assert.AreEqual(15, SaveDataVersion.Current);
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5105 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
@@ -482,7 +482,7 @@ public class WorldMapContentTests
         string legacy = JsonConvert.SerializeObject(new GameState { version = 12 });
         TargetInvocationException failure = Assert.Throws<TargetInvocationException>(() =>
             deserialize.Invoke(null, new object[] { legacy }));
-        Assert.IsInstanceOf<InvalidDataException>(failure.InnerException);
+        Assert.IsInstanceOf<SaveVersionMismatchException>(failure.InnerException);
     }
 
     [Test]
@@ -545,6 +545,7 @@ public class WorldMapContentTests
                 founding = new FoundingState
                 {
                     initialized = true, stage = FoundingStage.Cave, selectedWorldCellIndex = home,
+                    pendingSectName = "测试宗",
                     selectedTechniqueId = "qingmu", candidates = candidates,
                     selectedFounderIds = ids.ToList(), village = new VillageState(), externalThreat = new ActiveThreatState()
                 }
@@ -563,7 +564,11 @@ public class WorldMapContentTests
     private static PlayerData EstablishedSect(int home) => new PlayerData
     {
         sectId = "player_sect", sectName = "测试宗",
-        founding = new FoundingState { initialized = true, stage = FoundingStage.Cave, selectedWorldCellIndex = home }
+        founding = new FoundingState
+        {
+            initialized = true, stage = FoundingStage.Cave, selectedWorldCellIndex = home,
+            pendingSectName = "测试宗"
+        }
     };
 
     private static InfluenceSourceData Source(int cellIndex) => new InfluenceSourceData

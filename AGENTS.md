@@ -93,3 +93,17 @@
 - 高风险数据路径经过检查。
 - 明确列出未验证的手动测试。
 - 未经用户要求，不提交、不推送、不创建 PR。
+
+## Unity 批处理测试约定
+
+1.Unity 路径是 E:\Unity\2022.3.62f3\Editor\Unity.exe；
+2.-runTests 时不要加 -quit，否则可能在测试启动前退出；
+3.启动 batchmode 前先 Get-Process Unity 检查编辑器是否开着，开着必须先让用户关闭；
+4.PowerShell 后台任务返回不代表 Unity 已结束，要以结果 XML 产出为准。
+
+## 地图接入与 UI 分层约定
+
+1. WorldMapData / WorldCell / HexGeometry / Terrain 生成是唯一地图数据源；新视图只能切换 WorldMapViewMode，禁止创建第二套地图数据或独立地形 Renderer。
+2. GameFlowState 的 UI 启停必须集中在 WorldMap3DController 路由：MainMenu/CharacterSetup 只留立宗 UI；SectPlacement 复用世界地形 + 精简选址 HUD；WorldExplore 才恢复完整 HUD、资源栏与事件收件箱。
+3. 世界空间 Mesh/Renderer 不得挂在 ScreenSpaceOverlay Canvas 根节点下；UI Canvas 与地图 Renderer 必须分属不同节点。
+4. 建宗选址模式复用 WorldMapRenderer/TerrainRenderer 与既有相机，只切换表现模式与数据覆盖层，不新增 Camera/Renderer 系统。

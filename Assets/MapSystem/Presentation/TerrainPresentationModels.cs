@@ -12,7 +12,11 @@ namespace Cultivation4X.WorldMap
         Rainfall,
         FreshWaterDistance,
         DrainageFlow,
-        Elevation
+        Elevation,
+        // 玩法调试视图：只改变地表配色与灵脉覆盖层，不改变地形几何。
+        Aura,
+        DominantElement,
+        SpiritVeinPaths
     }
 
     /// <summary>
@@ -140,11 +144,59 @@ namespace Cultivation4X.WorldMap
                     color = Color.Lerp(new Color(0.08f, 0.10f, 0.14f),
                         new Color(0.94f, 0.94f, 0.90f), Mathf.Clamp01(cell.height));
                     break;
+                case WorldMapClimateDebugView.Aura:
+                    color = Color.Lerp(new Color(0.06f, 0.09f, 0.16f),
+                        new Color(0.85f, 0.27f, 0.94f), Mathf.Clamp01(cell.totalAura));
+                    break;
+                case WorldMapClimateDebugView.DominantElement:
+                    color = DominantElementDebugColor(cell);
+                    break;
+                case WorldMapClimateDebugView.SpiritVeinPaths:
+                    color = new Color(0.12f, 0.13f, 0.14f);
+                    break;
                 default:
                     return ColorForCell(cell);
             }
             color.a = 1f;
             return color;
+        }
+
+        /// <summary>五行专用颜色：金米白、木绿、水蓝、火红、土黄。</summary>
+        public static Color SpiritElementColor(SpiritElement element)
+        {
+            switch (element)
+            {
+                case SpiritElement.Metal: return new Color(0.88f, 0.88f, 0.70f);
+                case SpiritElement.Wood: return new Color(0.25f, 0.90f, 0.35f);
+                case SpiritElement.Water: return new Color(0.20f, 0.65f, 1f);
+                case SpiritElement.Fire: return new Color(1f, 0.25f, 0.12f);
+                default: return new Color(0.85f, 0.65f, 0.25f);
+            }
+        }
+
+        private static Color DominantElementDebugColor(WorldCell cell)
+        {
+            if (cell?.elementalAura == null) return new Color(0.12f, 0.13f, 0.14f);
+            SpiritElement dominant = SpiritElement.Metal;
+            float maximum = cell.elementalAura.metal;
+            if (cell.elementalAura.wood > maximum)
+            {
+                dominant = SpiritElement.Wood;
+                maximum = cell.elementalAura.wood;
+            }
+            if (cell.elementalAura.water > maximum)
+            {
+                dominant = SpiritElement.Water;
+                maximum = cell.elementalAura.water;
+            }
+            if (cell.elementalAura.fire > maximum)
+            {
+                dominant = SpiritElement.Fire;
+                maximum = cell.elementalAura.fire;
+            }
+            if (cell.elementalAura.earth > maximum) dominant = SpiritElement.Earth;
+            return Color.Lerp(new Color(0.025f, 0.025f, 0.03f),
+                SpiritElementColor(dominant), 0.15f + Mathf.Clamp01(cell.totalAura) * 0.85f);
         }
 
         private static Color DiagnosticGradient(WorldMap map, int cellIndex,

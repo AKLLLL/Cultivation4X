@@ -358,11 +358,8 @@ namespace Cultivation4X.WorldMap
             return nearest;
         }
 
-        private static Vector2 HexCorner(Vector2 center, int corner)
-        {
-            float angle = Mathf.Deg2Rad * (corner * 60f - 30f);
-            return center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-        }
+        private static Vector2 HexCorner(Vector2 center, int corner) =>
+            HexGeometry.GetCorners(center)[corner];
 
         private static Vector2 Barycentric(Vector2 center, Vector2 a, Vector2 b,
             int first, int second, int subdivisions)

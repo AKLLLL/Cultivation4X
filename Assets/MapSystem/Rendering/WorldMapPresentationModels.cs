@@ -241,6 +241,38 @@ namespace Cultivation4X.WorldMap
                 }).ToList();
         }
 
+        /// <summary>
+        /// 3D HUD 使用的完整标记集合：内容地点 + 环境暗示 + 兴趣点 + 宗门/洞府标记。
+        /// 只做表现数据组装，不修改进度；认知过滤由调用方按已知格集合执行。
+        /// </summary>
+        public static List<WorldMapPresentationMarker> CreateMapPresentationMarkers(
+            WorldMap map, WorldMapProgressState progress, PlayerData sect)
+        {
+            var result = new List<WorldMapPresentationMarker>();
+            List<WorldMapPresentationMarker> contentMarkers =
+                CreateContentMarkers(map, progress);
+            result.AddRange(contentMarkers);
+            result.AddRange(CreateEnvironmentHintMarkers(map, progress));
+            HashSet<int> contentCells = new HashSet<int>(
+                contentMarkers.Select(item => item.cellIndex));
+            result.AddRange(CreatePointOfInterestMarkers(map)
+                .Where(item => !contentCells.Contains(item.cellIndex)));
+
+            int caveIndex = sect?.founding?.selectedWorldCellIndex ?? -1;
+            if (map?.cells != null && caveIndex >= 0 && caveIndex < map.cells.Length)
+            {
+                MapSiteData sectBase = WorldMapProgressRules.GetSectBase(progress);
+                result.Add(new WorldMapPresentationMarker
+                {
+                    id = sectBase?.siteId ?? "player_cave",
+                    label = sectBase?.siteName ?? "待建洞府",
+                    kind = sectBase == null ? WorldMapMarkerKind.Cave : WorldMapMarkerKind.FactionSeat,
+                    cellIndex = caveIndex
+                });
+            }
+            return result;
+        }
+
         private static WorldMapMarkerKind ContentMarkerKind(MapSiteType type)
         {
             switch (type)

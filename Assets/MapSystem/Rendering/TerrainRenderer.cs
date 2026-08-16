@@ -68,6 +68,10 @@ namespace Cultivation4X.WorldMap
         [SerializeField] private float nearFieldOfViewDegrees = 45f;
         [SerializeField] private float cameraPitchDegrees = 55f;
         [SerializeField] private float cameraPitchFarDegrees = 45f;
+        // 建宗选址模式：接近垂直的高视角，只允许滚轮缩放与 WASD 平移。
+        [SerializeField, Range(55f, 89f)] private float placementPitchDegrees = 78f;
+        [SerializeField, Range(30f, 70f)] private float placementFieldOfViewDegrees = 45f;
+        private bool sectPlacementCameraMode;
         [SerializeField] private float cameraDistanceFactor = 0.85f;
         [SerializeField] private float cameraCurveMaxVisibleHexes = 16f;
         [Header("Near radial curvature")]
@@ -293,6 +297,20 @@ namespace Cultivation4X.WorldMap
             if (blocked) lastPointerPosition = Input.mousePosition;
         }
 
+        /// <summary>
+        /// 建宗选址相机模式：复用世界相机，固定接近垂直的俯仰角；
+        /// 只处理滚轮缩放和 WASD，不做平滑惯性、不响应鼠标拖拽。
+        /// </summary>
+        public void SetSectPlacementCameraMode(bool active)
+        {
+            sectPlacementCameraMode = active;
+            if (!active) return;
+            currentZoom = zoomLevel;
+            cameraPivot = targetPivot;
+            zoomVelocity = 0f;
+            focusVelocity = Vector3.zero;
+        }
+
         /// <summary>当前地形网格使用的表现参数，供地点图标按同一高度定位。</summary>
         public static TerrainMeshAppearance ActiveAppearance { get; private set; } = TerrainMeshAppearance.Default;
         public static bool ActiveContinuousSurface { get; private set; }
@@ -411,7 +429,9 @@ namespace Cultivation4X.WorldMap
             // Far and near meshes are two tessellation levels of the same terrain, not two
             // different reliefs. Keeping the height scale identical removes zoom-tier popping.
             effectiveFarAppearance.heightScale = nearAppearance.heightScale;
-            Color32 FarColor(WorldCell cell) => TerrainPresentationModels.FarColorForCell(cell);
+            Color32 FarColor(WorldCell cell) => climateDebugView == WorldMapClimateDebugView.Normal
+                ? TerrainPresentationModels.FarColorForCell(cell)
+                : TerrainPresentationModels.ColorForClimateDebug(cell, climateDebugView);
             List<Mesh> farMeshes;
             List<Mesh> nearMeshes;
             if (useContinuousTerrainSurface)
@@ -720,6 +740,11 @@ namespace Cultivation4X.WorldMap
         {
             Camera camera = Camera.main;
             if (camera == null || map == null) return;
+            if (sectPlacementCameraMode)
+            {
+                UpdateSectPlacementCamera(camera);
+                return;
+            }
             HandleZoom(camera);
             HandlePan(camera);
             currentZoom = Mathf.SmoothDamp(currentZoom, zoomLevel, ref zoomVelocity, zoomSmoothTime);
@@ -728,6 +753,33 @@ namespace Cultivation4X.WorldMap
                 panSmoothTime, Mathf.Infinity, Time.deltaTime);
             ApplyCameraTransform(camera);
             RefreshDetailLevel();
+        }
+
+        private void UpdateSectPlacementCamera(Camera camera)
+        {
+            HandleZoom(camera);
+            HandlePan(camera);
+            // 选址观察：禁用平滑惯性，输入直接作用于相机。
+            currentZoom = zoomLevel;
+            cameraDistance = heightCurve.Evaluate(currentZoom);
+            cameraPivot = targetPivot;
+            ApplySectPlacementCameraTransform(camera);
+            RefreshDetailLevel();
+        }
+
+        private void ApplySectPlacementCameraTransform(Camera camera)
+        {
+            camera.fieldOfView = Mathf.Clamp(placementFieldOfViewDegrees, 30f, 70f);
+            ActiveFieldOfViewDegrees = camera.fieldOfView;
+            ActiveVisibleHexesAcross = VisibleHexesForCurrentCamera(camera);
+            float pitchRadians = Mathf.Clamp(placementPitchDegrees, 55f, 89f) * Mathf.Deg2Rad;
+            Vector3 baseOffset = new Vector3(0f, Mathf.Sin(pitchRadians),
+                -Mathf.Cos(pitchRadians)) * cameraDistance;
+            Vector3 offset = Quaternion.Euler(0f, cameraYawDegrees, 0f) * baseOffset;
+            camera.transform.position = cameraPivot + offset;
+            camera.transform.rotation = Quaternion.LookRotation(cameraPivot - camera.transform.position);
+            SetCurveState(cameraPivot, 0f);
+            ApplyHorizonAtmosphere(currentZoom, Mathf.Sin(pitchRadians) * cameraDistance);
         }
 
         private void RefreshDetailLevel()

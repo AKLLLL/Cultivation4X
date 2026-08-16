@@ -14,11 +14,15 @@ namespace Cultivation4X.WorldMap
         private readonly List<GameObject> iconObjects = new List<GameObject>();
         private readonly List<Vector3> flatIconPositions = new List<Vector3>();
         [SerializeField] private TerrainRenderer terrainRenderer;
+        // 默认 false 保持 TerrainTest 演示模式不变；正式游戏预制体设为 true，
+        // 图标只画在已知格上，Hidden 地点不画，Hinted 显示“可疑线索”。
+        [SerializeField] private bool respectKnowledgeMask;
         private bool hasMap;
         private bool politicalMapEnabled = true;
         private int lastCurveRevision = -1;
 
         public int IconCount => iconObjects.Count;
+        public bool RespectKnowledgeMask => respectKnowledgeMask;
 
         /// <summary>政治地图模式开关：关闭时地点图标在所有缩放下保持可见。</summary>
         public void SetPoliticalMapEnabled(bool enabled)
@@ -34,17 +38,26 @@ namespace Cultivation4X.WorldMap
             if (terrainRenderer == null) terrainRenderer = FindObjectOfType<TerrainRenderer>();
             hasMap = true;
 
+            HashSet<int> knownCells = respectKnowledgeMask
+                ? WorldMapInfluenceRules.CollectKnownCellIndices(map, progress, false)
+                : null;
             foreach (MapSiteData site in progress.mapSites)
             {
                 if (site == null || site.cellIndex < 0 || site.cellIndex >= map.cells.Length) continue;
+                bool isSectBase = site.siteType == MapSiteType.SectBase;
+                if (knownCells != null && !isSectBase && !knownCells.Contains(site.cellIndex)) continue;
+                if (respectKnowledgeMask && !isSectBase &&
+                    site.revealState == MapContentRevealState.Hidden) continue;
                 WorldCell cell = map.cells[site.cellIndex];
                 if (cell == null) continue;
 
-                Vector2 center = TerrainMeshGenerator.HexCenter(cell.coord);
-                float top = TerrainRenderer.PresentationSurfaceHeight(map, cell);
-                GameObject root = new GameObject("SiteIcon_" + site.siteType);
+                bool hinted = respectKnowledgeMask && !isSectBase &&
+                              site.revealState == MapContentRevealState.Hinted;
+                Vector2 center = HexGeometry.GetCenter(cell);
+                float top = MapPresentationLayer.GetIconHeight(map, cell);
+                GameObject root = new GameObject(hinted ? "SiteHint_" + site.siteType : "SiteIcon_" + site.siteType);
                 root.transform.SetParent(transform, false);
-                Vector3 flatPosition = transform.TransformPoint(new Vector3(center.x, top + 1.2f, center.y));
+                Vector3 flatPosition = transform.TransformPoint(new Vector3(center.x, top, center.y));
                 root.transform.position = terrainRenderer != null
                     ? terrainRenderer.CurveWorldPosition(flatPosition)
                     : flatPosition;
@@ -54,15 +67,20 @@ namespace Cultivation4X.WorldMap
                 GameObject quad = new GameObject("Icon", typeof(MeshFilter), typeof(MeshRenderer));
                 quad.transform.SetParent(root.transform, false);
                 quad.transform.localPosition = new Vector3(0f, 1.0f, 0f);
-                quad.transform.localScale = Vector3.one * 0.9f;
+                quad.transform.localScale = Vector3.one * (hinted ? 0.72f : 0.9f);
                 quad.GetComponent<MeshFilter>().sharedMesh = SharedQuad();
-                quad.GetComponent<MeshRenderer>().sharedMaterial = MaterialFor(site.siteType);
+                quad.GetComponent<MeshRenderer>().sharedMaterial = MaterialFor(site.siteType, hinted);
 
                 TerrainLabel label = root.AddComponent<TerrainLabel>();
-                label.Set(string.IsNullOrEmpty(site.siteName)
-                        ? TerrainPresentationModels.SiteLabel(site.siteType)
-                        : site.siteName,
-                    TerrainPresentationModels.ColorForSite(site.siteType));
+                Color labelColor = hinted
+                    ? new Color(0.72f, 0.86f, 1f, 0.86f)
+                    : TerrainPresentationModels.ColorForSite(site.siteType);
+                label.Set(hinted
+                        ? "可疑线索"
+                        : string.IsNullOrEmpty(site.siteName)
+                            ? TerrainPresentationModels.SiteLabel(site.siteType)
+                            : site.siteName,
+                    labelColor);
             }
         }
 
@@ -137,11 +155,19 @@ namespace Cultivation4X.WorldMap
             return quadMesh;
         }
 
-        private static Material MaterialFor(MapSiteType siteType)
+        private static Material MaterialFor(MapSiteType siteType, bool hinted)
         {
-            Shader shader = Shader.Find("Unlit/VertexColor") ?? Shader.Find("Sprites/Default");
+            // 地点图标同样属于统一地图表现层：ZTest Always，不被地形裁剪。
+            Shader overlayShader = Shader.Find("Unlit/VertexColorOverlay");
+            Shader fallback = hinted
+                ? Shader.Find("Unlit/VertexColorTransparent") ?? Shader.Find("Unlit/VertexColor") ?? Shader.Find("Sprites/Default")
+                : Shader.Find("Unlit/VertexColor") ?? Shader.Find("Sprites/Default");
+            Shader shader = overlayShader != null ? overlayShader : fallback;
             Material material = new Material(shader);
-            material.color = TerrainPresentationModels.ColorForSite(siteType);
+            material.renderQueue = 4000;
+            material.color = hinted
+                ? new Color(0.72f, 0.86f, 1f, 0.65f)
+                : TerrainPresentationModels.ColorForSite(siteType);
             return material;
         }
 

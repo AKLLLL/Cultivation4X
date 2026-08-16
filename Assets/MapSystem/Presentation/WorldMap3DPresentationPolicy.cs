@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEngine;
 
 namespace Cultivation4X.WorldMap
 {
@@ -90,6 +91,50 @@ namespace Cultivation4X.WorldMap
                 default:
                     return 0;
             }
+        }
+
+        /// <summary>
+        /// 迁移自 TerrainTest 的初始机位规则：选择可建宗、临近山体并兼顾水面的格子，
+        /// 只决定相机落点，不修改地图数据。正式游戏新档未选址时使用。
+        /// </summary>
+        public static int SelectInitialFocusCell(WorldMap map)
+        {
+            if (map?.cells == null || map.cells.Length == 0) return -1;
+            int bestIndex = -1;
+            float bestScore = float.NegativeInfinity;
+            foreach (WorldCell candidate in map.cells)
+            {
+                if (candidate == null || !candidate.isBuildable ||
+                    candidate.landform == LandformType.Mountain ||
+                    candidate.landform == LandformType.DeepWater ||
+                    candidate.landform == LandformType.ShallowWater) continue;
+                float score = candidate.landform == LandformType.Plain ? 4f : 1f;
+                if (candidate.internalPositionTag == MapInternalPositionTag.ValleyFloor) score += 10f;
+                for (int row = Mathf.Max(0, candidate.coord.row - 4);
+                     row <= Mathf.Min(map.height - 1, candidate.coord.row + 4); row++)
+                for (int col = Mathf.Max(0, candidate.coord.col - 4);
+                     col <= Mathf.Min(map.width - 1, candidate.coord.col + 4); col++)
+                {
+                    int index = map.GetIndex(new HexCoord(col, row));
+                    if (index < 0 || index >= map.cells.Length || map.cells[index] == null) continue;
+                    int distance = HexCoord.Distance(candidate.coord, map.cells[index].coord);
+                    if (distance == 0 || distance > 4) continue;
+                    float weight = 1f / distance;
+                    switch (map.cells[index].landform)
+                    {
+                        case LandformType.Mountain: score += 8f * weight; break;
+                        case LandformType.Hill: score += 2.5f * weight; break;
+                        case LandformType.DeepWater:
+                        case LandformType.ShallowWater: score += 1.5f * weight; break;
+                    }
+                }
+                if (score <= bestScore) continue;
+                bestScore = score;
+                bestIndex = candidate.index;
+            }
+            if (bestIndex >= 0) return bestIndex;
+            return Mathf.Clamp((map.height / 2) * map.width + map.width / 2, 0,
+                map.cells.Length - 1);
         }
 
         /// <summary>

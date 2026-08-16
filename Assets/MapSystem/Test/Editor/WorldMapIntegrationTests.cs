@@ -31,7 +31,7 @@ public class WorldMapIntegrationTests
                                   $"maxHeight={first.cells.Max(cell => cell.height):F3} " +
                                   $"maxFlow={diagnostics.maximumAccumulatedFlow:F2} rivers={first.rivers.Count}");
         Assert.AreEqual(JsonConvert.SerializeObject(first), JsonConvert.SerializeObject(second));
-        Assert.AreEqual(4, first.generationVersion);
+        Assert.AreEqual(WorldMapGenerationVersion.Current, first.generationVersion);
         Assert.NotNull(first.generationSettings);
         Assert.IsNotEmpty(first.rivers);
         Assert.That(first.spiritVeins.Count(vein => vein.size == SpiritVeinSize.Large),
@@ -50,7 +50,7 @@ public class WorldMapIntegrationTests
     }
 
     [Test]
-    public void NewGame_RequiresValidWorldSiteBeforeCandidateSelection()
+    public void NewGame_StartsAtCandidateSelectionBeforeSectPlacement()
     {
         root = new GameObject("Player");
         PlayerManager player = root.AddComponent<PlayerManager>();
@@ -59,13 +59,13 @@ public class WorldMapIntegrationTests
         FoundingState state = player.playerData.founding;
         WorldMap map = WorldMapSession.Current;
         Assert.NotNull(map);
-        Assert.AreEqual(FoundingStage.WorldSelection, state.stage);
+        Assert.AreEqual(FoundingStage.CandidateSelection, state.stage,
+            "新游戏应先进入角色创建，而不是直接选址");
         Assert.AreEqual(-1, state.selectedWorldCellIndex);
+        Assert.AreEqual(10, state.candidates.Count);
         int invalid = Array.FindIndex(map.cells, cell => !cell.isBuildable);
-        Assert.IsFalse(player.ConfirmWorldSite(invalid, out _));
-        int valid = Array.FindIndex(map.cells, cell => cell.isBuildable);
-        Assert.IsTrue(player.ConfirmWorldSite(valid, out string reason), reason);
-        Assert.AreEqual(valid, state.selectedWorldCellIndex);
+        Assert.IsFalse(player.ConfirmWorldSite(invalid, out _),
+            "角色创建完成前不能确认洞府位置");
         Assert.AreEqual(FoundingStage.CandidateSelection, state.stage);
     }
 
@@ -81,9 +81,39 @@ public class WorldMapIntegrationTests
         Assert.AreEqual(map.rivers.Count, restored.worldMap.rivers.Count);
         Assert.AreEqual(map.spiritVeins.Count, restored.worldMap.spiritVeins.Count);
         Assert.NotNull(restored.worldMap.generationSettings);
-        Assert.AreEqual(4, restored.worldMap.generationSettings.generationVersion);
+        Assert.AreEqual(WorldMapGenerationVersion.Current,
+            restored.worldMap.generationSettings.generationVersion);
         Assert.AreEqual(3, restored.worldMap.pointsOfInterest.Count);
         Assert.IsTrue(restored.worldMap.pointsOfInterest.All(point => point.cellIndex >= 0));
+    }
+
+    [Test]
+    public void SaveValidation_OldMapGenerationVersion_IsClassifiedAsVersionMismatch()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 64, height = 48, seed = 211 });
+        map.generationVersion = WorldMapGenerationVersion.Current - 1;
+        GameState state = new GameState { worldMap = map };
+        Assert.Throws<SaveVersionMismatchException>(() => SaveManager.ValidateWorldMapState(state));
+    }
+
+    [Test]
+    public void SaveValidation_FutureMapGenerationVersion_IsNotClassifiedAsVersionMismatch()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 64, height = 48, seed = 212 });
+        map.generationVersion = WorldMapGenerationVersion.Current + 1;
+        GameState state = new GameState { worldMap = map };
+        try
+        {
+            SaveManager.ValidateWorldMapState(state);
+            Assert.Fail("未来版本的地图快照应被拒绝");
+        }
+        catch (SaveVersionMismatchException)
+        {
+            Assert.Fail("未来版本的地图快照不应触发旧档自动舍弃");
+        }
+        catch (InvalidDataException)
+        {
+        }
     }
 
     [Test]
@@ -998,7 +1028,7 @@ public class WorldMapIntegrationTests
                 founding = new FoundingState
                 {
                     initialized = true,
-                    stage = FoundingStage.WorldSelection,
+                    stage = FoundingStage.CandidateSelection,
                     selectedWorldCellIndex = -1,
                     candidates = FoundingRules.GenerateCandidates(9191)
                 }

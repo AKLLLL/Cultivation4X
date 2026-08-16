@@ -15,6 +15,7 @@ public sealed class SectWorldInterface : MonoBehaviour
     private RectTransform layoutPanel;
     private RectTransform taskPanel;
     private RectTransform summaryPanel;
+    private Canvas canvas;
     private string lastResourceText;
     private float nextResourceRefreshTime;
 
@@ -31,6 +32,7 @@ public sealed class SectWorldInterface : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         Canvas canvas = RuntimeUIFactory.Canvas(gameObject, 930);
+        this.canvas = canvas;
         CreateResourceBar(canvas.transform);
         briefPanel = CreatePanel(canvas.transform, "SectBrief",
             new Vector2(0.18f, 0.10f), new Vector2(0.82f, 0.90f));
@@ -52,6 +54,12 @@ public sealed class SectWorldInterface : MonoBehaviour
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>宗门世界 UI（顶部资源栏）只应在 GameFlowState.WorldMap 显示。</summary>
+    public void SetUiVisible(bool visible)
+    {
+        if (canvas != null) canvas.gameObject.SetActive(visible);
     }
 
     private void Update()

@@ -49,13 +49,14 @@ namespace Cultivation4X.WorldMap
             minimumRegionCells = TerrainPresentationModels.RegionOverlayMinimumCells(map);
             hasMap = true;
 
-            Shader shader = Shader.Find("Unlit/VertexColorTransparent") ?? Shader.Find("Sprites/Default");
+            Shader shader = Shader.Find("Unlit/VertexColorOverlay") ??
+                            Shader.Find("Unlit/VertexColorTransparent") ?? Shader.Find("Sprites/Default");
             if (shader == null)
             {
                 Debug.LogError("RegionOverlayRenderer: 未找到半透明顶点色 Shader");
                 return;
             }
-            Material overlayMaterial = new Material(shader) { renderQueue = 3100 };
+            Material overlayMaterial = new Material(shader) { renderQueue = 4000 };
             overlayMaterial.name = "RegionOverlay";
             ownedMaterials.Add(overlayMaterial);
 
@@ -143,7 +144,7 @@ namespace Cultivation4X.WorldMap
             Color regionColor = TerrainPresentationModels.ColorForRegion(region.regionType);
             regionColor.a = overlayAlpha;
             Color32 overlayColor = regionColor;
-            float radius = TerrainMeshGenerator.HexDiameter * 0.5f;
+            float radius = HexGeometry.GetRadius();
             HashSet<int> regionCells = new HashSet<int>();
             foreach (int index in region.cellIndices)
             {
@@ -157,20 +158,15 @@ namespace Cultivation4X.WorldMap
             foreach (int index in regionCells)
             {
                 WorldCell cell = map.cells[index];
-                Vector2 center = TerrainMeshGenerator.HexCenter(cell.coord);
-                Vector2[] corners = new Vector2[6];
-                for (int corner = 0; corner < 6; corner++)
-                {
-                    float angle = Mathf.Deg2Rad * (corner * 60f - 30f);
-                    corners[corner] = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
-                }
+                Vector2 center = HexGeometry.GetCenter(cell);
+                Vector2[] corners = HexGeometry.GetCorners(center, radius);
                 for (int direction = 0; direction < 6; direction++)
                 {
                     HexCoord neighborCoord = map.GetNeighbor(cell.coord, direction);
                     int neighborIndex = map.GetIndex(neighborCoord);
                     if (neighborIndex >= 0 && regionCells.Contains(neighborIndex)) continue;
 
-                    Vector2 mid = (center + TerrainMeshGenerator.HexCenter(neighborCoord)) * 0.5f;
+                    Vector2 mid = (center + HexGeometry.GetCenter(neighborCoord)) * 0.5f;
                     int bestA = -1;
                     int bestB = -1;
                     float bestADistance = float.MaxValue;

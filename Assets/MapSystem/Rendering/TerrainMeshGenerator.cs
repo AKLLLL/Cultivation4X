@@ -38,11 +38,8 @@ namespace Cultivation4X.WorldMap
         public const int HillSubmesh = 3;
         public const int MountainSubmesh = 4;
 
-        private const float HexRadius = 1f;
-
-        /// <summary>六边形外接圆直径（世界单位），相机缩放按可见格数换算时使用。</summary>
-        public const float HexDiameter = HexRadius * 2f;
-        private static readonly float Sqrt3 = Mathf.Sqrt(3f);
+        /// <summary>六边形外接圆直径（世界单位）。唯一实现见 HexGeometryService。</summary>
+        public const float HexDiameter = HexGeometry.Diameter;
         private const float WaterBaseHeight = 0.04f;
         private const float WaterTopHeight = 0.12f;
         public const float DeepWaterStrategicHeight = 0.02f;
@@ -508,9 +505,8 @@ namespace Cultivation4X.WorldMap
             return mesh;
         }
 
-        /// <summary>六边形中心的 XZ 坐标（表现层定位覆盖物/图标时使用）。</summary>
-        public static Vector2 HexCenter(HexCoord coord) =>
-            new Vector2(Sqrt3 * (coord.col + ((coord.row & 1) == 1 ? 0.5f : 0f)), 1.5f * coord.row);
+        /// <summary>六边形中心的 XZ 坐标。唯一实现见 HexGeometryService。</summary>
+        public static Vector2 HexCenter(HexCoord coord) => HexGeometry.GetCenter(coord);
 
         /// <summary>
         /// 六边形沿屏幕水平方向投影后的真实宽度。镜头旋转后不能继续把外接圆直径
@@ -522,43 +518,16 @@ namespace Cultivation4X.WorldMap
             if (direction.sqrMagnitude < 0.0001f) return HexDiameter;
             direction.Normalize();
             float extent = 0f;
-            for (int corner = 0; corner < 6; corner++)
-            {
-                float angle = Mathf.Deg2Rad * (corner * 60f - 30f);
-                Vector2 vertex = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * HexRadius;
+            foreach (Vector2 vertex in HexGeometry.GetCorners(Vector2.zero, HexGeometry.Radius))
                 extent = Mathf.Max(extent, Mathf.Abs(Vector2.Dot(vertex, direction)));
-            }
             return extent * 2f;
         }
 
         /// <summary>
         /// 把连续地形表面的世界坐标还原为原始 Hex 索引。地形只改变 Y，XZ 网格仍由 HexCoord 决定。
         /// </summary>
-        public static bool TryGetCellIndex(WorldMap map, Vector3 worldPosition, out int cellIndex)
-        {
-            cellIndex = -1;
-            if (map?.cells == null || map.cells.Length == 0) return false;
-            int rowGuess = Mathf.RoundToInt(worldPosition.z / 1.5f);
-            int colGuess = Mathf.RoundToInt(worldPosition.x / Sqrt3 -
-                                            ((rowGuess & 1) == 1 ? 0.5f : 0f));
-            float bestDistance = float.MaxValue;
-            for (int row = rowGuess - 1; row <= rowGuess + 1; row++)
-            {
-                for (int col = colGuess - 1; col <= colGuess + 1; col++)
-                {
-                    int candidate = map.GetIndex(new HexCoord(col, row));
-                    if (candidate < 0 || candidate >= map.cells.Length || map.cells[candidate] == null) continue;
-                    Vector2 center = HexCenter(map.cells[candidate].coord);
-                    float distance = (new Vector2(worldPosition.x, worldPosition.z) - center).sqrMagnitude;
-                    if (distance >= bestDistance) continue;
-                    bestDistance = distance;
-                    cellIndex = candidate;
-                }
-            }
-            if (cellIndex >= 0 && bestDistance <= HexRadius * HexRadius + 0.0001f) return true;
-            cellIndex = -1;
-            return false;
-        }
+        public static bool TryGetCellIndex(WorldMap map, Vector3 worldPosition, out int cellIndex) =>
+            HexGeometry.TryGetCellIndex(map, worldPosition, out cellIndex);
 
         private static void AddMacroCellSurface(WorldMap map, TerrainBuildContext context, WorldCell cell,
             List<Vector3> vertices, List<int> triangles, List<Color32> colors,
@@ -566,6 +535,7 @@ namespace Cultivation4X.WorldMap
             TerrainMeshAppearance appearance)
         {
             Vector2 center = HexCenter(cell.coord);
+            Vector2[] geometryCorners = HexGeometry.GetCorners(center);
             int centerIndex = vertices.Count;
             vertices.Add(new Vector3(center.x, context.Height(cell.index) * appearance.heightScale, center.y));
             if (colorFor != null) colors.Add(colorFor(cell));
@@ -573,12 +543,10 @@ namespace Cultivation4X.WorldMap
             int[] corners = new int[6];
             for (int corner = 0; corner < 6; corner++)
             {
-                float angle = Mathf.Deg2Rad * (corner * 60f - 30f);
-                float x = center.x + Mathf.Cos(angle) * HexRadius;
-                float z = center.y + Mathf.Sin(angle) * HexRadius;
                 float y = context.CornerHeight(cell.index, corner) * appearance.heightScale;
                 corners[corner] = GetOrAddSharedVertex(vertices, colors, sharedVertices,
-                    new Vector3(x, y, z), context.CornerColor(cell.index, corner, colorFor));
+                    new Vector3(geometryCorners[corner].x, y, geometryCorners[corner].y),
+                    context.CornerColor(cell.index, corner, colorFor));
             }
 
             for (int corner = 0; corner < 6; corner++)
@@ -605,6 +573,7 @@ namespace Cultivation4X.WorldMap
             Func<WorldCell, Color32> colorFor, float sideDarkenFactor)
         {
             Vector2 center = HexCenter(cell.coord);
+            Vector2[] geometryCorners = HexGeometry.GetCorners(center);
             float top = StrategicSurfaceHeight(cell);
             Color32? color = colorFor != null ? colorFor(cell) : (Color32?)null;
             int centerIndex = vertices.Count;
@@ -614,9 +583,7 @@ namespace Cultivation4X.WorldMap
             int cornerStart = vertices.Count;
             for (int corner = 0; corner < 6; corner++)
             {
-                float angle = Mathf.Deg2Rad * (corner * 60f - 30f);
-                vertices.Add(new Vector3(center.x + Mathf.Cos(angle) * HexRadius, top,
-                    center.y + Mathf.Sin(angle) * HexRadius));
+                vertices.Add(new Vector3(geometryCorners[corner].x, top, geometryCorners[corner].y));
                 if (color.HasValue) colors.Add(color.Value);
             }
             for (int corner = 0; corner < 6; corner++)
@@ -633,12 +600,10 @@ namespace Cultivation4X.WorldMap
                     ? StrategicSurfaceHeight(map.cells[neighbor])
                     : 0f;
                 if (top <= neighborHeight + 0.0001f) continue;
-                float angleA = Mathf.Deg2Rad * (edge * 60f - 30f);
-                float angleB = Mathf.Deg2Rad * ((edge + 1) * 60f - 30f);
-                Vector3 topA = new Vector3(center.x + Mathf.Cos(angleA) * HexRadius, top,
-                    center.y + Mathf.Sin(angleA) * HexRadius);
-                Vector3 topB = new Vector3(center.x + Mathf.Cos(angleB) * HexRadius, top,
-                    center.y + Mathf.Sin(angleB) * HexRadius);
+                Vector2 cornerA = geometryCorners[edge];
+                Vector2 cornerB = geometryCorners[(edge + 1) % 6];
+                Vector3 topA = new Vector3(cornerA.x, top, cornerA.y);
+                Vector3 topB = new Vector3(cornerB.x, top, cornerB.y);
                 AddBoundarySkirt(vertices, triangles, colors, topA, topB, neighborHeight,
                     color, sideDarkenFactor);
             }
@@ -694,12 +659,11 @@ namespace Cultivation4X.WorldMap
             int topCenterIndex = vertices.Count;
             vertices.Add(new Vector3(center.x, peakY, center.y));
             if (cellColor.HasValue) colors.Add(cellColor.Value);
+            Vector2[] geometryCorners = HexGeometry.GetCorners(center);
             int topStart = vertices.Count;
             for (int corner = 0; corner < 6; corner++)
             {
-                float angle = Mathf.Deg2Rad * (corner * 60f - 30f);
-                vertices.Add(new Vector3(center.x + Mathf.Cos(angle) * HexRadius, topY,
-                    center.y + Mathf.Sin(angle) * HexRadius));
+                vertices.Add(new Vector3(geometryCorners[corner].x, topY, geometryCorners[corner].y));
                 if (cellColor.HasValue) colors.Add(cellColor.Value);
             }
             for (int corner = 0; corner < 6; corner++)
@@ -711,12 +675,10 @@ namespace Cultivation4X.WorldMap
 
             for (int corner = 0; corner < 6; corner++)
             {
-                float angleA = Mathf.Deg2Rad * (corner * 60f - 30f);
-                float angleB = Mathf.Deg2Rad * ((corner + 1) * 60f - 30f);
-                Vector3 topA = new Vector3(center.x + Mathf.Cos(angleA) * HexRadius, topY,
-                    center.y + Mathf.Sin(angleA) * HexRadius);
-                Vector3 topB = new Vector3(center.x + Mathf.Cos(angleB) * HexRadius, topY,
-                    center.y + Mathf.Sin(angleB) * HexRadius);
+                Vector2 cornerA = geometryCorners[corner];
+                Vector2 cornerB = geometryCorners[(corner + 1) % 6];
+                Vector3 topA = new Vector3(cornerA.x, topY, cornerA.y);
+                Vector3 topB = new Vector3(cornerB.x, topY, cornerB.y);
                 Vector3 bottomA = new Vector3(topA.x, 0f, topA.z);
                 Vector3 bottomB = new Vector3(topB.x, 0f, topB.z);
                 int topAIndex = vertices.Count;
