@@ -125,7 +125,18 @@ namespace Cultivation4X.WorldMap
         private void HandleCellPicked(int cellIndex)
         {
             SelectedLocation = ResolveLocationAt(cellIndex);
+            if (IsWorldMapActive) OpenWorldInfoPanel(cellIndex);
             RefreshPresentation();
+        }
+
+        private void OpenWorldInfoPanel(int cellIndex)
+        {
+            WorldMap map = WorldMapSession.Current;
+            if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length) return;
+            WorldInfoPanel panel = FindObjectOfType<WorldInfoPanel>(true);
+            if (panel == null) return;
+            VillageState village = PlayerManager.Instance?.playerData?.founding?.village;
+            panel.Open(map, cellIndex, village);
         }
 
         private WorldLocation ResolveLocationAt(int cellIndex)

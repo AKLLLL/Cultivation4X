@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace Cultivation4X.WorldMap
@@ -41,9 +42,13 @@ namespace Cultivation4X.WorldMap
             HashSet<int> knownCells = respectKnowledgeMask
                 ? WorldMapInfluenceRules.CollectKnownCellIndices(map, progress, false)
                 : null;
+            bool hasWorldVillage = map.locations != null &&
+                                   map.locations.Values.Any(location =>
+                                       location != null && location.type == LocationType.Village);
             foreach (MapSiteData site in progress.mapSites)
             {
                 if (site == null || site.cellIndex < 0 || site.cellIndex >= map.cells.Length) continue;
+                if (hasWorldVillage && site.siteType == MapSiteType.Village) continue;
                 bool isSectBase = site.siteType == MapSiteType.SectBase;
                 if (knownCells != null && !isSectBase && !knownCells.Contains(site.cellIndex)) continue;
                 if (respectKnowledgeMask && !isSectBase &&
@@ -82,6 +87,47 @@ namespace Cultivation4X.WorldMap
                             : site.siteName,
                     labelColor);
             }
+
+            if (map.locations != null)
+            {
+                foreach (WorldLocation location in map.locations.Values)
+                {
+                    if (location == null || location.position.x < 0 ||
+                        location.position.x >= map.width ||
+                        location.position.y < 0 || location.position.y >= map.height) continue;
+                    int locationCell = map.GetIndex(
+                        new HexCoord(location.position.x, location.position.y));
+                    if (locationCell < 0 || locationCell >= map.cells.Length) continue;
+                    AddWorldLocationIcon(map, location);
+                }
+            }
+        }
+
+        private void AddWorldLocationIcon(WorldMap map, WorldLocation location)
+        {
+            WorldCell cell = map.cells[map.GetIndex(
+                new HexCoord(location.position.x, location.position.y))];
+            if (cell == null) return;
+            Vector2 center = HexGeometry.GetCenter(cell);
+            float top = MapPresentationLayer.GetIconHeight(map, cell);
+            GameObject root = new GameObject("WorldLocationIcon_" + location.type);
+            root.transform.SetParent(transform, false);
+            Vector3 flatPosition = transform.TransformPoint(new Vector3(center.x, top, center.y));
+            root.transform.position = terrainRenderer != null
+                ? terrainRenderer.CurveWorldPosition(flatPosition)
+                : flatPosition;
+            iconObjects.Add(root);
+            flatIconPositions.Add(flatPosition);
+
+            GameObject quad = new GameObject("Icon", typeof(MeshFilter), typeof(MeshRenderer));
+            quad.transform.SetParent(root.transform, false);
+            quad.transform.localPosition = new Vector3(0f, 1.0f, 0f);
+            quad.transform.localScale = Vector3.one * 0.9f;
+            quad.GetComponent<MeshFilter>().sharedMesh = SharedQuad();
+            quad.GetComponent<MeshRenderer>().sharedMaterial = MaterialFor(MapSiteType.Village, false);
+
+            TerrainLabel label = root.AddComponent<TerrainLabel>();
+            label.Set(location.name, TerrainPresentationModels.ColorForSite(MapSiteType.Village));
         }
 
         /// <summary>远景模式：隐藏地点图标，避免遮挡区域色与区域名。</summary>
