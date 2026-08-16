@@ -122,7 +122,9 @@ public class WorldMap3DControllerTests
             Assert.AreSame(map, pipeline.CurrentMap);
             Assert.AreEqual(map.cells.Length, pipeline.KnownCellCount,
                 "无玩家立宗状态时应按全知模式显示");
-            Assert.IsFalse(hud.DebugViewEnabled);
+            Assert.IsFalse(hud.gameObject.GetComponentsInChildren<TMPro.TMP_Text>(true)
+                    .Any(text => text != null && text.text.Contains("地图调试")),
+                "正式游戏世界地图不得包含地图调试 UI");
             Assert.Greater(hud.gameObject.GetComponentsInChildren<TMPro.TMP_Text>(true).Length, 0,
                 "HUD 应创建详情文本");
         }
@@ -256,6 +258,54 @@ public class WorldMap3DControllerTests
             Object.DestroyImmediate(playerObject);
             Object.DestroyImmediate(npcObject);
             if (cameraObject != null) Object.DestroyImmediate(cameraObject);
+        }
+    }
+
+    [Test]
+    public void ClickedCell_ResolvesWorldLocationFromCellReference()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
+            { width = 32, height = 24, seed = 7001 });
+        int sect = map.cells.First(cell => cell != null && cell.isBuildable &&
+            cell.landform != LandformType.Mountain &&
+            map.GetNeighborIndices(cell.index).Any(index => map.cells[index] != null &&
+                map.cells[index].isBuildable && map.cells[index].landform != LandformType.Mountain)).index;
+        WorldLocation village = WorldLocationRules.CreateStarterVillage(map, sect);
+        Assert.NotNull(village);
+        WorldMapSession.Set(map, new WorldMapProgressState());
+        GameObject root = new GameObject("WorldLocationClickTest");
+        try
+        {
+            GameObject pipelineObject = new GameObject("RenderPipeline");
+            pipelineObject.transform.SetParent(root.transform, false);
+            WorldMapRenderPipeline pipeline = pipelineObject.AddComponent<WorldMapRenderPipeline>();
+            GameObject interactionObject = new GameObject("Interaction");
+            interactionObject.transform.SetParent(root.transform, false);
+            WorldMapInteractionController interaction =
+                interactionObject.AddComponent<WorldMapInteractionController>();
+            GameObject hudObject = new GameObject("HUD");
+            hudObject.transform.SetParent(root.transform, false);
+            WorldMapHudController hud = hudObject.AddComponent<WorldMapHudController>();
+
+            WorldMap3DController controller = root.AddComponent<WorldMap3DController>();
+            SetPrivateField(controller, "renderPipeline", pipeline);
+            SetPrivateField(controller, "interaction", interaction);
+            SetPrivateField(controller, "hud", hud);
+            InvokePrivate(controller, "Awake");
+            InvokePrivate(hud, "Awake");
+
+            int villageCell = map.GetIndex(new HexCoord(village.position.x, village.position.y));
+            interaction.SelectCell(villageCell);
+            Assert.AreSame(village, controller.SelectedLocation);
+
+            int emptyCell = System.Array.FindIndex(map.cells,
+                cell => cell != null && string.IsNullOrEmpty(cell.locationId));
+            interaction.SelectCell(emptyCell);
+            Assert.IsNull(controller.SelectedLocation);
+        }
+        finally
+        {
+            Object.DestroyImmediate(root);
         }
     }
 

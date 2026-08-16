@@ -27,6 +27,9 @@ namespace Cultivation4X.WorldMap
             ResolvedFlowState == GameFlowState.WorldMap ? WorldMapViewMode.WorldExplore :
             WorldMapViewMode.WorldExplore;
 
+        /// <summary>最近一次点击格解析出的 WorldLocation；没有地点时为 null。</summary>
+        public WorldLocation SelectedLocation { get; private set; }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
         {
@@ -52,7 +55,6 @@ namespace Cultivation4X.WorldMap
                 hud.OnExplore = () => OpenSelectedAction(MapActionType.Explore);
                 hud.OnSiteAction = OpenSelectedSiteAction;
                 hud.OnOpenSectBrief = () => SectWorldInterface.Instance?.OpenSectBrief();
-                hud.OnDebugViewSelected = HandleDebugViewSelected;
             }
             if (interaction != null) interaction.CellPicked += HandleCellPicked;
         }
@@ -116,12 +118,23 @@ namespace Cultivation4X.WorldMap
             get
             {
                 FoundingState founding = PlayerManager.Instance?.playerData?.founding;
-                return hud != null && hud.DebugViewEnabled ||
-                       founding == null || !FoundingRules.HasReachedCave(founding);
+                return founding == null || !FoundingRules.HasReachedCave(founding);
             }
         }
 
-        private void HandleCellPicked(int cellIndex) => RefreshPresentation();
+        private void HandleCellPicked(int cellIndex)
+        {
+            SelectedLocation = ResolveLocationAt(cellIndex);
+            RefreshPresentation();
+        }
+
+        private WorldLocation ResolveLocationAt(int cellIndex)
+        {
+            WorldMap map = WorldMapSession.Current;
+            if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
+                return null;
+            return map.GetLocationAt(map.cells[cellIndex]);
+        }
 
         private void HandleGameplayChanged()
         {
@@ -133,12 +146,6 @@ namespace Cultivation4X.WorldMap
             gameFlowDiagSequence++;
             Debug.Log($"[GameFlowDiag][{gameFlowDiagSequence}] " +
                       $"WorldMap3DController.HandleFlowStateChanged({state})");
-            RefreshPresentation();
-        }
-
-        private void HandleDebugViewSelected(WorldMapClimateDebugView view)
-        {
-            if (renderPipeline != null) renderPipeline.SetDebugView(view);
             RefreshPresentation();
         }
 
