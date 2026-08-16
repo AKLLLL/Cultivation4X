@@ -341,6 +341,8 @@ public class PlayerManager : MonoBehaviour
         };
         WorldMapInfluenceRules.Recalculate(map, updatedProgress);
         WorldMapContentRules.RefreshHints(map, updatedProgress);
+        // 宗门建立后，在影响范围内生成青石村 WorldLocation。
+        WorldLocationRules.CreateStarterVillage(map, cellIndex);
 
         playerData.sectId = "player_sect";
         playerData.sectName = sectName;
