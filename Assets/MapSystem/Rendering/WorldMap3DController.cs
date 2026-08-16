@@ -18,6 +18,7 @@ namespace Cultivation4X.WorldMap
         [SerializeField] private WorldMapInteractionController interaction;
         [SerializeField] private WorldMapHudController hud;
         private bool foundingTransitionPending;
+        private WorldInfoPanel worldInfoPanel;
         private static int gameFlowDiagSequence;
         private TerrainRenderer.MapDetailLevel lastSelectionDetailLevel =
             TerrainRenderer.MapDetailLevel.Mid;
@@ -133,10 +134,21 @@ namespace Cultivation4X.WorldMap
         {
             WorldMap map = WorldMapSession.Current;
             if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length) return;
-            WorldInfoPanel panel = FindObjectOfType<WorldInfoPanel>(true);
-            if (panel == null) return;
+            if (worldInfoPanel == null)
+            {
+                worldInfoPanel = FindObjectOfType<WorldInfoPanel>(true);
+                if (worldInfoPanel == null) return;
+                worldInfoPanel.ActionRequested += HandleLocationAction;
+            }
             VillageState village = PlayerManager.Instance?.playerData?.founding?.village;
-            panel.Open(map, cellIndex, village);
+            worldInfoPanel.Open(map, cellIndex, village);
+        }
+
+        private void HandleLocationAction(WorldLocation location, LocationAction action)
+        {
+            // 第一阶段只保留接口：行为由后续村庄/任务/劳动力系统实现。
+            Debug.Log($"[WorldLocation] action requested location={location?.name} " +
+                      $"action={action?.displayName}");
         }
 
         private WorldLocation ResolveLocationAt(int cellIndex)
@@ -456,6 +468,7 @@ namespace Cultivation4X.WorldMap
         private void OnDestroy()
         {
             if (interaction != null) interaction.CellPicked -= HandleCellPicked;
+            if (worldInfoPanel != null) worldInfoPanel.ActionRequested -= HandleLocationAction;
             if (PlayerManager.Instance != null)
                 PlayerManager.Instance.OnFoundingChanged -= HandleGameplayChanged;
             if (GameFlowStateManager.Instance != null)

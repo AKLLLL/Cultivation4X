@@ -25,6 +25,9 @@ public sealed class WorldInfoPanel : MonoBehaviour
 
     public bool IsOpen => panel != null && panel.gameObject.activeSelf;
 
+    /// <summary>地点行动点击接口。第一阶段只向上转发，具体行为后续系统接入。</summary>
+    public event Action<WorldLocation, LocationAction> ActionRequested;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
@@ -174,8 +177,19 @@ public sealed class WorldInfoPanel : MonoBehaviour
         foreach (LocationAction action in location.availableActions)
         {
             if (action == null) continue;
-            AddText($"{action.displayName}\n消耗：{action.cost}");
+            AddActionButton(action);
         }
+    }
+
+    private void AddActionButton(LocationAction action)
+    {
+        Button button = RuntimeUIFactory.Button(content,
+            $"{action.displayName}\n消耗：{action.cost}", 52);
+        button.interactable = action.available;
+        WorldLocation capturedLocation = location;
+        LocationAction capturedAction = action;
+        button.onClick.AddListener(() => ActionRequested?.Invoke(capturedLocation, capturedAction));
+        dynamicContent.Add(button.gameObject);
     }
 
     private void AddText(string value)
