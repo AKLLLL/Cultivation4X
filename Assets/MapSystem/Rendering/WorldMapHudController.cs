@@ -9,8 +9,9 @@ using UnityEngine.UI;
 namespace Cultivation4X.WorldMap
 {
     /// <summary>
-    /// 3D 世界地图 HUD：详情文本、选址确认、地图行动、宗门简报入口与调试视图。
+    /// 3D 世界地图 HUD：详情文本、选址确认、地图行动与宗门简报入口。
     /// 只组装展示数据并转发按钮回调，不直接修改任何玩法状态。
+    /// 地图调试 UI 不属于正式游戏，统一由 TerrainTest 的 MapTestManager 提供。
     /// </summary>
     public sealed class WorldMapHudController : MonoBehaviour
     {
@@ -18,7 +19,6 @@ namespace Cultivation4X.WorldMap
         public Action OnExplore;
         public Action OnSiteAction;
         public Action OnOpenSectBrief;
-        internal Action<WorldMapClimateDebugView> OnDebugViewSelected;
 
         private Canvas hudCanvas;
         private RectTransform hudControls;
@@ -31,14 +31,7 @@ namespace Cultivation4X.WorldMap
         private Button exploreButton;
         private Button siteActionButton;
         private Button sectBriefButton;
-        private Button debugToggle;
-        private GameObject debugPanel;
-        private TMP_Text legendText;
-        private readonly List<Button> debugViewButtons = new List<Button>();
 
-        public bool DebugViewEnabled => debugPanel != null && debugPanel.activeSelf;
-        internal WorldMapClimateDebugView CurrentDebugView { get; private set; } =
-            WorldMapClimateDebugView.Normal;
         internal Canvas HudCanvas => hudCanvas;
         internal string HudCanvasName => hudCanvas != null ? hudCanvas.gameObject.name : "null";
 
@@ -112,7 +105,6 @@ namespace Cultivation4X.WorldMap
             sectBriefButton.onClick.AddListener(() => OnOpenSectBrief?.Invoke());
             sectBriefButton.gameObject.SetActive(false);
 
-            CreateDebugHud();
             CreateFoundingTransitionOverlay();
         }
 
@@ -135,41 +127,6 @@ namespace Cultivation4X.WorldMap
         public void ShowFoundingTransition(bool visible)
         {
             if (foundingTransition != null) foundingTransition.SetActive(visible);
-        }
-
-        private void CreateDebugHud()
-        {
-            debugToggle = RuntimeUIFactory.Button(hudCanvas.transform, "地图调试", 38);
-            RectTransform toggleRect = debugToggle.GetComponent<RectTransform>();
-            toggleRect.anchorMin = toggleRect.anchorMax = new Vector2(0f, 0f);
-            toggleRect.pivot = new Vector2(0f, 0f);
-            toggleRect.anchoredPosition = new Vector2(152f, 12f);
-            toggleRect.sizeDelta = new Vector2(130f, 38f);
-            debugToggle.onClick.AddListener(() => SetDebugViewEnabled(!DebugViewEnabled));
-
-            debugPanel = RuntimeUIFactory.Panel(hudCanvas.transform, "WorldMapDebugViews",
-                new Vector2(0f, 0f), new Vector2(0f, 1f)).gameObject;
-            RectTransform panelRect = debugPanel.GetComponent<RectTransform>();
-            panelRect.pivot = new Vector2(0f, 0.5f);
-            panelRect.anchoredPosition = new Vector2(12f, 0f);
-            panelRect.sizeDelta = new Vector2(360f, -24f);
-            panelRect.offsetMin = new Vector2(panelRect.offsetMin.x, 58f);
-            panelRect.offsetMax = new Vector2(panelRect.offsetMax.x, -64f);
-            RuntimeUIFactory.Text(debugPanel.transform, "地图视图", 24, 36);
-            RectTransform viewContent = RuntimeUIFactory.ScrollContent(debugPanel.transform, "MapDebugViewsScroll");
-            RectTransform viewScroll = viewContent.parent.parent as RectTransform;
-            LayoutElement viewLayout = viewScroll.GetComponent<LayoutElement>();
-            viewLayout.flexibleHeight = 1f;
-            viewLayout.minHeight = 120f;
-            foreach (WorldMapClimateDebugView view in Enum.GetValues(typeof(WorldMapClimateDebugView)))
-            {
-                Button button = RuntimeUIFactory.Button(viewContent, DebugViewLabel(view), 34);
-                button.onClick.AddListener(() => SelectDebugView(view));
-                debugViewButtons.Add(button);
-            }
-            legendText = RuntimeUIFactory.Text(debugPanel.transform, string.Empty, 15, 72);
-            RefreshDebugPanelVisuals();
-            debugPanel.SetActive(false);
         }
 
         public bool IsPointerOverHudControl()
@@ -252,8 +209,6 @@ namespace Cultivation4X.WorldMap
                 sectBriefButton.gameObject.SetActive(!selecting && sectBase != null &&
                                                     sectBase.cellIndex == selectedCellIndex);
             }
-            if (debugToggle != null) debugToggle.gameObject.SetActive(!selecting && hasSectBase);
-            if (!debugToggle.gameObject.activeSelf) SetDebugViewEnabled(false);
 
             RefreshDetails(map, progress, selectedCellIndex, selecting, revealAll, sect);
         }
@@ -291,34 +246,6 @@ namespace Cultivation4X.WorldMap
                 details.GetPreferredValues(details.text, availableWidth, 0f).y + 8f);
             RectTransform detailsScrollRoot = details.transform.parent?.parent?.parent as RectTransform;
             if (detailsScrollRoot != null) LayoutRebuilder.MarkLayoutForRebuild(detailsScrollRoot);
-        }
-
-        public void SetDebugViewEnabled(bool enabled)
-        {
-            if (debugPanel != null) debugPanel.SetActive(enabled);
-            if (!enabled && CurrentDebugView != WorldMapClimateDebugView.Normal)
-                SelectDebugView(WorldMapClimateDebugView.Normal);
-        }
-
-        private void SelectDebugView(WorldMapClimateDebugView view)
-        {
-            CurrentDebugView = view;
-            RefreshDebugPanelVisuals();
-            OnDebugViewSelected?.Invoke(view);
-        }
-
-        private void RefreshDebugPanelVisuals()
-        {
-            for (int index = 0; index < debugViewButtons.Count; index++)
-            {
-                WorldMapClimateDebugView view = (WorldMapClimateDebugView)index;
-                Button button = debugViewButtons[index];
-                if (button != null)
-                    button.GetComponent<Image>().color = view == CurrentDebugView
-                        ? new Color(0.55f, 0.36f, 0.13f, 1f)
-                        : new Color(0.20f, 0.17f, 0.13f, 1f);
-            }
-            if (legendText != null) legendText.text = DebugViewLegend(CurrentDebugView);
         }
 
         private static string PlacementLocationText(WorldMap map, int cellIndex)
@@ -385,46 +312,6 @@ namespace Cultivation4X.WorldMap
             }
         }
 
-        private static string DebugViewLabel(WorldMapClimateDebugView view)
-        {
-            switch (view)
-            {
-                case WorldMapClimateDebugView.Normal: return "正常地图";
-                case WorldMapClimateDebugView.Biome: return "生物群系";
-                case WorldMapClimateDebugView.Temperature: return "温度";
-                case WorldMapClimateDebugView.Moisture: return "湿度";
-                case WorldMapClimateDebugView.Rainfall: return "地形降雨";
-                case WorldMapClimateDebugView.FreshWaterDistance: return "淡水距离";
-                case WorldMapClimateDebugView.DrainageFlow: return "排水汇流";
-                case WorldMapClimateDebugView.Elevation: return "海拔";
-                case WorldMapClimateDebugView.Aura: return "灵气浓度";
-                case WorldMapClimateDebugView.DominantElement: return "五行主属性";
-                case WorldMapClimateDebugView.SpiritVeinPaths: return "灵脉路径";
-                default: return view.ToString();
-            }
-        }
-
-        private static string DebugViewLegend(WorldMapClimateDebugView view)
-        {
-            switch (view)
-            {
-                case WorldMapClimateDebugView.Aura:
-                    return "固定 0–1：暗蓝→紫；颜色越亮总灵气越高。";
-                case WorldMapClimateDebugView.DominantElement:
-                    return "金米白、木绿、水蓝、火红、土黄；明暗表示总灵气。";
-                case WorldMapClimateDebugView.SpiritVeinPaths:
-                    return "中性背景；路径颜色表示五行，大型灵脉更宽。";
-                case WorldMapClimateDebugView.Temperature:
-                    return "蓝→青→黄→红。";
-                case WorldMapClimateDebugView.Moisture:
-                    return "褐→绿→蓝。";
-                case WorldMapClimateDebugView.Elevation:
-                    return "黑色（低）→白色（高）。";
-                default:
-                    return "正常地表颜色。";
-            }
-        }
-
         private void OnDestroy()
         {
             if (hudCanvas != null)
@@ -437,9 +324,6 @@ namespace Cultivation4X.WorldMap
             detailsTextLayout = null;
             hudControls = null;
             selectionBlocker = null;
-            debugPanel = null;
-            legendText = null;
-            debugViewButtons.Clear();
         }
     }
 }
