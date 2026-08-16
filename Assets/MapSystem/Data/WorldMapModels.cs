@@ -69,6 +69,8 @@ namespace Cultivation4X.WorldMap
         public ElementalAura elementalAura = new ElementalAura();
         public string regionId;
         public MapInternalPositionTag internalPositionTag;
+        /// <summary>该格上的世界实体 ID；实体数据在 WorldMap.locations，不保存在格子里。</summary>
+        public string locationId;
     }
 
     [Serializable]
@@ -191,7 +193,7 @@ namespace Cultivation4X.WorldMap
     /// </summary>
     public static class WorldMapGenerationVersion
     {
-        public const int Current = 5;
+        public const int Current = 6;
     }
 
     [Serializable]
@@ -233,6 +235,8 @@ namespace Cultivation4X.WorldMap
         public List<SpiritVein> spiritVeins = new List<SpiritVein>();
         public List<WorldPointOfInterest> pointsOfInterest = new List<WorldPointOfInterest>();
         public List<MapRegionData> regions = new List<MapRegionData>();
+        /// <summary>世界实体表；HexCell 只保存 locationId，不保存完整地点数据。</summary>
+        public Dictionary<string, WorldLocation> locations = new Dictionary<string, WorldLocation>();
         private static readonly int[,] EvenRowDirections =
         {
             { 1, 0 }, { 0, 1 }, { -1, 1 }, { -1, 0 }, { -1, -1 }, { 0, -1 }
@@ -248,6 +252,17 @@ namespace Cultivation4X.WorldMap
         {
             int index = GetIndex(coord);
             return index < 0 || cells == null || index >= cells.Length ? null : cells[index];
+        }
+        public WorldLocation GetLocation(string locationId)
+        {
+            if (string.IsNullOrEmpty(locationId) || locations == null) return null;
+            locations.TryGetValue(locationId, out WorldLocation location);
+            return location;
+        }
+        public WorldLocation GetLocationAt(WorldCell cell)
+        {
+            if (cell == null) return null;
+            return GetLocation(cell.locationId);
         }
         public HexCoord GetNeighbor(HexCoord coord, int direction)
         {

@@ -334,6 +334,8 @@ public class SaveManager : MonoBehaviour
         if (state.worldMap != null)
         {
             state.worldMap.regions = state.worldMap.regions ?? new System.Collections.Generic.List<MapRegionData>();
+            state.worldMap.locations = state.worldMap.locations ??
+                new System.Collections.Generic.Dictionary<string, WorldLocation>();
             foreach (MapRegionData region in state.worldMap.regions.Where(item => item != null))
                 region.cellIndices = region.cellIndices ?? new System.Collections.Generic.List<int>();
         }
@@ -388,6 +390,7 @@ public class SaveManager : MonoBehaviour
                 throw new InvalidDataException($"世界地图格子 {index} 无效");
         }
 
+        ValidateWorldLocations(map);
         ValidateStaticMapInputs(map);
         ValidateMapRegions(map);
 
@@ -565,6 +568,36 @@ public class SaveManager : MonoBehaviour
             sectBaseSource.radius != WorldMapInfluenceRules.SectBaseRadius ||
             !sectBaseSource.isActive)
             throw new InvalidDataException("宗门驻地与宗门数据不一致");
+    }
+
+    private static void ValidateWorldLocations(WorldMap map)
+    {
+        if (map.locations == null)
+            throw new InvalidDataException("世界地点表缺失");
+        foreach (System.Collections.Generic.KeyValuePair<string, WorldLocation> pair in map.locations)
+        {
+            WorldLocation location = pair.Value;
+            if (location == null || string.IsNullOrWhiteSpace(location.id) ||
+                !string.Equals(pair.Key, location.id, StringComparison.Ordinal) ||
+                !Enum.IsDefined(typeof(LocationType), location.type) ||
+                !Enum.IsDefined(typeof(LocationState), location.state) ||
+                string.IsNullOrWhiteSpace(location.name) ||
+                location.availableActions == null ||
+                location.availableActions.Any(action => action == null ||
+                    string.IsNullOrWhiteSpace(action.id) ||
+                    string.IsNullOrWhiteSpace(action.displayName)) ||
+                location.position.x < 0 || location.position.x >= map.width ||
+                location.position.y < 0 || location.position.y >= map.height)
+                throw new InvalidDataException("世界地点实体无效");
+        }
+
+        foreach (WorldCell cell in map.cells)
+        {
+            if (string.IsNullOrEmpty(cell.locationId)) continue;
+            WorldLocation location = map.GetLocation(cell.locationId);
+            if (location == null || map.GetIndex(new HexCoord(location.position.x, location.position.y)) != cell.index)
+                throw new InvalidDataException("格子地点引用与地点位置不一致");
+        }
     }
 
     private static void ValidateStaticMapInputs(WorldMap map)
