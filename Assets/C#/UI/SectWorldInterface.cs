@@ -3,6 +3,7 @@ using System.Linq;
 using Cultivation4X.WorldMap;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 public sealed class SectWorldInterface : MonoBehaviour
@@ -126,18 +127,35 @@ public sealed class SectWorldInterface : MonoBehaviour
         if (!FoundingRules.HasReachedCave(sect?.founding)) return;
         Clear(layoutPanel);
         RuntimeUIFactory.Text(layoutPanel, $"{sect.sectName} · 宗门布局", 30, 48);
-        RuntimeUIFactory.Text(layoutPanel, "内部建筑不占用世界格。", 17, 36);
+        int disciples = LivingDiscipleCount();
+        int materials = WarehouseManager.Instance == null
+            ? 0
+            : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId);
+        RuntimeUIFactory.Text(layoutPanel,
+            $"弟子：{disciples}　灵材：{sect.gold}　基础材料：{materials}　声望：{sect.reputation}",
+            16, 30);
         RectTransform list = RuntimeUIFactory.ScrollContent(layoutPanel, "LayoutList");
-        AddEntry(list, "库藏", OpenWarehouse);
-        AddEntry(list, "炼丹房", () => FindRuntime<AlchemyPanel>()?.OpenFromSectLayout());
-        AddEntry(list, "修炼室", OpenTrainingSummary);
-        AddEntry(list, "藏经阁", OpenScriptureSummary);
-        AddEntry(list, "任务堂／执事堂", OpenStewardHall);
-        AddEntry(list, "宗门建设", () => FindRuntime<SectDevelopmentPanel>()?.OpenFromSectLayout());
+        AddBuildingCard(list, "藏经阁", "功法研究", OpenScriptureSummary);
+        AddBuildingCard(list, "炼丹房", "炼制丹药", () => FindRuntime<AlchemyPanel>()?.OpenFromSectLayout());
+        AddBuildingCard(list, "修炼室", "安排修炼", OpenTrainingSummary);
+        AddBuildingCard(list, "库藏", "资源存取", OpenWarehouse);
+        AddBuildingCard(list, "任务堂／执事堂", "任务与外部威胁", OpenStewardHall);
+        AddBuildingCard(list, "宗门建设", "设施建设与升级",
+            () => FindRuntime<SectDevelopmentPanel>()?.OpenFromSectLayout());
         if (sect.founding.stage == FoundingStage.Cave)
-            AddEntry(list, "洞府整备／立宗进度", () => FindRuntime<FoundingPanel>()?.OpenFromSectLayout());
+            AddBuildingCard(list, "洞府整备／立宗进度", "修复洞府与立宗任务",
+                () => FindRuntime<FoundingPanel>()?.OpenFromSectLayout());
         AddCloseButton(layoutPanel);
         OpenManaged(layoutPanel);
+    }
+
+    private static void AddBuildingCard(Transform parent, string title, string description,
+        UnityEngine.Events.UnityAction onClick)
+    {
+        Button card = RuntimeUIFactory.Button(parent, $"{title}\n{description}", 62);
+        card.onClick.AddListener(onClick);
+        LayoutElement layout = card.GetComponent<LayoutElement>();
+        layout.flexibleWidth = 1f;
     }
 
     private void OpenStewardHall()

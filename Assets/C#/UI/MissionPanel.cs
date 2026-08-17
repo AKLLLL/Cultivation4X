@@ -38,6 +38,7 @@ public class MissionPanel : MonoBehaviour
     private MissionPage currentPage;
     private readonly Dictionary<MissionPage, Button> pageButtons = new Dictionary<MissionPage, Button>();
     private MapMissionContext selectedMapContext;
+    private WorldLocation selectedLocation;
     private void Start()
     {
         EnsureDynamicUI();
@@ -46,6 +47,7 @@ public class MissionPanel : MonoBehaviour
     public  void SelectMission(string id)
     {
         selectedMapContext = null;
+        selectedLocation = null;
         RefreshMissionMode();
         // 根据任务ID获取Mission对象
         selectedMissionData = MissionManager.Instance.GetMissionData(id);
@@ -125,7 +127,7 @@ public class MissionPanel : MonoBehaviour
     public void OnCancelButtonClick()
     {
         selectedMissionData = null;
-
+        selectedLocation = null;
         UIManager.Instance.ClosePanel(missionPanel);
     }
 
@@ -134,6 +136,7 @@ public class MissionPanel : MonoBehaviour
         transform.SetAsLastSibling();
         selectedMissionData = null;
         selectedMapContext = null;
+        selectedLocation = null;
         EnsureDynamicUI();
         RefreshMissionMode();
         RefreshDynamicList();
@@ -166,6 +169,21 @@ public class MissionPanel : MonoBehaviour
         return true;
     }
 
+    public bool OpenLocationMissions(WorldLocation location)
+    {
+        if (location == null || MissionManager.Instance == null)
+        { return false; }
+        if (UIManager.Instance == null) return false;
+        UIManager.Instance.OpenPanel(missionPanel == null ? gameObject : missionPanel);
+        selectedMapContext = null;
+        selectedLocation = location;
+        selectedMissionData = null;
+        RefreshMissionMode();
+        RefreshDynamicList();
+        SetSelectedNPC(null);
+        return true;
+    }
+
     private void EnsureDynamicUI()
     {
         if (dynamicList != null || missionPanel == null) return;
@@ -186,12 +204,21 @@ public class MissionPanel : MonoBehaviour
     private void RefreshMissionMode()
     {
         bool mapMode = selectedMapContext != null;
-        if (missionTabs != null) missionTabs.gameObject.SetActive(!mapMode);
+        bool locationMode = selectedLocation != null;
+        if (missionTabs != null) missionTabs.gameObject.SetActive(!mapMode && !locationMode);
         if (dynamicScrollRoot != null) dynamicScrollRoot.gameObject.SetActive(!mapMode);
-        if (rewardArea != null) rewardArea.gameObject.SetActive(!mapMode);
+        if (rewardArea != null) rewardArea.gameObject.SetActive(!mapMode && !locationMode);
         if (mapContextText == null) return;
-        mapContextText.gameObject.SetActive(mapMode);
-        mapContextText.text = mapMode ? FormatMapActionContext(selectedMapContext) : string.Empty;
+        mapContextText.gameObject.SetActive(mapMode || locationMode);
+        if (mapMode) mapContextText.text = FormatMapActionContext(selectedMapContext);
+        else if (locationMode) mapContextText.text = FormatLocationContext(selectedLocation);
+        else mapContextText.text = string.Empty;
+    }
+
+    private static string FormatLocationContext(WorldLocation location)
+    {
+        if (location == null) return string.Empty;
+        return $"地点任务：{location.name}\n请选择任务并派遣弟子执行；任务进度由时间推进。";
     }
 
     private static string FormatMapActionContext(MapMissionContext context)
@@ -217,6 +244,11 @@ public class MissionPanel : MonoBehaviour
         if (dynamicList == null || MissionManager.Instance == null) return;
         ClearChildren(dynamicList);
         ClearChildren(rewardArea);
+        if (selectedLocation != null)
+        {
+            RefreshLocationMissions();
+            return;
+        }
         RefreshPageTabs();
         int reputation = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation;
         string header = $"宗门事务　声望 {reputation}　开放至 {FacilityRules.MaxMissionRankForReputation(reputation)} 阶任务";
@@ -259,6 +291,22 @@ public class MissionPanel : MonoBehaviour
                 RefreshDynamicList();
             });
         }
+    }
+
+    private void RefreshLocationMissions()
+    {
+        if (selectedLocation == null) return;
+        statusText.text = $"地点任务：{selectedLocation.name}";
+        List<MissionData> missions = (selectedLocation.availableMissionIds ?? new List<string>())
+            .Select(MissionManager.Instance.GetMissionData)
+            .Where(data => data != null)
+            .ToList();
+        if (missions.Count == 0)
+        {
+            RuntimeUIFactory.Text(dynamicList, "该地点暂无可接任务。", 18, 42);
+            return;
+        }
+        AddSection("地点任务", missions);
     }
 
     private void AddPageTab(Transform tabs, MissionPage page, string label)

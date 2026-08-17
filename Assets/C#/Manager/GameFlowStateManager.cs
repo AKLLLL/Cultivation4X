@@ -101,7 +101,7 @@ public sealed class GameFlowStateManager : MonoBehaviour
         if (Current == next) return;
         GameFlowState previous = Current;
         Current = next;
-        Debug.Log($"[GameFlowDiag] GameFlowState {previous} -> {next} " +
+        GameDebugConfig.LogWorldMap($"[GameFlowDiag] GameFlowState {previous} -> {next} " +
                   $"hasGameSession={(SaveManager.Instance != null && SaveManager.Instance.HasGameSession)}");
         StateChanged?.Invoke(Current);
     }

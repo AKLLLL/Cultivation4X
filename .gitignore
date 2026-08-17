@@ -7,6 +7,9 @@
 [Ll]ogs/
 UserSettings/
 
+# Local test runner output
+TestOutput/
+
 # TMP 生成的超大字体资产：本地保留，不再纳入版本控制。
 # 新克隆如需该字体，可从 Assets/Resources/SourceHanSansHWSC-Bold.otf 重新生成。
 Assets/Resources/SourceHanSansHWSC-Bold SDF.asset

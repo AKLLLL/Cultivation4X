@@ -27,6 +27,16 @@ namespace Cultivation4X.WorldMap
         Locked = 3
     }
 
+    /// <summary>地点行动类型：由 WorldMap3DController 统一分发到对应系统。</summary>
+    public enum LocationActionType
+    {
+        None = 0,
+        Explore = 1,
+        ManageLabor = 2,
+        ViewStatus = 3,
+        ManageSect = 4
+    }
+
     /// <summary>
     /// 地点可执行行为的接口数据。第一阶段只描述显示与可用性，
     /// 实际行为由后续任务/村庄系统接入。
@@ -35,6 +45,7 @@ namespace Cultivation4X.WorldMap
     public class LocationAction
     {
         public string id;
+        public LocationActionType actionType;
         public string displayName;
         public int cost;
         public bool available;
@@ -55,5 +66,9 @@ namespace Cultivation4X.WorldMap
         public int level;
         public LocationState state;
         public List<LocationAction> availableActions = new List<LocationAction>();
+        /// <summary>该地点可提供的既有 Mission 模板 ID。</summary>
+        public List<string> availableMissionIds = new List<string>();
+        /// <summary>关联的 MapSiteData.siteId；MapSiteData 仍是玩法真实数据，WorldLocation 是地图门面。</summary>
+        public string sourceMapSiteId;
     }
 }

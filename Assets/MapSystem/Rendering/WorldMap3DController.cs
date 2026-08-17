@@ -18,7 +18,6 @@ namespace Cultivation4X.WorldMap
         [SerializeField] private WorldMapInteractionController interaction;
         [SerializeField] private WorldMapHudController hud;
         private bool foundingTransitionPending;
-        private WorldInfoPanel worldInfoPanel;
         private static int gameFlowDiagSequence;
         private TerrainRenderer.MapDetailLevel lastSelectionDetailLevel =
             TerrainRenderer.MapDetailLevel.Mid;
@@ -53,9 +52,8 @@ namespace Cultivation4X.WorldMap
             if (hud != null)
             {
                 hud.OnConfirmSite = ConfirmSite;
-                hud.OnExplore = () => OpenSelectedAction(MapActionType.Explore);
-                hud.OnSiteAction = OpenSelectedSiteAction;
-                hud.OnOpenSectBrief = () => SectWorldInterface.Instance?.OpenSectBrief();
+                hud.LocationActionRequested += HandleLocationAction;
+                hud.LocationMissionsRequested += OpenLocationMissions;
             }
             if (interaction != null) interaction.CellPicked += HandleCellPicked;
         }
@@ -126,29 +124,47 @@ namespace Cultivation4X.WorldMap
         private void HandleCellPicked(int cellIndex)
         {
             SelectedLocation = ResolveLocationAt(cellIndex);
-            if (IsWorldMapActive) OpenWorldInfoPanel(cellIndex);
             RefreshPresentation();
         }
 
-        private void OpenWorldInfoPanel(int cellIndex)
+        private void OpenLocationMissions(WorldLocation location)
         {
-            WorldMap map = WorldMapSession.Current;
-            if (map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length) return;
-            if (worldInfoPanel == null)
+            if (location == null) return;
+            MissionPanel panel = FindObjectOfType<MissionPanel>(true);
+            if (panel == null)
             {
-                worldInfoPanel = FindObjectOfType<WorldInfoPanel>(true);
-                if (worldInfoPanel == null) return;
-                worldInfoPanel.ActionRequested += HandleLocationAction;
+                GameDebugConfig.LogWorldMapWarning("MissionPanel 尚未初始化");
+                return;
             }
-            VillageState village = PlayerManager.Instance?.playerData?.founding?.village;
-            worldInfoPanel.Open(map, cellIndex, village);
+            panel.OpenLocationMissions(location);
         }
 
         private void HandleLocationAction(WorldLocation location, LocationAction action)
         {
-            // 第一阶段只保留接口：行为由后续村庄/任务/劳动力系统实现。
-            Debug.Log($"[WorldLocation] action requested location={location?.name} " +
-                      $"action={action?.displayName}");
+            if (action == null) return;
+            switch (action.actionType)
+            {
+                case LocationActionType.Explore:
+                    OpenSelectedAction(MapActionType.Explore);
+                    break;
+                case LocationActionType.ManageLabor:
+                {
+                    VillageLaborPanel panel = FindObjectOfType<VillageLaborPanel>(true);
+                    if (panel != null) panel.Open(location);
+                    else GameDebugConfig.LogWorldMapWarning("VillageLaborPanel 尚未初始化");
+                    break;
+                }
+                case LocationActionType.ViewStatus:
+                    GameDebugConfig.LogWorldMap($"[WorldLocation] ViewStatus location={location?.name}");
+                    break;
+                case LocationActionType.ManageSect:
+                    SectWorldInterface.Instance?.OpenSectLayout();
+                    break;
+                default:
+                    GameDebugConfig.LogWorldMap($"[WorldLocation] action requested " +
+                          $"location={location?.name} action={action?.displayName}");
+                    break;
+            }
         }
 
         private WorldLocation ResolveLocationAt(int cellIndex)
@@ -167,7 +183,7 @@ namespace Cultivation4X.WorldMap
         private void HandleFlowStateChanged(GameFlowState state)
         {
             gameFlowDiagSequence++;
-            Debug.Log($"[GameFlowDiag][{gameFlowDiagSequence}] " +
+            GameDebugConfig.LogWorldMap($"[GameFlowDiag][{gameFlowDiagSequence}] " +
                       $"WorldMap3DController.HandleFlowStateChanged({state})");
             RefreshPresentation();
         }
@@ -215,7 +231,7 @@ namespace Cultivation4X.WorldMap
         {
             if (GameFlowStateManager.Instance != null) GameFlowStateManager.Instance.Refresh();
             gameFlowDiagSequence++;
-            Debug.Log($"[GameFlowDiag][{gameFlowDiagSequence}] RefreshFlowUiOnly " +
+            GameDebugConfig.LogWorldMap($"[GameFlowDiag][{gameFlowDiagSequence}] RefreshFlowUiOnly " +
                       $"flowState={ResolvedFlowState} mapIsNull={WorldMapSession.Current?.cells == null}");
             switch (ResolvedFlowState)
             {
@@ -237,7 +253,7 @@ namespace Cultivation4X.WorldMap
         {
             if (GameFlowStateManager.Instance != null) GameFlowStateManager.Instance.Refresh();
             gameFlowDiagSequence++;
-            Debug.Log($"[GameFlowDiag][{gameFlowDiagSequence}] RefreshFromFlowState " +
+            GameDebugConfig.LogWorldMap($"[GameFlowDiag][{gameFlowDiagSequence}] RefreshFromFlowState " +
                       $"flowState={ResolvedFlowState} mapCells={(map?.cells != null ? map.cells.Length : 0)}");
             switch (ResolvedFlowState)
             {
@@ -343,12 +359,12 @@ namespace Cultivation4X.WorldMap
         private void LogGameFlowUiStep(string method, string phase)
         {
             gameFlowDiagSequence++;
-            Debug.Log($"[GameFlowDiag][{gameFlowDiagSequence}] {method}.{phase} " +
+            GameDebugConfig.LogWorldMap($"[GameFlowDiag][{gameFlowDiagSequence}] {method}.{phase} " +
                       $"flowState={ResolvedFlowState} worldViewMode={CurrentWorldMapViewMode}");
             foreach (WorldMapHudController hudController in
                      UnityEngine.Object.FindObjectsOfType<WorldMapHudController>(true))
             {
-                Debug.Log($"[GameFlowDiag][{gameFlowDiagSequence}] WorldHUD hierarchy: " +
+                GameDebugConfig.LogWorldMap($"[GameFlowDiag][{gameFlowDiagSequence}] WorldHUD hierarchy: " +
                           $"instance={hudController.name} " +
                           $"activeSelf={hudController.gameObject.activeSelf} " +
                           $"activeInHierarchy={hudController.gameObject.activeInHierarchy} " +
@@ -426,20 +442,6 @@ namespace Cultivation4X.WorldMap
             RefreshPresentation();
         }
 
-        private void OpenSelectedSiteAction()
-        {
-            if (interaction == null || interaction.SelectedCellIndex < 0) return;
-            MapSiteData site = WorldMapSession.Progress?.mapSites?.FirstOrDefault(item =>
-                item != null && item.cellIndex == interaction.SelectedCellIndex &&
-                item.siteType != MapSiteType.SectBase);
-            MapActionType action = WorldMapContentRules.ActionForSite(site);
-            if (action == MapActionType.None)
-            {
-                action = MapActionType.InvestigateSpiritSpring;
-            }
-            OpenSelectedAction(action);
-        }
-
         private void OpenSelectedAction(MapActionType actionType)
         {
             if (interaction == null || interaction.SelectedCellIndex < 0) return;
@@ -468,7 +470,11 @@ namespace Cultivation4X.WorldMap
         private void OnDestroy()
         {
             if (interaction != null) interaction.CellPicked -= HandleCellPicked;
-            if (worldInfoPanel != null) worldInfoPanel.ActionRequested -= HandleLocationAction;
+            if (hud != null)
+            {
+                hud.LocationActionRequested -= HandleLocationAction;
+                hud.LocationMissionsRequested -= OpenLocationMissions;
+            }
             if (PlayerManager.Instance != null)
                 PlayerManager.Instance.OnFoundingChanged -= HandleGameplayChanged;
             if (GameFlowStateManager.Instance != null)

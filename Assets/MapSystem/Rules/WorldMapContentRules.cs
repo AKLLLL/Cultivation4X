@@ -63,6 +63,7 @@ namespace Cultivation4X.WorldMap
             progress.mapSites = progress.mapSites
                 .OrderBy(site => site.siteType == MapSiteType.SectBase ? 0 : 1)
                 .ThenBy(site => site.siteId, StringComparer.Ordinal).ToList();
+            WorldLocationRules.SynchronizeFromMapSites(map, progress);
         }
 
         public static bool TryPrepareSectBasePlacement(WorldMap map, WorldMapProgressState progress,
@@ -121,6 +122,7 @@ namespace Cultivation4X.WorldMap
             }
             foreach (KeyValuePair<MapSiteData, int> replacement in replacements)
                 replacement.Key.cellIndex = replacement.Value;
+            WorldLocationRules.SynchronizeFromMapSites(map, progress);
             reason = null;
             return true;
         }

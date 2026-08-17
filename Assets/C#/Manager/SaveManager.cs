@@ -336,6 +336,13 @@ public class SaveManager : MonoBehaviour
             state.worldMap.regions = state.worldMap.regions ?? new System.Collections.Generic.List<MapRegionData>();
             state.worldMap.locations = state.worldMap.locations ??
                 new System.Collections.Generic.Dictionary<string, WorldLocation>();
+            foreach (WorldLocation location in state.worldMap.locations.Values)
+            {
+                location.availableActions = location.availableActions ??
+                    new System.Collections.Generic.List<LocationAction>();
+                location.availableMissionIds = location.availableMissionIds ??
+                    new System.Collections.Generic.List<string>();
+            }
             foreach (MapRegionData region in state.worldMap.regions.Where(item => item != null))
                 region.cellIndices = region.cellIndices ?? new System.Collections.Generic.List<int>();
         }
@@ -356,6 +363,7 @@ public class SaveManager : MonoBehaviour
                 site.tags = site.tags ?? new System.Collections.Generic.List<string>();
                 site.availableActionIds = site.availableActionIds ?? new System.Collections.Generic.List<string>();
             }
+            WorldLocationRules.SynchronizeFromMapSites(state.worldMap, state.worldMapProgress);
         }
         state.activeMissions = state.activeMissions ?? new System.Collections.Generic.List<MissionSaveData>();
     }
@@ -390,7 +398,7 @@ public class SaveManager : MonoBehaviour
                 throw new InvalidDataException($"世界地图格子 {index} 无效");
         }
 
-        ValidateWorldLocations(map);
+        ValidateWorldLocations(map, state.worldMapProgress);
         ValidateStaticMapInputs(map);
         ValidateMapRegions(map);
 
@@ -570,7 +578,7 @@ public class SaveManager : MonoBehaviour
             throw new InvalidDataException("宗门驻地与宗门数据不一致");
     }
 
-    private static void ValidateWorldLocations(WorldMap map)
+    private static void ValidateWorldLocations(WorldMap map, WorldMapProgressState progress = null)
     {
         if (map.locations == null)
             throw new InvalidDataException("世界地点表缺失");
@@ -586,8 +594,15 @@ public class SaveManager : MonoBehaviour
                 location.availableActions.Any(action => action == null ||
                     string.IsNullOrWhiteSpace(action.id) ||
                     string.IsNullOrWhiteSpace(action.displayName)) ||
+                location.availableMissionIds == null ||
+                location.availableMissionIds.Any(string.IsNullOrWhiteSpace) ||
+                location.availableMissionIds.Distinct(StringComparer.Ordinal).Count() !=
+                    location.availableMissionIds.Count ||
                 location.position.x < 0 || location.position.x >= map.width ||
-                location.position.y < 0 || location.position.y >= map.height)
+                location.position.y < 0 || location.position.y >= map.height ||
+                (!string.IsNullOrEmpty(location.sourceMapSiteId) &&
+                 (progress?.mapSites == null ||
+                  progress.mapSites.All(site => site == null || site.siteId != location.sourceMapSiteId))))
                 throw new InvalidDataException("世界地点实体无效");
         }
 

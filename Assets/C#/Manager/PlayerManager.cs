@@ -341,8 +341,11 @@ public class PlayerManager : MonoBehaviour
         };
         WorldMapInfluenceRules.Recalculate(map, updatedProgress);
         WorldMapContentRules.RefreshHints(map, updatedProgress);
-        // 宗门建立后，在影响范围内生成青石村 WorldLocation。
+        // 宗门建立后，在影响范围内生成青石村 WorldLocation，并把宗门自身也注册为世界地点。
         WorldLocationRules.CreateStarterVillage(map, cellIndex);
+        WorldLocationRules.CreatePlayerSect(map, cellIndex, sectName);
+        // 把候选内容（灵泉/灵矿/洞府/兽巢/遗迹/村庄）同步为 WorldLocation 门面。
+        WorldLocationRules.SynchronizeFromMapSites(map, updatedProgress);
 
         playerData.sectId = "player_sect";
         playerData.sectName = sectName;
