@@ -62,15 +62,13 @@ public class WarehouseManager : MonoBehaviour
         NormalizeItems();
         if (string.IsNullOrWhiteSpace(itemId) || count <= 0) return false;
         if (warehouseData.items.Exists(item => item.itemId == itemId)) return true;
-        int level = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse);
-        return warehouseData.items.Count < FacilityRules.WarehouseSlots(level);
+        return GetUsedSlotCount() < GetCapacity();
     }
 
     public bool CanAddRewards(System.Collections.Generic.IEnumerable<ItemReward> rewards)
     {
         NormalizeItems();
-        int level = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse);
-        int freeSlots = Mathf.Max(0, FacilityRules.WarehouseSlots(level) - warehouseData.items.Count);
+        int freeSlots = Mathf.Max(0, GetCapacity() - GetUsedSlotCount());
         var newIds = new System.Collections.Generic.HashSet<string>();
         foreach (ItemReward reward in rewards ?? new ItemReward[0])
         {
@@ -189,6 +187,25 @@ public class WarehouseManager : MonoBehaviour
             if (item.itemId == itemId) total += item.count;
         return total;
     }
+
+    /// <summary>仓库固定容量：至少 10，仓库建筑等级再提供额外槽位。</summary>
+    public int GetCapacity()
+    {
+        int facilitySlots = PlayerManager.Instance == null
+            ? 10
+            : FacilityRules.WarehouseSlots(PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse));
+        return Mathf.Max(10, facilitySlots);
+    }
+
+    /// <summary>当前已占用的物品种类槽位数（数量为 0 的槽不计入）。</summary>
+    public int GetUsedSlotCount()
+    {
+        NormalizeItems();
+        return warehouseData.items.Count;
+    }
+
+    /// <summary>剩余可容纳的新物品种类槽位数。</summary>
+    public int GetFreeSlotCount() => Mathf.Max(0, GetCapacity() - GetUsedSlotCount());
 
     public void NormalizeItems()
     {

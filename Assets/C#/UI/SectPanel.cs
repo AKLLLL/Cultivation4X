@@ -83,6 +83,11 @@ public class SectPanel : MonoBehaviour
             Debug.LogWarning("SectPanel：NPC列表引用未绑定，无法刷新。");
             return;
         }
+        if (!content.gameObject.activeInHierarchy)
+        {
+            // 新版流程只把 SectPanel 当作详情父容器，列表内容保持隐藏。
+            return;
+        }
 
         foreach (var slot in slots)
         {

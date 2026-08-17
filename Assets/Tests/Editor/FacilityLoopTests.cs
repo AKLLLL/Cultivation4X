@@ -96,6 +96,37 @@ public class FacilityLoopTests
     }
 
     [Test]
+    public void Warehouse_CapacityStaysStableWhenLastStackConsumed()
+    {
+        WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
+        WarehouseManager.Instance = warehouse;
+
+        int capacity = warehouse.GetCapacity();
+        Assert.AreEqual(10, capacity);
+        Assert.AreEqual(1, warehouse.GetUsedSlotCount());
+        Assert.IsTrue(warehouse.RemoveItem(FacilityRules.BasicMaterialId, 5));
+        Assert.AreEqual(0, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
+        Assert.AreEqual(0, warehouse.GetUsedSlotCount());
+        Assert.AreEqual(capacity, warehouse.GetCapacity());
+        Assert.AreEqual(capacity, warehouse.GetFreeSlotCount());
+    }
+
+    [Test]
+    public void Warehouse_NewGameStartCapacityIsTenEvenWithLevelZeroWarehouse()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        player.playerData.warehouseLevel = 0;
+
+        WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
+        WarehouseManager.Instance = warehouse;
+
+        Assert.AreEqual(10, warehouse.GetCapacity());
+        Assert.AreEqual(1, warehouse.GetUsedSlotCount());
+        Assert.IsTrue(warehouse.CanAddItem("new_kind", 1));
+    }
+
+    [Test]
     public void V1Save_MigratesAdditiveFacilityDefaults()
     {
         GameState state = JsonConvert.DeserializeObject<GameState>("{\"version\":1,\"sect\":{\"gold\":7,\"missionHallLevel\":1},\"warehouse\":{\"items\":[]}}");

@@ -299,25 +299,17 @@ namespace Cultivation4X.WorldMap
             if (location.availableMissionIds != null && location.availableMissionIds.Count > 0)
             {
                 hasContent = true;
-                AddInfoText("地点任务", 15);
-                foreach (string missionId in location.availableMissionIds)
-                {
-                    MissionData data = MissionManager.Instance == null
-                        ? null
-                        : MissionManager.Instance.GetMissionData(missionId);
-                    if (data == null) continue;
-                    AddLocationMissionButton(location, data);
-                }
+                AddLocationMissionsButton(location, location.availableMissionIds.Count);
             }
 
             if (!hasContent)
                 AddInfoText("该地点暂无可执行行动。", 15);
         }
 
-        private void AddLocationMissionButton(WorldLocation location, MissionData data)
+        private void AddLocationMissionsButton(WorldLocation location, int missionCount)
         {
             Button button = RuntimeUIFactory.Button(infoContent,
-                $"{data.name}　{data.needDays}天", 46);
+                $"地点任务（{missionCount}）", 46);
             WorldLocation captured = location;
             button.onClick.AddListener(() => LocationMissionsRequested?.Invoke(captured));
             infoDynamicItems.Add(button.gameObject);
