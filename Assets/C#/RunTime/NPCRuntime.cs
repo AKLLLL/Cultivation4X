@@ -154,7 +154,12 @@ public class NPCRuntime
         float healthPenalty = Character.health == HealthState.PermanentTrauma ? 0.2f : 0f;
         float chance = Mathf.Clamp01(0.65f + bonusChance - healthPenalty);
         Character.cultivation -= need;
-        if (UnityEngine.Random.value > chance) return false;
+        if (UnityEngine.Random.value > chance)
+        {
+            Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                "Breakthrough", $"突破失败，修为损耗 {need}");
+            return false;
+        }
 
         Character.realm = (CultivationRealm)((int)Character.realm + 1);
         Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,

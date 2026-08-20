@@ -1,0 +1,19 @@
+{
+  "id": "disciple_ai_rest_001",
+  "name": "静养",
+  "description": "弟子休整调息，恢复身心状态。",
+  "missionType": "Disciple",
+  "missionRank": 1,
+  "requiredFacilityLevel": 0,
+  "isPlayerAssignable": false,
+  "goldCost": 0,
+  "itemCosts": [],
+  "needDays": 2,
+  "goldReward": 0,
+  "expReward": 0,
+  "itemRewards": [],
+  "requiredAttack": 0,
+  "requiredIntelligence": 0,
+  "requiredCombatPower": 0,
+  "nodes": []
+}

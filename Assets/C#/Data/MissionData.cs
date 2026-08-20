@@ -13,6 +13,8 @@ public class MissionData
     public string description;
     // 目标类型
     public MissionType missionType;
+    /// <summary>是否允许玩家在任务面板主动派遣。旧配置缺省时默认为 true，行为不变。</summary>
+    public bool isPlayerAssignable = true;
     public int missionRank = 1;
     public int requiredMissionHallLevel = 1;
     public FacilityType requiredFacility;

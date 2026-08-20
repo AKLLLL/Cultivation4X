@@ -1,0 +1,19 @@
+{
+  "id": "disciple_ai_social_001",
+  "name": "同门往来",
+  "description": "弟子与同门走动往来，增进情谊。",
+  "missionType": "Disciple",
+  "missionRank": 1,
+  "requiredFacilityLevel": 0,
+  "isPlayerAssignable": false,
+  "goldCost": 0,
+  "itemCosts": [],
+  "needDays": 2,
+  "goldReward": 0,
+  "expReward": 0,
+  "itemRewards": [],
+  "requiredAttack": 0,
+  "requiredIntelligence": 0,
+  "requiredCombatPower": 0,
+  "nodes": []
+}

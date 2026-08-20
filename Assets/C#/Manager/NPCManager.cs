@@ -216,10 +216,17 @@ public class NPCManager : MonoBehaviour
         return runtime;
     }
 
-    public bool AddRelationship(string sourceId, string targetId, RelationshipTag tag)
+    /// <summary>
+    /// 建立人物关系，并给双方各写一条 Relationship 履历。
+    /// 这是所有关系写入的统一入口：事件、自主社交、未来外交/师徒/仇敌都走这里。
+    /// 文本参数缺省时使用默认文本；旧的三参数调用源码兼容。
+    /// </summary>
+    public bool AddRelationship(string sourceId, string targetId, RelationshipTag tag,
+        string sourceRecordText = null, string targetRecordText = null)
     {
         NPCRuntime source = GetRuntime(sourceId);
-        if (source == null || GetRuntime(targetId) == null || sourceId == targetId) return false;
+        NPCRuntime target = GetRuntime(targetId);
+        if (source == null || target == null || sourceId == targetId) return false;
         if (source.Character.relationships.Any(r => r.targetCharacterId == targetId && r.tag == tag)) return false;
         source.Character.relationships.Add(new RelationshipRecord
         {
@@ -228,7 +235,46 @@ public class NPCManager : MonoBehaviour
             tag = tag,
             createdDay = CurrentDay
         });
+        source.Character.AddLifeRecord(CurrentDay, "Relationship",
+            string.IsNullOrWhiteSpace(sourceRecordText)
+                ? DefaultRelationshipRecordText(source, target, tag)
+                : sourceRecordText);
+        target.Character.AddLifeRecord(CurrentDay, "Relationship",
+            string.IsNullOrWhiteSpace(targetRecordText)
+                ? DefaultRelationshipRecordText(target, source, tag)
+                : targetRecordText);
         return true;
+    }
+
+    /// <summary>
+    /// 关系结果兜底：没有可建关系的目标时，只给当事人写一条 Relationship 履历。
+    /// </summary>
+    public void RecordRelationshipOutcome(string characterId, string text)
+    {
+        NPCRuntime runtime = GetRuntime(characterId);
+        if (runtime == null || !runtime.Character.IsAlive || string.IsNullOrWhiteSpace(text)) return;
+        runtime.Character.AddLifeRecord(CurrentDay, "Relationship", text);
+    }
+
+    private static string DefaultRelationshipRecordText(NPCRuntime subject, NPCRuntime other, RelationshipTag tag)
+    {
+        string otherName = string.IsNullOrWhiteSpace(other.Character?.displayName)
+            ? other.Data?.npcName
+            : other.Character.displayName;
+        if (string.IsNullOrWhiteSpace(otherName)) otherName = "同门";
+        return $"与{otherName}结为{RelationshipTagName(tag)}";
+    }
+
+    private static string RelationshipTagName(RelationshipTag tag)
+    {
+        switch (tag)
+        {
+            case RelationshipTag.MasterApprentice: return "师徒";
+            case RelationshipTag.Friend: return "好友";
+            case RelationshipTag.Rival: return "仇敌";
+            case RelationshipTag.LifeSaver: return "救命恩人";
+            default: return tag.ToString();
+        }
     }
 
     public bool Kill(NPCRuntime npc, string cause)

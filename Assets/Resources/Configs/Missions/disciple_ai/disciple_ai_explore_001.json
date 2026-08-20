@@ -1,0 +1,24 @@
+{
+  "id": "disciple_ai_explore_001",
+  "name": "山野探索",
+  "description": "弟子自行前往山野探查，寻觅灵材。",
+  "missionType": "Exploration",
+  "missionRank": 1,
+  "requiredFacility": "SecretRealm",
+  "requiredFacilityLevel": 1,
+  "isFacilityAction": true,
+  "usesFacilityLevelScaling": true,
+  "isPlayerAssignable": false,
+  "goldCost": 0,
+  "itemCosts": [],
+  "needDays": 5,
+  "goldReward": 0,
+  "expReward": 30,
+  "itemRewards": [
+    { "itemId": "material_001", "count": 3 }
+  ],
+  "requiredAttack": 0,
+  "requiredIntelligence": 0,
+  "requiredCombatPower": 0,
+  "nodes": []
+}

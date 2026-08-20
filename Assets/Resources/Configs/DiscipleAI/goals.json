@@ -1,0 +1,39 @@
+[
+  {
+    "id": "improve_cultivation",
+    "displayName": "提升修为",
+    "baseIntensity": 4,
+    "conditions": [ { "type": "RealmAtMost", "value": "GoldenCore" } ],
+    "weightTerms": [
+      { "source": "Ability", "key": "CultivationRatio", "weight": 2,
+        "curve": [ [0, 0.2], [0.5, 0.5], [0.75, 0.9], [1.0, 1.3] ] }
+    ]
+  },
+  {
+    "id": "obtain_resources",
+    "displayName": "获取资源",
+    "baseIntensity": 2,
+    "conditions": [],
+    "weightTerms": [
+      { "source": "Environment", "key": "WarehouseScarcity.material_001",
+        "weight": 6, "threshold": 5, "curve": [ [0, 0.0], [1.0, 1.0] ] }
+    ]
+  },
+  {
+    "id": "improve_relationship",
+    "displayName": "改善关系",
+    "baseIntensity": 4,
+    "conditions": [ { "type": "RelationshipCountBelow", "intValue": 2 } ],
+    "weightTerms": [
+      { "source": "Trait", "key": "loyal", "weight": 2, "curve": [ [0, 1], [1, 1] ] },
+      { "source": "Trait", "key": "kind", "weight": 1, "curve": [ [0, 1], [1, 1] ] }
+    ]
+  },
+  {
+    "id": "recover_state",
+    "displayName": "恢复状态",
+    "baseIntensity": 8,
+    "conditions": [ { "type": "HealthIs", "value": "Injured" } ],
+    "weightTerms": []
+  }
+]

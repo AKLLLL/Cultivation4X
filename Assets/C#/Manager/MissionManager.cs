@@ -981,7 +981,7 @@ public class MissionManager : MonoBehaviour
 
     public bool IsMissionVisible(MissionData data)
     {
-        if (data == null || data.missionType == MissionType.WorldEvent) return false;
+        if (data == null || !data.isPlayerAssignable || data.missionType == MissionType.WorldEvent) return false;
         if (data.generatedByMap) return false;
         if (data.threatMissionKind == ThreatMissionKind.Investigation)
         {
