@@ -4,10 +4,8 @@
   "description": "弟子自行前往山野探查，寻觅灵材。",
   "missionType": "Exploration",
   "missionRank": 1,
-  "requiredFacility": "SecretRealm",
-  "requiredFacilityLevel": 1,
-  "isFacilityAction": true,
-  "usesFacilityLevelScaling": true,
+  "requiredFacilityLevel": 0,
+  "usesFacilityLevelScaling": false,
   "isPlayerAssignable": false,
 
   "itemCosts": [],

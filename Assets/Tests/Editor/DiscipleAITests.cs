@@ -185,6 +185,7 @@ public class DiscipleAITests
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
+        player.playerData.secretRealmLevel = 0;
         Add<WarehouseManager>("Warehouse");
         MissionManager missions = Add<MissionManager>("Missions");
         MissionManager.Instance = missions;
@@ -204,7 +205,11 @@ public class DiscipleAITests
         ActionScoreResult social = results.First(item => item.Action.id == "social");
         Assert.IsTrue(social.Eligible, social.FilterReason);
         ActionScoreResult explore = results.First(item => item.Action.id == "explore");
-        Assert.IsTrue(explore.Eligible, explore.FilterReason);
+        Assert.IsTrue(explore.Eligible, "普通山野探索不应依赖秘境等级：" + explore.FilterReason);
+        MissionData exploreMission = MissionManager.Instance.GetMissionData("disciple_ai_explore_001");
+        Assert.IsFalse(exploreMission.isFacilityAction);
+        Assert.IsFalse(exploreMission.usesFacilityLevelScaling);
+        Assert.AreEqual(0, exploreMission.requiredFacilityLevel);
         ActionScoreResult alchemy = results.First(item => item.Action.id == "alchemy");
         Assert.AreEqual("需要消耗资源", alchemy.FilterReason);
 
@@ -217,7 +222,7 @@ public class DiscipleAITests
     }
 
     [Test]
-    public void ActionFiltering_FacilityOccupiedByActiveMission()
+    public void ActionFiltering_OrdinaryExploreIgnoresSecretRealmOccupation()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
@@ -254,7 +259,7 @@ public class DiscipleAITests
         List<ActionScoreResult> results = DiscipleAIEvaluator.EvaluateActions(
             observer, identity, new List<GoalInstance>(), DiscipleAIConfigLoader.Load().Actions);
         ActionScoreResult explore = results.First(item => item.Action.id == "explore");
-        Assert.AreEqual("设施正在使用", explore.FilterReason);
+        Assert.IsTrue(explore.Eligible, "普通山野探索不应占用或依赖秘境：" + explore.FilterReason);
     }
 
     [Test]
