@@ -8,6 +8,8 @@
 
     "itemType":"Pill",
 
+    "tags":["pill"],
+
     "quality":"Rare",
 
     "rank":5,

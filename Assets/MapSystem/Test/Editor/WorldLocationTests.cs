@@ -19,6 +19,8 @@ public class WorldLocationTests
         Assert.AreEqual(LocationState.Active, village.state);
         Assert.AreEqual("青石村", village.name);
         Assert.AreEqual(3, village.availableActions.Count);
+        Assert.IsTrue(village.availableActions.Any(action => action.actionType == LocationActionType.Explore),
+            "青石村保留既有的地点调查入口");
 
         int villageCell = map.GetIndex(new HexCoord(village.position.x, village.position.y));
         Assert.GreaterOrEqual(villageCell, 0);
@@ -46,7 +48,7 @@ public class WorldLocationTests
     }
 
     [Test]
-    public void IsLocationRevealed_HidesContentUntilDiscoveredAndKeepsHandCreatedVisible()
+    public void SynchronizeFromMapSites_CreatesFacadeOnlyAfterDiscovery()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
             { width = 32, height = 24, seed = 7004 });
@@ -55,11 +57,15 @@ public class WorldLocationTests
 
         MapSiteData spring = progress.mapSites.Single(site => site.siteType == MapSiteType.SpiritSpring);
         WorldLocation facade = map.GetLocation("world_location_" + spring.siteId);
-        Assert.NotNull(facade);
-        Assert.IsFalse(WorldLocationRules.IsLocationRevealed(facade, progress),
-            "Hidden 的 MapSite 不应暴露地点信息");
+        Assert.IsNull(facade, "Hidden 的 MapSite 不应创建地点门面");
+        Assert.IsTrue(string.IsNullOrEmpty(map.cells[spring.cellIndex].locationId));
 
         spring.revealState = MapContentRevealState.Discovered;
+        spring.discoveredDay = spring.lastUpdatedDay = 0;
+        WorldMapContentRules.SynchronizeLegacyFlags(spring);
+        WorldLocationRules.SynchronizeFromMapSites(map, progress);
+        facade = map.GetLocation("world_location_" + spring.siteId);
+        Assert.NotNull(facade);
         Assert.IsTrue(WorldLocationRules.IsLocationRevealed(facade, progress),
             "Discovered 后地点门面应可见");
 
@@ -79,6 +85,10 @@ public class WorldLocationTests
         WorldMapContentRules.EnsureCandidates(map, progress);
 
         MapSiteData beast = progress.mapSites.Single(site => site.siteType == MapSiteType.BeastLair);
+        beast.revealState = MapContentRevealState.Discovered;
+        beast.discoveredDay = beast.lastUpdatedDay = 0;
+        WorldMapContentRules.SynchronizeLegacyFlags(beast);
+        WorldLocationRules.SynchronizeFromMapSites(map, progress);
         WorldLocation facade = map.GetLocation("world_location_" + beast.siteId);
         Assert.AreEqual(LocationState.Active, facade.state);
 
@@ -90,6 +100,31 @@ public class WorldLocationTests
     }
 
     [Test]
+    public void SynchronizeFromMapSites_RefreshesResourceDevelopmentAction()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
+            { width = 32, height = 24, seed = 7011 });
+        WorldMapProgressState progress = new WorldMapProgressState();
+        WorldMapContentRules.EnsureCandidates(map, progress);
+        MapSiteData resource = progress.mapSites.Single(site => site.siteType == MapSiteType.ResourceNode);
+        resource.revealState = MapContentRevealState.Discovered;
+        WorldMapContentRules.SynchronizeLegacyFlags(resource);
+
+        WorldLocationRules.SynchronizeFromMapSites(map, progress);
+        WorldLocation facade = map.GetLocation("world_location_" + resource.siteId);
+        Assert.IsTrue(facade.availableActions.Any(action =>
+            action.actionType == LocationActionType.DevelopResourceNode));
+        Assert.IsEmpty(facade.availableMissionIds,
+            "地图资源开发必须携带 MapMissionContext，不应退回普通资源任务");
+
+        resource.siteState = MapSiteState.Developed;
+        resource.ownerSectId = WorldMapProgressRules.PlayerSectOwnerId;
+        WorldLocationRules.SynchronizeFromMapSites(map, progress);
+        Assert.IsFalse(facade.availableActions.Any(action =>
+            action.actionType == LocationActionType.DevelopResourceNode));
+    }
+
+    [Test]
     public void SynchronizeFromMapSites_CreatesFacadesAndRebindsMovedSites()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
@@ -97,21 +132,18 @@ public class WorldLocationTests
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
 
-        Assert.AreEqual(6, progress.mapSites.Count);
-        Assert.AreEqual(6, map.locations.Count);
-        foreach (MapSiteData site in progress.mapSites)
-        {
-            WorldLocation facade = map.GetLocation("world_location_" + site.siteId);
-            Assert.NotNull(facade, "每个 MapSite 都应同步为 WorldLocation 门面");
-            Assert.AreEqual(site.siteId, facade.sourceMapSiteId);
-            Assert.AreEqual(site.cellIndex,
-                map.GetIndex(new HexCoord(facade.position.x, facade.position.y)));
-            Assert.AreEqual(facade.id, map.cells[site.cellIndex].locationId);
-            Assert.NotNull(facade.availableActions);
-            Assert.NotNull(facade.availableMissionIds);
-        }
-
+        Assert.AreEqual(7, progress.mapSites.Count);
         MapSiteData spring = progress.mapSites.Single(site => site.siteType == MapSiteType.SpiritSpring);
+        spring.revealState = MapContentRevealState.Discovered;
+        spring.discoveredDay = spring.lastUpdatedDay = 0;
+        WorldMapContentRules.SynchronizeLegacyFlags(spring);
+        WorldLocationRules.SynchronizeFromMapSites(map, progress);
+        Assert.AreEqual(1, map.locations.Count);
+        WorldLocation facade = map.GetLocation("world_location_" + spring.siteId);
+        Assert.NotNull(facade);
+        Assert.AreEqual(spring.siteId, facade.sourceMapSiteId);
+        Assert.AreEqual(facade.id, map.cells[spring.cellIndex].locationId);
+
         int oldCell = spring.cellIndex;
         int newCell = map.cells.First(cell => cell.index != oldCell && string.IsNullOrEmpty(cell.locationId)).index;
         spring.cellIndex = newCell;
@@ -134,6 +166,11 @@ public class WorldLocationTests
         string candidateVillageId = "world_location_" + candidateVillage.siteId;
         MapSiteData beast = progress.mapSites.Single(site => site.siteType == MapSiteType.BeastLair);
         string beastId = "world_location_" + beast.siteId;
+        beast.revealState = MapContentRevealState.Discovered;
+        beast.discoveredDay = beast.lastUpdatedDay = 0;
+        WorldMapContentRules.SynchronizeLegacyFlags(beast);
+        WorldLocationRules.SynchronizeFromMapSites(map, progress);
+        Assert.NotNull(map.GetLocation(beastId));
 
         progress.mapSites.Remove(beast);
         WorldLocationRules.SynchronizeFromMapSites(map, progress);
@@ -146,7 +183,35 @@ public class WorldLocationTests
 
         Assert.NotNull(map.GetLocation(WorldLocationRules.StarterVillageId));
         Assert.IsFalse(map.locations.ContainsKey(candidateVillageId),
-            "手建青石村存在时，候选村庄门面不应重复保留");
-        Assert.AreEqual(5, map.locations.Count);
+            "Hidden 候选村庄不应创建门面");
+        Assert.AreEqual(1, map.locations.Count);
+    }
+
+
+    [Test]
+    public void CreateStarterVillage_ExplicitlyAvoidsReservedMapSiteCells()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings
+            { width = 32, height = 24, seed = 7012 });
+        int sect = map.cells.First(cell => cell.isBuildable &&
+            map.GetNeighborIndices(cell.index).Count(index => map.cells[index].isBuildable) >= 2).index;
+        int reserved = map.GetNeighborIndices(sect).First(index => map.cells[index].isBuildable);
+        var progress = new WorldMapProgressState
+        {
+            mapSites = new System.Collections.Generic.List<MapSiteData>
+            {
+                new MapSiteData
+                {
+                    siteId = "reserved", siteName = "隐藏灵泉", siteType = MapSiteType.SpiritSpring,
+                    cellIndex = reserved, revealState = MapContentRevealState.Hidden
+                }
+            }
+        };
+
+        WorldLocation village = WorldLocationRules.CreateStarterVillage(map, sect, progress);
+
+        Assert.NotNull(village);
+        Assert.AreNotEqual(reserved,
+            map.GetIndex(new HexCoord(village.position.x, village.position.y)));
     }
 }

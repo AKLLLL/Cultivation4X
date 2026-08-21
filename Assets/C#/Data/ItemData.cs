@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 /// <summary>
 /// 单个物品配置
@@ -15,6 +16,8 @@ public class ItemData
     public string description;
     // 类型
     public ItemType itemType;
+    // 资源分类与玩法查询标签。V1 不引入额外 ResourceDefinition。
+    public List<string> tags = new List<string>();
     // 品质
     public string quality;
     //品阶

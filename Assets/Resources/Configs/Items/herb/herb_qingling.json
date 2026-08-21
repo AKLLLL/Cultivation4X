@@ -1,0 +1,13 @@
+{
+    "itemId":"herb_qingling",
+    "itemName":"青灵草",
+    "description":"生长于木灵气充沛森林中的基础灵草。",
+    "itemType":"Herb",
+    "tags":["spiritual_material"],
+    "quality":"Normal",
+    "rank":1,
+    "price":60,
+    "stackable":true,
+    "maxStack":999,
+    "icon":"Icons/herb_001"
+}

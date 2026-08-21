@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using UnityEngine;
+using Cultivation4X.WorldMap;
 
 public static class ConfigValidator
 {
@@ -9,9 +10,38 @@ public static class ConfigValidator
     private static void ValidateAtStartup()
     {
         ValidateItems();
+        ValidateResources();
         ValidateMissions();
         ValidateFounding();
         ValidateExternalThreats();
+    }
+
+    private static void ValidateResources()
+    {
+        HashSet<string> itemIds = new HashSet<string>();
+        foreach (TextAsset file in Resources.LoadAll<TextAsset>("Configs/Items"))
+        {
+            try
+            {
+                ItemData item = JsonConvert.DeserializeObject<ItemData>(file.text);
+                if (!string.IsNullOrWhiteSpace(item?.itemId)) itemIds.Add(item.itemId);
+            }
+            catch (Exception) { }
+        }
+        HashSet<string> nodeIds = new HashSet<string>();
+        foreach (ResourceNodeDefinition node in ResourceDefinitionDatabase.Nodes)
+        {
+            if (node == null || string.IsNullOrWhiteSpace(node.id) || !nodeIds.Add(node.id) ||
+                !itemIds.Contains(node.resourceId) || node.baseOutput <= 0 || node.biomeRequirements == null)
+                Debug.LogError($"资源节点配置无效: {node?.id}");
+        }
+        HashSet<string> veinIds = new HashSet<string>();
+        foreach (SpiritualVeinDefinition vein in ResourceDefinitionDatabase.Veins)
+        {
+            if (vein == null || string.IsNullOrWhiteSpace(vein.id) || !veinIds.Add(vein.id) ||
+                vein.grade <= 0 || vein.outputMultiplier < 1f || vein.origin != SpiritualVeinOrigin.Natural)
+                Debug.LogError($"灵脉配置无效: {vein?.id}");
+        }
     }
 
     private static void ValidateItems()

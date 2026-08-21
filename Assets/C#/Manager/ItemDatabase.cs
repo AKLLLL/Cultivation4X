@@ -16,6 +16,7 @@ public class ItemDatabase : MonoBehaviour
     /// </summary>
     private Dictionary<string, ItemData> items =
         new Dictionary<string, ItemData>();
+    private bool isLoaded;
 
     private void Awake()
     {
@@ -32,14 +33,15 @@ public class ItemDatabase : MonoBehaviour
 
     private void Start()
     {
-        LoadItems();
+        EnsureLoaded();
     }
 
     /// <summary>
     /// 加载所有物品
     /// </summary>
-    void LoadItems()
+    private void EnsureLoaded()
     {
+        if (isLoaded) return;
         items.Clear();
 
         TextAsset[] jsons =
@@ -77,6 +79,7 @@ public class ItemDatabase : MonoBehaviour
            // Debug.Log($"加载物品：{data.itemName}");
         }
 
+        isLoaded = true;
         Debug.Log($"共加载 {items.Count} 个物品");
     }
 
@@ -85,6 +88,7 @@ public class ItemDatabase : MonoBehaviour
     /// </summary>
     public ItemData GetItem(string id)
     {
+        EnsureLoaded();
         if (items.TryGetValue(id, out ItemData item))
             return item;
 

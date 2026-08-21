@@ -299,6 +299,12 @@ public class WorldMap3DOverlayTests
                 },
                 new MapSiteData
                 {
+                    siteId = "hinted_ruin", siteName = "真实遗迹名", cellIndex = 7,
+                    siteType = MapSiteType.Ruin, revealState = MapContentRevealState.Hinted,
+                    siteState = MapSiteState.None
+                },
+                new MapSiteData
+                {
                     siteId = "known_village", siteName = "村落", cellIndex = 10,
                     siteType = MapSiteType.Village, revealState = MapContentRevealState.Discovered,
                     siteState = MapSiteState.None
@@ -312,8 +318,8 @@ public class WorldMap3DOverlayTests
             SetPrivateField(renderer, "respectKnowledgeMask", true);
             renderer.Render(map, progress);
 
-            Assert.AreEqual(2, renderer.IconCount,
-                "宗门驻地始终显示，已知格地点显示，未知格地点隐藏");
+            Assert.AreEqual(3, renderer.IconCount,
+                "宗门驻地与已知地点显示，Hidden 隐藏，未知格上的 Hinted 仍显示匿名线索");
         }
         finally
         {

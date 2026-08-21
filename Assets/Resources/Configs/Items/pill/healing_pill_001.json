@@ -1,1 +1,1 @@
-{"itemId":"healing_pill_001","itemName":"草木疗伤丹","description":"以青木法炼成的基础疗伤丹。","itemType":"Pill","quality":"Normal","rank":1,"price":120,"stackable":true,"maxStack":99,"icon":"Items/pill_003"}
+{"itemId":"healing_pill_001","itemName":"草木疗伤丹","description":"以青木法炼成的基础疗伤丹。","itemType":"Pill","tags":["pill"],"quality":"Normal","rank":1,"price":120,"stackable":true,"maxStack":99,"icon":"Items/pill_003"}

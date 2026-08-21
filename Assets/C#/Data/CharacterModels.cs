@@ -67,6 +67,7 @@ public class CharacterState
     public int level = 1;
     public int exp;
     public int cultivation;
+    public int mentalState = DiscipleMentalStateRules.MaxMentalState;
     public CultivationRealm realm;
     public HealthState health = HealthState.Healthy;
     public NPCState activityState = NPCState.Idle;

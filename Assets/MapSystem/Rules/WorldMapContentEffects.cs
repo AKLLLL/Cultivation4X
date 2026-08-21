@@ -11,7 +11,6 @@ namespace Cultivation4X.WorldMap
     public static class WorldMapContentEffects
     {
         public const int SpiritSpringDailyCultivation = 1;
-        public const int SpiritMineDailyMaterial = 1;
         public const int VillageRelationReward = 15;
         public const int VillageReputationReward = 10;
         public const int RuinTechniqueUnderstandingReward = 5;
@@ -28,7 +27,8 @@ namespace Cultivation4X.WorldMap
         }
 
         public static bool IsSiteDeveloped(MapSiteData site) =>
-            site != null && site.siteState == MapSiteState.Developed && site.ownerSectId == "player_sect";
+            site != null && site.siteState == MapSiteState.Developed &&
+            site.ownerSectId == WorldMapProgressRules.PlayerSectOwnerId;
 
         public static bool HasDevelopedSite(MapSiteType type)
         {
@@ -42,11 +42,9 @@ namespace Cultivation4X.WorldMap
         public static void ApplyDaily(int currentDay)
         {
             bool springActive = HasDevelopedSite(MapSiteType.SpiritSpring);
-            bool mineActive = HasDevelopedSite(MapSiteType.SpiritMine);
-            if (!springActive && !mineActive) return;
+            if (!springActive) return;
             // 依赖对象尚未初始化时不推进日标记；稍后同一天补齐对象仍应获得效果。
-            if ((springActive && NPCManager.Instance == null) ||
-                (mineActive && WarehouseManager.Instance == null)) return;
+            if (NPCManager.Instance == null) return;
             if (!ReferenceEquals(lastDailyAppliedMap, WorldMapSession.Current))
             {
                 lastDailyAppliedMap = WorldMapSession.Current;
@@ -62,11 +60,6 @@ namespace Cultivation4X.WorldMap
                     if (npc != null && npc.Character != null && npc.Character.IsAlive && npc.State == NPCState.Idle)
                         npc.AddCultivation(SpiritSpringDailyCultivation);
                 }
-            }
-            if (mineActive)
-            {
-                // 仓库满时 TryAddItem 返回 false，产出不会绕过容量规则。
-                WarehouseManager.Instance.TryAddItem(FacilityRules.BasicMaterialId, SpiritMineDailyMaterial);
             }
         }
 
@@ -104,7 +97,8 @@ namespace Cultivation4X.WorldMap
             switch (type)
             {
                 case MapSiteType.SpiritSpring: return "开发后：每日为每名空闲存活弟子提供修为+1";
-                case MapSiteType.SpiritMine: return "开发后：每日尝试获得基础材料+1（受仓库容量限制）";
+                case MapSiteType.SpiritMine:
+                case MapSiteType.ResourceNode: return "开发后：每30天结算一次资源产出";
                 case MapSiteType.Village: return "完成后：村落关系+15，宗门声望+10";
                 case MapSiteType.BeastLair: return "清理后：抑制尚未排程的兽潮，或延后现有威胁节点";
                 case MapSiteType.Ruin: return "调查后：功法理解+5";

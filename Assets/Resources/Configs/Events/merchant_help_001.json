@@ -5,13 +5,13 @@
 
     "needDays":1,
 
-    "goldReward":200,
+
 
     "expReward":50,
 
 
     "itemRewards":
-    [
+    [{"itemId":"LingShi_001","count":200}
     ],
 
 
@@ -42,8 +42,8 @@
                     "effects":
                     [
                         {
-                            "type":"AddGold",
-                            "value":200
+                            "type":"AddItem",
+                            "itemId":"LingShi_001","count":200
                         }
                     ]
                 },

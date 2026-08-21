@@ -159,7 +159,11 @@ public class WorldMapRegionTests
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 6104 });
         var progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
-        int target = map.cells.First(cell => cell.landform != LandformType.DeepWater).index;
+        MapSiteData targetSite = progress.mapSites.First(site =>
+            map.cells[site.cellIndex].landform != LandformType.DeepWater);
+        targetSite.revealState = MapContentRevealState.Hinted;
+        WorldMapContentRules.SynchronizeLegacyFlags(targetSite);
+        int target = targetSite.cellIndex;
         var context = new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = target };
         Reward before = WorldMapContentRules.CreateReward(map, context);
         Assert.IsTrue(WorldMapContentRules.CompleteSuccessfulAction(map, progress, context,
@@ -260,10 +264,10 @@ public class WorldMapRegionTests
     }
 
     [Test]
-    public void FarPresentation_HidesHintsButRetainsConfirmedStrategicMarkers()
+    public void FarPresentation_KeepsContentCluesButHidesEnvironmentHints()
     {
         Assert.IsFalse(WorldMapRegionPresentationPolicy.ShowOrdinaryHint(WorldMapZoomLevel.Far));
-        Assert.IsFalse(WorldMapRegionPresentationPolicy.ShowMarker(WorldMapMarkerKind.ContentHint,
+        Assert.IsTrue(WorldMapRegionPresentationPolicy.ShowMarker(WorldMapMarkerKind.ContentHint,
             WorldMapZoomLevel.Far));
         Assert.IsFalse(WorldMapRegionPresentationPolicy.ShowMarker(WorldMapMarkerKind.EnvironmentBeastTracks,
             WorldMapZoomLevel.Far));

@@ -9,13 +9,12 @@ public enum EventConditionType
     MinimumRealm,
     HealthIs,
     HasRelationship,
-    MinimumGold,
+    MinimumItem,
     LivingCharacterCount
 }
 
 public enum EventEffectType
 {
-    AddGold,
     AddReputation,
     AddCultivation,
     AddExperience,

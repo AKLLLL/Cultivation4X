@@ -34,7 +34,7 @@ public class FacilityLoopTests
     {
         PlayerData player = new PlayerData();
         WarehouseData warehouse = new WarehouseData();
-        Assert.AreEqual(100, player.gold);
+        Assert.AreEqual(100, warehouse.items.Single(item => item.itemId == FacilityRules.SpiritStoneId).count);
         Assert.AreEqual(5, warehouse.items.Single(item => item.itemId == FacilityRules.BasicMaterialId).count);
         Assert.AreEqual(1, player.warehouseLevel);
         Assert.AreEqual(1, player.secretRealmLevel);
@@ -74,9 +74,9 @@ public class FacilityLoopTests
         PlayerManager.Instance = player;
         WarehouseManager.Instance = warehouse;
         FacilityUpgradeResult result = player.TryUpgradeFacility(FacilityType.Warehouse);
-        Assert.IsTrue(result.success, $"{result.reason}; gold={player.playerData.gold}; material={warehouse.GetItemCount(FacilityRules.BasicMaterialId)}; level={player.playerData.warehouseLevel}");
+        Assert.IsTrue(result.success, $"{result.reason}; spiritStones={warehouse.GetItemCount(FacilityRules.SpiritStoneId)}; material={warehouse.GetItemCount(FacilityRules.BasicMaterialId)}; level={player.playerData.warehouseLevel}");
         Assert.AreEqual(2, player.playerData.warehouseLevel);
-        Assert.AreEqual(0, player.playerData.gold);
+        Assert.AreEqual(0, warehouse.GetItemCount(FacilityRules.SpiritStoneId));
         Assert.AreEqual(0, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
         FacilityUpgradeResult failed = player.TryUpgradeFacility(FacilityType.Warehouse);
         Assert.IsFalse(failed.success);
@@ -129,10 +129,9 @@ public class FacilityLoopTests
     [Test]
     public void V1Save_MigratesAdditiveFacilityDefaults()
     {
-        GameState state = JsonConvert.DeserializeObject<GameState>("{\"version\":1,\"sect\":{\"gold\":7,\"missionHallLevel\":1},\"warehouse\":{\"items\":[]}}");
+        GameState state = JsonConvert.DeserializeObject<GameState>("{\"version\":1,\"sect\":{\"missionHallLevel\":1},\"warehouse\":{\"items\":[]}}");
         SaveManager.MigrateState(state);
         Assert.AreEqual(SaveDataVersion.Current, state.version);
-        Assert.AreEqual(7, state.sect.gold);
         Assert.AreEqual(1, state.sect.warehouseLevel);
         Assert.AreEqual(1, state.sect.secretRealmLevel);
         Assert.IsNotNull(state.dailyMissionCandidateIds);
@@ -143,6 +142,7 @@ public class FacilityLoopTests
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
+        player.playerData.founding.sectCreated = true;
         player.playerData.founding.completed = true;
         player.playerData.founding.stage = FoundingStage.Completed;
         MissionManager manager = Add<MissionManager>("Missions");
@@ -169,6 +169,7 @@ public class FacilityLoopTests
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
+        player.playerData.founding.sectCreated = true;
         player.playerData.founding.completed = true;
         player.playerData.founding.stage = FoundingStage.Completed;
         Add<WarehouseManager>("Warehouse");

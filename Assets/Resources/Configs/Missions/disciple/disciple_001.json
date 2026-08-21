@@ -11,13 +11,13 @@
     "needDays":3,
 
 
-    "goldReward":50,
+
 
     "expReward":30,
 
 
     "itemRewards":
-    [
+    [{"itemId":"LingShi_001","count":50}
     ],
 
 

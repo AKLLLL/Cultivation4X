@@ -12,11 +12,6 @@ public class PlayerData
     public int foundedDay;
     public int influenceRadius;
 
-    /// <summary>
-    /// 玩家金币
-    /// </summary>
-    public int gold = 100;
-
     public int reputation = 0;
     public int trainingRoomLevel = 1;
     public int missionHallLevel = 1;
@@ -28,5 +23,5 @@ public class PlayerData
     public int inheritanceChamberLevel = 1;
     public int forgeRoomLevel = 1;
     public int formationPlatformLevel = 1;
-    public FoundingState founding = new FoundingState { initialized = true, completed = true, stage = FoundingStage.Completed };
+    public FoundingState founding = new FoundingState { initialized = true, sectCreated = true, completed = true, stage = FoundingStage.Completed };
 }

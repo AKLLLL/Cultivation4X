@@ -271,7 +271,7 @@ namespace Cultivation4X.WorldMap
             foreach (WorldMapPresentationMarker marker in presentationMarkers)
             {
                 if (marker.cellIndex < 0 || marker.cellIndex >= map.cells.Length ||
-                    !CanShowGameplayCell(marker.cellIndex) ||
+                    (marker.kind != WorldMapMarkerKind.ContentHint && !CanShowGameplayCell(marker.cellIndex)) ||
                     !WorldMapRegionPresentationPolicy.ShowMarker(marker.kind, lastZoomLevel) ||
                     !WorldMapPresentationPolicy.MarkerVisible(marker, viewMode, lastDensityTier, map.effectiveSeed))
                     continue;

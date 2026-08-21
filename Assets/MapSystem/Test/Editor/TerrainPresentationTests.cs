@@ -42,9 +42,12 @@ public class TerrainPresentationTests
             Cell(1, LandformType.Hill),
             Cell(2, LandformType.Mountain));
         WorldMapProgressState progress = new WorldMapProgressState();
-        progress.mapSites.Add(new MapSiteData { siteId = "village", cellIndex = 0, siteType = MapSiteType.Village });
-        progress.mapSites.Add(new MapSiteData { siteId = "cave", cellIndex = 1, siteType = MapSiteType.CaveResidence });
-        progress.mapSites.Add(new MapSiteData { siteId = "mine", cellIndex = 2, siteType = MapSiteType.SpiritMine });
+        progress.mapSites.Add(new MapSiteData { siteId = "village", cellIndex = 0, siteType = MapSiteType.Village,
+            revealState = MapContentRevealState.Discovered });
+        progress.mapSites.Add(new MapSiteData { siteId = "cave", cellIndex = 1, siteType = MapSiteType.CaveResidence,
+            revealState = MapContentRevealState.Discovered });
+        progress.mapSites.Add(new MapSiteData { siteId = "mine", cellIndex = 2, siteType = MapSiteType.SpiritMine,
+            revealState = MapContentRevealState.Discovered });
         progress.mapSites.Add(new MapSiteData { siteId = "invalid", cellIndex = -1, siteType = MapSiteType.Ruin });
 
         GameObject root = new GameObject("MapIconRendererTest");
@@ -62,6 +65,46 @@ public class TerrainPresentationTests
             renderer.Clear();
             Assert.AreEqual(0, renderer.IconCount);
             Assert.AreEqual(0, root.transform.childCount);
+        }
+        finally
+        {
+            renderer.Clear();
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
+    public void MapIconRenderer_FarViewKeepsHintButHidesDiscoveredLocation()
+    {
+        WorldMap map = BuildMap(
+            Cell(0, LandformType.Plain),
+            Cell(1, LandformType.Hill));
+        WorldMapProgressState progress = new WorldMapProgressState();
+        progress.mapSites.Add(new MapSiteData
+        {
+            siteId = "known", cellIndex = 0, siteType = MapSiteType.Village,
+            revealState = MapContentRevealState.Discovered
+        });
+        progress.mapSites.Add(new MapSiteData
+        {
+            siteId = "hint", cellIndex = 1, siteType = MapSiteType.Ruin,
+            revealState = MapContentRevealState.Hinted
+        });
+
+        GameObject root = new GameObject("MapIconFarHintTest");
+        MapIconRenderer renderer = root.AddComponent<MapIconRenderer>();
+        try
+        {
+            renderer.Render(map, progress);
+            GameObject known = root.transform.Cast<Transform>()
+                .Single(child => child.name.StartsWith("SiteIcon_")).gameObject;
+            GameObject hint = root.transform.Cast<Transform>()
+                .Single(child => child.name.StartsWith("SiteHint_")).gameObject;
+
+            renderer.SetFarViewVisible(true);
+
+            Assert.IsFalse(known.activeSelf, "远景仍应隐藏普通地点图标");
+            Assert.IsTrue(hint.activeSelf, "远景必须保留匿名问号线索");
         }
         finally
         {
@@ -817,7 +860,8 @@ public class TerrainPresentationTests
     {
         WorldMap map = BuildMap(Cell(0, LandformType.Plain));
         WorldMapProgressState progress = new WorldMapProgressState();
-        progress.mapSites.Add(new MapSiteData { siteId = "village", cellIndex = 0, siteType = MapSiteType.Village });
+        progress.mapSites.Add(new MapSiteData { siteId = "village", cellIndex = 0, siteType = MapSiteType.Village,
+            revealState = MapContentRevealState.Discovered });
         GameObject root = new GameObject("MapIconModeSwitchTest");
         MapIconRenderer renderer = root.AddComponent<MapIconRenderer>();
         try

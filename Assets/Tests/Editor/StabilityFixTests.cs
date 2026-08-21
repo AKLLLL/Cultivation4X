@@ -112,7 +112,7 @@ public class StabilityFixTests
                             requirementType = "None",
                             effects = new List<MissionEffectData>
                             {
-                                new MissionEffectData { type = "AddGold", value = 50 },
+                                new MissionEffectData { type = "AddItem", itemId = FacilityRules.SpiritStoneId, count = 50 },
                                 new MissionEffectData { type = "RemoveItem", itemId = missingItem, count = 1 }
                             }
                         }
@@ -129,7 +129,7 @@ public class StabilityFixTests
         mission.SelectOption(0);
 
         Assert.AreEqual(MissionState.WaitingNode, mission.State, "预检失败后任务必须停留在 WaitingNode");
-        Assert.AreEqual(0, mission.Reward.Gold, "RemoveItem 预检失败时前面的 AddGold 不得生效");
+        Assert.AreEqual(100, warehouse.GetItemCount(FacilityRules.SpiritStoneId), "RemoveItem 预检失败时前面的 AddItem 不得生效");
         Assert.IsNotNull(mission.NodeFailureReason);
         StringAssert.Contains("材料不足", mission.NodeFailureReason);
         Assert.AreEqual(0, warehouse.GetItemCount(missingItem));
@@ -138,7 +138,7 @@ public class StabilityFixTests
         mission.SelectOption(0);
 
         Assert.AreEqual(MissionState.Active, mission.State, "补齐材料后同一节点必须可以再次选择");
-        Assert.AreEqual(50, mission.Reward.Gold);
+        Assert.AreEqual(150, warehouse.GetItemCount(FacilityRules.SpiritStoneId));
         Assert.IsNull(mission.NodeFailureReason);
         Assert.AreEqual(0, warehouse.GetItemCount(missingItem));
     }

@@ -13,6 +13,7 @@ public sealed class SectWorldInterface : MonoBehaviour
 
     private TMP_Text resourceText;
     private Button warehouseButton;
+    private Button resourceStatusButton;
     private RectTransform briefPanel;
     private RectTransform layoutPanel;
     private RectTransform taskPanel;
@@ -160,7 +161,7 @@ public sealed class SectWorldInterface : MonoBehaviour
         AddSectInfoRow("灵气",
             $"{WorldMapCellDetailsFormatter.AuraBand(cell.totalAura)} ({cell.totalAura:0.000})");
         AddSectInfoRow("弟子", LivingDiscipleCount().ToString());
-        AddSectInfoRow("灵材", sect.gold.ToString());
+        AddSectInfoRow("灵石", (WarehouseManager.Instance?.GetItemCount(FacilityRules.SpiritStoneId) ?? 0).ToString());
         AddSectInfoRow("基础材料", materials.ToString());
         AddSectInfoRow("声望", sect.reputation.ToString());
         AddSectInfoRow("影响范围", $"核心{core}　影响{influence}　外缘{outer}");
@@ -203,7 +204,7 @@ public sealed class SectWorldInterface : MonoBehaviour
 
         AddSectInfoText("可建设", 16);
         Button future = AddSectButton(
-            "药园（未开放）\n需要：基础材料 20　灵材 10", 52);
+            "药园（未开放）\n需要：基础材料 20　灵石 10", 52);
         future.interactable = false;
 
         Button upgrade = AddSectButton( "设施升级（仓库/修炼室/秘境/炼丹房）", 46);
@@ -219,8 +220,8 @@ public sealed class SectWorldInterface : MonoBehaviour
 
     private void ShowSectResources()
     {
-        AddSectInfoRow("灵材",
-            (PlayerManager.Instance?.playerData?.gold ?? 0).ToString());
+        AddSectInfoRow("灵石",
+            (WarehouseManager.Instance?.GetItemCount(FacilityRules.SpiritStoneId) ?? 0).ToString());
         AddSectInfoRow("基础材料",
             (WarehouseManager.Instance == null
                 ? 0 : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId)).ToString());
@@ -471,6 +472,10 @@ public sealed class SectWorldInterface : MonoBehaviour
         resourceText.fontSizeMin = 9f;
         resourceText.fontSizeMax = 13f;
         resourceText.overflowMode = TextOverflowModes.Ellipsis;
+        resourceStatusButton = RuntimeUIFactory.Button(bar.transform, "资源", 38);
+        resourceStatusButton.GetComponent<LayoutElement>().preferredWidth = 80f;
+        resourceStatusButton.GetComponent<LayoutElement>().flexibleWidth = 0f;
+        resourceStatusButton.onClick.AddListener(() => FindRuntime<ResourceStatusPanel>()?.OpenFromSectLayout());
         warehouseButton = RuntimeUIFactory.Button(bar.transform, "库藏详情", 38);
         warehouseButton.GetComponent<LayoutElement>().preferredWidth = 110f;
         warehouseButton.GetComponent<LayoutElement>().flexibleWidth = 0f;
@@ -494,7 +499,7 @@ public sealed class SectWorldInterface : MonoBehaviour
         WorldMapProgressState progress = WorldMapSession.Progress;
         if (established) WorldMapInfluenceRules.EnsureCurrent(WorldMapSession.Current, progress);
         int influence = established ? progress.cellInfluences.Count : 0;
-        string value = $"灵材 {sect?.gold ?? 0} 基础材料 {materials} 弟子 {LivingDiscipleCount()} " +
+        string value = $"灵石 {WarehouseManager.Instance?.GetItemCount(FacilityRules.SpiritStoneId) ?? 0} 基础材料 {materials} 弟子 {LivingDiscipleCount()} " +
                        $"声望 {sect?.reputation ?? 0} 影响 {influence}格 第 {day}天";
         if (value != lastResourceText && resourceText != null)
         {
@@ -502,6 +507,7 @@ public sealed class SectWorldInterface : MonoBehaviour
             lastResourceText = value;
         }
         if (warehouseButton != null) warehouseButton.interactable = established;
+        if (resourceStatusButton != null) resourceStatusButton.interactable = established;
     }
 
     private void OpenNpcDetail(NPCRuntime npc)

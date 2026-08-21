@@ -1,6 +1,7 @@
 using UnityEngine;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 
 /// <summary>
@@ -61,7 +62,7 @@ public class WarehouseManager : MonoBehaviour
     {
         NormalizeItems();
         if (string.IsNullOrWhiteSpace(itemId) || count <= 0) return false;
-        if (warehouseData.items.Exists(item => item.itemId == itemId)) return true;
+        if (warehouseData.items.Exists(item => item.itemId == itemId) || IsCapacityExemptItem(itemId)) return true;
         return GetUsedSlotCount() < GetCapacity();
     }
 
@@ -73,7 +74,7 @@ public class WarehouseManager : MonoBehaviour
         foreach (ItemReward reward in rewards ?? new ItemReward[0])
         {
             if (reward == null || reward.count <= 0) continue;
-            if (!warehouseData.items.Exists(item => item.itemId == reward.itemId)) newIds.Add(reward.itemId);
+            if (!warehouseData.items.Exists(item => item.itemId == reward.itemId) && !IsCapacityExemptItem(reward.itemId)) newIds.Add(reward.itemId);
         }
         return newIds.Count <= freeSlots;
     }
@@ -127,6 +128,7 @@ public class WarehouseManager : MonoBehaviour
             $"仓库获得 {itemId} x {count}"
         );
         OnInventoryChanged?.Invoke();
+        TimeManager.Instance?.RecordPreAdvanceItemChange(itemId, count);
         return true;
     }
 
@@ -173,6 +175,7 @@ public class WarehouseManager : MonoBehaviour
         );
 
         OnInventoryChanged?.Invoke();
+        TimeManager.Instance?.RecordPreAdvanceItemChange(itemId, -count);
 
 
         return true;
@@ -188,6 +191,9 @@ public class WarehouseManager : MonoBehaviour
         return total;
     }
 
+    public bool HasItem(string itemId, int count = 1) =>
+        count >= 0 && GetItemCount(itemId) >= count;
+
     /// <summary>仓库固定容量：至少 10，仓库建筑等级再提供额外槽位。</summary>
     public int GetCapacity()
     {
@@ -201,7 +207,7 @@ public class WarehouseManager : MonoBehaviour
     public int GetUsedSlotCount()
     {
         NormalizeItems();
-        return warehouseData.items.Count;
+        return warehouseData.items.Count(item => item != null && !IsCapacityExemptItem(item.itemId));
     }
 
     /// <summary>剩余可容纳的新物品种类槽位数。</summary>
@@ -232,6 +238,14 @@ public class WarehouseManager : MonoBehaviour
                 merged[item.itemId] = item;
             }
         }
+    }
+
+
+    public static bool IsCapacityExemptItem(string itemId)
+    {
+        if (itemId == FacilityRules.SpiritStoneId) return true;
+        ItemData definition = ItemDatabase.Instance?.GetItem(itemId);
+        return definition?.tags != null && definition.tags.Contains("warehouse_capacity_exempt");
     }
 
 }

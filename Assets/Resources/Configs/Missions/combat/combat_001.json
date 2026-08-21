@@ -6,11 +6,11 @@
     "missionType":"Combat",
     "needDays": 4,
 
-    "goldReward": 120,
+
     "expReward": 80,
 
     "itemRewards":
-    [
+    [{"itemId":"LingShi_001","count":120},
     {
      "itemId":"weapon_001",
      "count":5
@@ -22,7 +22,7 @@
      "requiredCombatPower":70,
      "preferredTechniqueTags":["combat","body"],
      "preferredTraitIds":["reckless","loyal"],
-    
+
     "nodes":
     [
         {
@@ -41,8 +41,8 @@
             "effects":
             [
                 {
-                    "type":"Reward",
-                    "value":30
+                    "type":"AddItem",
+                    "itemId":"LingShi_001","count":30
                 }
             ]
                 },

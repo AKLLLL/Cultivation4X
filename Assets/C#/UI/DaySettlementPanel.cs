@@ -104,7 +104,7 @@ public class DaySettlementPanel : MonoBehaviour
             $"任务结果 {missionCount} 项　新事件 {eventCount} 项\n弟子变化 {characterCount} 人　设施升级 {facilityCount} 项",
             18, 64);
         RuntimeUIFactory.Text(content,
-            $"灵材 {Signed(summary.goldChange)}　声望 {Signed(summary.reputationChange)}　基础材料 {Signed(summary.basicMaterialChange)}",
+            $"{FormatItemChanges(summary)}　声望 {Signed(summary.reputationChange)}",
             18, 42);
     }
 
@@ -148,8 +148,16 @@ public class DaySettlementPanel : MonoBehaviour
     {
         RuntimeUIFactory.Text(content, "资源变化", 22, 38);
         RuntimeUIFactory.Text(content,
-            $"灵材 {Signed(summary.goldChange)}　声望 {Signed(summary.reputationChange)}　基础材料 {Signed(summary.basicMaterialChange)}",
+            $"{FormatItemChanges(summary)}　声望 {Signed(summary.reputationChange)}",
             18, 42);
+        if (summary.resourceProduction != null && summary.resourceProduction.Count > 0)
+        {
+            RuntimeUIFactory.Text(content, "月度产出", 22, 38);
+            foreach (ResourceProductionRecord item in summary.resourceProduction)
+                RuntimeUIFactory.Text(content,
+                    $"{item.siteName}：{ItemName(item.itemId)} 应产 {item.calculated}，入库 {item.received}" +
+                    (item.lost > 0 ? $"，损失 {item.lost}" : string.Empty), 18, 42);
+        }
         RuntimeUIFactory.Text(content, "设施升级", 22, 38);
         if (summary.facilityUpgrades == null || summary.facilityUpgrades.Count == 0)
             RuntimeUIFactory.Text(content, "今日没有设施升级。", 18, 38);
@@ -207,6 +215,18 @@ public class DaySettlementPanel : MonoBehaviour
     }
 
     private static string Signed(int value) => value >= 0 ? "+" + value : value.ToString();
+    private static string FormatItemChanges(DaySettlementSummary summary)
+    {
+        if (summary?.itemChanges == null || summary.itemChanges.Count == 0) return "物品无变化";
+        return string.Join("　", summary.itemChanges.ConvertAll(item =>
+            $"{ItemName(item.itemId)} {Signed(item.countChange)}"));
+    }
+
+    private static string ItemName(string itemId)
+    {
+        ItemData item = ItemDatabase.Instance?.GetItem(itemId);
+        return item == null || string.IsNullOrWhiteSpace(item.itemName) ? itemId : item.itemName;
+    }
     private static string StateName(MissionState state) => state == MissionState.Completed ? "完成" : state == MissionState.Failed ? "失败" : "待领奖";
     private static string HealthName(HealthState state)
     {

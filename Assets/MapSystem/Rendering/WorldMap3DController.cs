@@ -54,6 +54,7 @@ namespace Cultivation4X.WorldMap
                 hud.OnConfirmSite = ConfirmSite;
                 hud.LocationActionRequested += HandleLocationAction;
                 hud.LocationMissionsRequested += OpenLocationMissions;
+                hud.CellInteractionRequested += HandleCellInteraction;
             }
             if (interaction != null) interaction.CellPicked += HandleCellPicked;
         }
@@ -160,9 +161,26 @@ namespace Cultivation4X.WorldMap
                 case LocationActionType.ManageSect:
                     SectWorldInterface.Instance?.OpenSectLayout();
                     break;
+                case LocationActionType.DevelopResourceNode:
+                    OpenSelectedAction(MapActionType.DevelopResourceNode);
+                    break;
                 default:
                     GameDebugConfig.LogWorldMap($"[WorldLocation] action requested " +
                           $"location={location?.name} action={action?.displayName}");
+                    break;
+            }
+        }
+
+        private void HandleCellInteraction(CellInteractionOption option)
+        {
+            if (option == null) return;
+            switch (option.optionType)
+            {
+                case CellInteractionOptionType.Explore:
+                    OpenSelectedAction(MapActionType.Explore);
+                    break;
+                default:
+                    GameDebugConfig.LogWorldMap($"[CellInteraction] 未支持的格子交互: {option.id}");
                     break;
             }
         }
@@ -474,6 +492,7 @@ namespace Cultivation4X.WorldMap
             {
                 hud.LocationActionRequested -= HandleLocationAction;
                 hud.LocationMissionsRequested -= OpenLocationMissions;
+                hud.CellInteractionRequested -= HandleCellInteraction;
             }
             if (PlayerManager.Instance != null)
                 PlayerManager.Instance.OnFoundingChanged -= HandleGameplayChanged;

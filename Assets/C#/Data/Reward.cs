@@ -14,11 +14,6 @@ using System.Collections.Generic;
 public class Reward
 {
     /// <summary>
-    /// 金币奖励
-    /// </summary>
-    public int Gold;
-
-    /// <summary>
     /// NPC经验奖励
     /// </summary>
     public int Exp;

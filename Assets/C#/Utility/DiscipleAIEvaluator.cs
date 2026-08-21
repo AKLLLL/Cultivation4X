@@ -113,7 +113,8 @@ public static class DiscipleAIEvaluator
     public static List<ActionScoreResult> EvaluateActions(NPCRuntime npc,
         IdentityDefinition identity,
         IReadOnlyList<GoalInstance> goals,
-        IReadOnlyList<ActionDefinition> actions)
+        IReadOnlyList<ActionDefinition> actions,
+        int currentDay = -1)
     {
         List<ActionScoreResult> results = new List<ActionScoreResult>();
         if (npc == null || actions == null) return results;
@@ -122,7 +123,7 @@ public static class DiscipleAIEvaluator
         {
             if (action == null) continue;
             ActionScoreResult result = new ActionScoreResult { Action = action };
-            string filterReason = FilterReason(npc, identity, action);
+            string filterReason = FilterReason(npc, identity, action, currentDay);
             if (!string.IsNullOrEmpty(filterReason))
             {
                 result.FilterReason = filterReason;
@@ -272,6 +273,13 @@ public static class DiscipleAIEvaluator
 
     private static float ResolveEnvironment(ScoreTerm term, out string reasonLabel)
     {
+        if (term.key.StartsWith("WarehouseTagScarcity.", StringComparison.Ordinal))
+        {
+            reasonLabel = "资源匮乏";
+            string tag = term.key.Substring("WarehouseTagScarcity.".Length);
+            float threshold = term.threshold > 0f ? term.threshold : 5f;
+            return ResourceStatusService.Scarcity(tag, threshold);
+        }
         if (term.key.StartsWith("WarehouseScarcity.", StringComparison.Ordinal))
         {
             reasonLabel = "资源匮乏";
@@ -295,16 +303,30 @@ public static class DiscipleAIEvaluator
         return 0f;
     }
 
-    private static string FilterReason(NPCRuntime npc, IdentityDefinition identity, ActionDefinition action)
+    private static string FilterReason(NPCRuntime npc, IdentityDefinition identity,
+        ActionDefinition action, int currentDay)
     {
         if (npc == null || !npc.CanDispatch()) return "弟子当前无法自主行动";
         if (identity == null || action.identityIds == null || !action.identityIds.Contains(identity.id))
             return "身份不符";
+        int day = currentDay >= 0
+            ? currentDay
+            : TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+        if (DiscipleMentalStateRules.IsAutonomyCoolingDown(npc, day))
+            return "自由修炼后冷却中";
+        if (DiscipleMentalStateRules.IsCultivationAction(action) &&
+            npc.MentalState < DiscipleMentalStateRules.MaxMentalState)
+            return "心境未满";
+        if (action.minIntervalDays > 0)
+        {
+            int lastEndDay = DiscipleMissionBridge.GetMostRecentMissionEndDay(npc, action.missionId);
+            if (lastEndDay >= 0 && day <= lastEndDay + action.minIntervalDays) return "冷却中";
+        }
         if (MissionManager.Instance == null) return "任务系统未初始化";
         MissionData data = MissionManager.Instance.GetMissionData(action.missionId);
         if (data == null) return "任务模板不存在";
         if (data.nodes != null && data.nodes.Count > 0) return "任务包含节点";
-        if (data.goldCost != 0 || (data.itemCosts != null && data.itemCosts.Count > 0)) return "需要消耗资源";
+        if (data.itemCosts != null && data.itemCosts.Count > 0) return "需要消耗资源";
         if (data.missionType == MissionType.WorldEvent || data.generatedByMap || data.isStoryAction)
             return "不属于自主任务";
 

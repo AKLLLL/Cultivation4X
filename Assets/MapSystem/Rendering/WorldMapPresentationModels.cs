@@ -217,8 +217,10 @@ namespace Cultivation4X.WorldMap
             {
                 result.Add(new WorldMapPresentationMarker
                 {
-                    id = site.siteId,
-                    label = site.revealState == MapContentRevealState.Hinted ? "可疑线索" : site.siteName,
+                    id = site.revealState == MapContentRevealState.Hinted
+                        ? "content_hint_" + site.cellIndex
+                        : site.siteId,
+                    label = site.revealState == MapContentRevealState.Hinted ? "未知线索" : site.siteName,
                     kind = site.revealState == MapContentRevealState.Hinted
                         ? WorldMapMarkerKind.ContentHint : ContentMarkerKind(site.siteType),
                     cellIndex = site.cellIndex
@@ -280,6 +282,7 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Village: return WorldMapMarkerKind.Village;
                 case MapSiteType.SpiritSpring: return WorldMapMarkerKind.SpiritSpring;
                 case MapSiteType.SpiritMine: return WorldMapMarkerKind.SpiritMine;
+                case MapSiteType.ResourceNode: return WorldMapMarkerKind.PointOfInterest;
                 case MapSiteType.CaveResidence: return WorldMapMarkerKind.CaveResidence;
                 case MapSiteType.BeastLair: return WorldMapMarkerKind.BeastLair;
                 case MapSiteType.Ruin: return WorldMapMarkerKind.Ruin;
@@ -402,6 +405,7 @@ namespace Cultivation4X.WorldMap
                     action == WorldMapContentRules.DevelopActionId ? "开发灵泉" :
                     action == WorldMapContentRules.EstablishVillageRelationActionId ? "建立村庄关系" :
                     action == WorldMapContentRules.DevelopSpiritMineActionId ? "开发灵矿" :
+                    action == WorldMapContentRules.DevelopResourceNodeActionId ? "开发资源节点" :
                     action == WorldMapContentRules.BuildCaveResidenceOutpostActionId ? "建立洞府据点规则" :
                     action == WorldMapContentRules.ClearBeastLairActionId ? "清理兽巢" :
                     action == WorldMapContentRules.InvestigateRuinActionId ? "调查遗迹" : action));

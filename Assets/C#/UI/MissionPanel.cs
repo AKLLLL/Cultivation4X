@@ -229,6 +229,7 @@ public class MissionPanel : MonoBehaviour
             context.actionType == MapActionType.DevelopSpiritSpring ? "开发灵泉" :
             context.actionType == MapActionType.EstablishVillageRelation ? "建立村庄关系" :
             context.actionType == MapActionType.DevelopSpiritMine ? "开发灵矿" :
+            context.actionType == MapActionType.DevelopResourceNode ? "开发资源节点" :
             context.actionType == MapActionType.BuildCaveResidenceOutpost ? "建立洞府据点规则" :
             context.actionType == MapActionType.ClearBeastLair ? "清理兽巢" :
             context.actionType == MapActionType.InvestigateRuin ? "调查遗迹" : "地图行动";
@@ -387,7 +388,6 @@ public class MissionPanel : MonoBehaviour
     private static string FormatMissionCosts(MissionData data)
     {
         List<string> costs = new List<string>();
-        if (data.goldCost > 0) costs.Add($"{data.goldCost}灵材");
         foreach (IGrouping<string, ItemReward> group in (data.itemCosts ?? new List<ItemReward>())
                      .Where(item => item != null && item.count > 0 && !string.IsNullOrWhiteSpace(item.itemId))
                      .GroupBy(item => item.itemId))
@@ -402,7 +402,6 @@ public class MissionPanel : MonoBehaviour
     private static string FormatMissionOutputs(MissionData data)
     {
         List<string> outputs = new List<string>();
-        if (data.goldReward > 0) outputs.Add($"{data.goldReward}灵材");
         if (data.expReward > 0) outputs.Add($"{data.expReward}修为");
         foreach (IGrouping<string, ItemReward> group in (data.itemRewards ?? new List<ItemReward>())
                      .Where(item => item != null && item.count > 0 && !string.IsNullOrWhiteSpace(item.itemId))
@@ -430,9 +429,8 @@ public class MissionPanel : MonoBehaviour
             VillageState village = PlayerManager.Instance.playerData.founding.village;
             if (village == null || village.totalLabor - village.reservedLabor < data.laborCost) return "可用劳动力不足";
         }
-        if (PlayerManager.Instance.playerData.gold < data.goldCost) return "灵材不足";
         foreach (ItemReward cost in data.itemCosts ?? new List<ItemReward>())
-            if (WarehouseManager.Instance.GetItemCount(cost.itemId) < cost.count) return "材料不足";
+            if (WarehouseManager.Instance.GetItemCount(cost.itemId) < cost.count) return "资源不足";
         if (data.isFacilityAction && MissionManager.Instance.GetActiveMissions().Any(m => m.Data.isFacilityAction &&
             m.Data.requiredFacility == data.requiredFacility && (m.State == MissionState.Active || m.State == MissionState.WaitingNode))) return "设施忙碌";
         return null;

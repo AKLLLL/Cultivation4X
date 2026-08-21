@@ -61,6 +61,10 @@ public class SectFoundingIntegrationTests
 
         Assert.IsTrue(player.ConfirmWorldSite(buildable, out string siteReason), siteReason);
         Assert.AreEqual(FoundingStage.Cave, player.playerData.founding.stage);
+        Assert.IsTrue(player.playerData.founding.sectCreated,
+            "选址完成即宗门成立，sectCreated 应立即为 true");
+        Assert.IsFalse(player.playerData.founding.completed,
+            "completed 只代表初创发展完成，选址时不得提前置真");
         Assert.AreEqual("青云宗", player.playerData.sectName);
         Assert.AreEqual(2, player.playerData.influenceRadius);
         MapSiteData sectBase = WorldMapProgressRules.GetSectBase(WorldMapSession.Progress);

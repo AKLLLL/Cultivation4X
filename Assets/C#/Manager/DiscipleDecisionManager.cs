@@ -145,7 +145,8 @@ public class DiscipleDecisionManager : MonoBehaviour
             if (ExperienceGenerator.HasDecisionRecordOn(npc, day)) continue; // 读档/重复结算幂等
 
             context.Goals = DiscipleAIEvaluator.GenerateGoals(npc, config.Goals, context.Goals);
-            context.LastScores = DiscipleAIEvaluator.EvaluateActions(npc, identity, context.Goals, config.Actions);
+            context.LastScores = DiscipleAIEvaluator.EvaluateActions(
+                npc, identity, context.Goals, config.Actions, day);
             DiscipleDecisionResult decision = DiscipleAIEvaluator.ChooseAction(context.LastScores);
             DiscipleAIDebug.LogDecision(npc, decision);
 
@@ -190,7 +191,7 @@ public class DiscipleDecisionManager : MonoBehaviour
     private bool IsAutonomyActive()
     {
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
-        return founding != null && founding.completed &&
+        return GameFlowPermission.IsSectEstablished(founding) &&
             NPCManager.Instance != null && MissionManager.Instance != null &&
             DiscipleAIConfigLoader.Load().Actions.Count > 0;
     }

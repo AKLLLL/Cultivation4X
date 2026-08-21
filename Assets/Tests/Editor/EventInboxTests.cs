@@ -99,7 +99,8 @@ public class EventInboxTests
             eventGeneratedDay = 8,
             eventGeneratedOrdinaryCount = 2,
             eventInbox = new List<EventInboxEntry> { new EventInboxEntry { entryId = "e1", eventId = "wounded_beast" } },
-            unreadDaySettlement = new DaySettlementSummary { day = 8, goldChange = 12 }
+            unreadDaySettlement = new DaySettlementSummary { day = 8, itemChanges = new List<ItemDayChange>
+                { new ItemDayChange { itemId = FacilityRules.SpiritStoneId, countChange = 12 } } }
         };
         GameState restored = JsonConvert.DeserializeObject<GameState>(JsonConvert.SerializeObject(source));
         Assert.AreEqual("e1", restored.activeEventEntryId);
@@ -107,7 +108,7 @@ public class EventInboxTests
         Assert.AreEqual(8, restored.eventGeneratedDay);
         Assert.AreEqual(2, restored.eventGeneratedOrdinaryCount);
         Assert.AreEqual("wounded_beast", restored.eventInbox[0].eventId);
-        Assert.AreEqual(12, restored.unreadDaySettlement.goldChange);
+        Assert.AreEqual(12, restored.unreadDaySettlement.itemChanges.Single().countChange);
     }
 
     [Test]

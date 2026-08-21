@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -317,6 +318,13 @@ public class DiscipleAITests
 
         Assert.IsTrue(manager.AddRelationship(npcs[0].CharacterId, npcs[1].CharacterId,
             RelationshipTag.Friend, "与乙结为好友，心境渐安", "与甲结为好友"));
+        RelationshipRecord sourceRelation = npcs[0].Character.relationships.Single(record =>
+            record.targetCharacterId == npcs[1].CharacterId && record.tag == RelationshipTag.Friend);
+        RelationshipRecord targetRelation = npcs[1].Character.relationships.Single(record =>
+            record.targetCharacterId == npcs[0].CharacterId && record.tag == RelationshipTag.Friend);
+        Assert.AreEqual(npcs[0].CharacterId, sourceRelation.sourceCharacterId);
+        Assert.AreEqual(npcs[1].CharacterId, targetRelation.sourceCharacterId);
+        Assert.AreEqual(sourceRelation.createdDay, targetRelation.createdDay);
         Assert.AreEqual(1, npcs[0].Character.lifeRecords.Count(record =>
             record.category == "Relationship" && record.text.Contains("心境渐安")));
         Assert.AreEqual(1, npcs[1].Character.lifeRecords.Count(record =>
@@ -324,6 +332,11 @@ public class DiscipleAITests
 
         int recordsBefore = npcs[0].Character.lifeRecords.Count + npcs[1].Character.lifeRecords.Count;
         Assert.IsFalse(manager.AddRelationship(npcs[0].CharacterId, npcs[1].CharacterId, RelationshipTag.Friend));
+        Assert.IsFalse(manager.AddRelationship(npcs[1].CharacterId, npcs[0].CharacterId, RelationshipTag.Friend));
+        Assert.AreEqual(1, npcs[0].Character.relationships.Count(record =>
+            record.targetCharacterId == npcs[1].CharacterId && record.tag == RelationshipTag.Friend));
+        Assert.AreEqual(1, npcs[1].Character.relationships.Count(record =>
+            record.targetCharacterId == npcs[0].CharacterId && record.tag == RelationshipTag.Friend));
         Assert.AreEqual(recordsBefore, npcs[0].Character.lifeRecords.Count + npcs[1].Character.lifeRecords.Count);
 
         Assert.IsTrue(manager.AddRelationship(npcs[0].CharacterId, npcs[2].CharacterId, RelationshipTag.MasterApprentice));
@@ -448,6 +461,204 @@ public class DiscipleAITests
         Assert.AreEqual("cultivate", record.sourceId);
         Assert.IsTrue(ExperienceGenerator.HasDecisionRecordOn(npc, 7));
         Assert.IsFalse(ExperienceGenerator.HasDecisionRecordOn(npc, 8));
+    }
+
+    // ---------------------------------------------------------------
+    // 冷却与曲线回归
+    // ---------------------------------------------------------------
+
+    [Test]
+    public void CultivationCooldown_BlocksAllAutonomyForThreeDaysThenMentalStateStillBlocksCultivation()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        Add<WarehouseManager>("Warehouse");
+        MissionManager missions = Add<MissionManager>("Missions");
+        MissionManager.Instance = missions;
+        missions.LoadMissionsFromJson();
+
+        NPCRuntime npc = CreateRuntime("t_cooldown", "测试弟子");
+        npc.Character.mentalState = 80;
+        npc.Character.AddLifeRecord(10, "Mission", "达标：自由修炼", "disciple_ai_cultivate_001");
+        IdentityDefinition identity = DiscipleAIConfigLoader.Load().GetIdentity("inner_disciple");
+        List<ActionDefinition> actions = DiscipleAIConfigLoader.Load().Actions;
+
+        Assert.AreEqual(10, DiscipleMissionBridge.GetMostRecentMissionEndDay(npc, "disciple_ai_cultivate_001"));
+        Assert.AreEqual(-1, DiscipleMissionBridge.GetMostRecentMissionEndDay(npc, "combat_001"),
+            "玩家任务履历不得触发自主冷却");
+
+        foreach (int day in new[] { 10, 11, 12, 13 })
+        {
+            List<ActionScoreResult> results =
+                DiscipleAIEvaluator.EvaluateActions(npc, identity, new List<GoalInstance>(), actions, day);
+            Assert.IsTrue(results.All(item => !item.Eligible));
+            Assert.IsTrue(results.All(item => item.FilterReason == "自由修炼后冷却中"),
+                $"第 {day} 天所有自主行为都应处于冷却中");
+            Assert.IsTrue(npc.CanDispatch(), "自主冷却不得阻止玩家派遣");
+        }
+
+        List<ActionScoreResult> resumed =
+            DiscipleAIEvaluator.EvaluateActions(npc, identity, new List<GoalInstance>(), actions, 14);
+        Assert.AreEqual("心境未满", resumed.First(item => item.Action.id == "cultivate").FilterReason);
+        Assert.IsTrue(resumed.First(item => item.Action.id == "rest").Eligible,
+            "D+4 应允许非修炼自主行为");
+        npc.Character.mentalState = 100;
+        resumed = DiscipleAIEvaluator.EvaluateActions(npc, identity, new List<GoalInstance>(), actions, 14);
+        Assert.IsTrue(resumed.First(item => item.Action.id == "cultivate").Eligible);
+    }
+
+    [Test]
+    public void MentalState_MissionOutcomesUseApprovedValuesAndClamp()
+    {
+        NPCRuntime npc = CreateRuntime("t_mental_results", "测试弟子");
+        MethodInfo record = typeof(MissionManager).GetMethod("RecordMissionOutcome",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        record.Invoke(null, new object[]
+        {
+            npc, new MissionData { id = DiscipleMentalStateRules.CultivationMissionId, name = "自由修炼" },
+            MissionResultTier.Qualified
+        });
+        Assert.AreEqual(80, npc.MentalState);
+        record.Invoke(null, new object[]
+        {
+            npc, new MissionData { id = DiscipleMentalStateRules.CultivationMissionId, name = "自由修炼" },
+            MissionResultTier.Insufficient
+        });
+        Assert.AreEqual(30, npc.MentalState);
+        record.Invoke(null, new object[]
+        {
+            npc, new MissionData { id = DiscipleMentalStateRules.RestMissionId, name = "静养" },
+            MissionResultTier.Qualified
+        });
+        Assert.AreEqual(35, npc.MentalState);
+        record.Invoke(null, new object[]
+        {
+            npc, new MissionData { id = DiscipleMentalStateRules.RestMissionId, name = "静养" },
+            MissionResultTier.Insufficient
+        });
+        Assert.AreEqual(30, npc.MentalState);
+
+        npc.Character.mentalState = 3;
+        DiscipleMentalStateRules.ApplyMissionResult(npc,
+            DiscipleMentalStateRules.CultivationMissionId, MissionResultTier.Insufficient);
+        Assert.AreEqual(0, npc.MentalState);
+        npc.Character.mentalState = 99;
+        DiscipleMentalStateRules.ApplyMissionResult(npc,
+            DiscipleMentalStateRules.RestMissionId, MissionResultTier.Excellent);
+        Assert.AreEqual(100, npc.MentalState);
+    }
+
+    [Test]
+    public void MentalState_NpcManagerDailyRecoveryAppliesWhileBusyButNotAfterDeath()
+    {
+        NPCManager manager = Add<NPCManager>("NPCs");
+        NPCRuntime npc = CreateRuntime("t_mental_daily", "测试弟子");
+        npc.Character.mentalState = 90;
+        npc.SetState(NPCState.Busy, 3);
+        var runtimes = (List<NPCRuntime>)typeof(NPCManager).GetField("runtimes",
+            BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
+        runtimes.Add(npc);
+
+        manager.OnDayPassed();
+        Assert.AreEqual(91, npc.MentalState);
+        npc.Character.health = HealthState.Dead;
+        manager.OnDayPassed();
+        Assert.AreEqual(91, npc.MentalState);
+    }
+
+    [Test]
+    public void Cooldown_ZeroIntervalActionsAreNotBlockedNextDay()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        Add<WarehouseManager>("Warehouse");
+        MissionManager missions = Add<MissionManager>("Missions");
+        MissionManager.Instance = missions;
+        missions.LoadMissionsFromJson();
+
+        NPCRuntime npc = CreateRuntime("t_no_cooldown", "测试弟子");
+        npc.Character.AddLifeRecord(10, "Mission", "达标：同门往来", "disciple_ai_social_001");
+        IdentityDefinition identity = DiscipleAIConfigLoader.Load().GetIdentity("inner_disciple");
+
+        List<ActionScoreResult> results = DiscipleAIEvaluator.EvaluateActions(
+            npc, identity, new List<GoalInstance>(),
+            DiscipleAIConfigLoader.Load().Actions, 11);
+
+        Assert.IsTrue(results.First(item => item.Action.id == "social").Eligible,
+            "minIntervalDays=0 不应增加额外冷却");
+    }
+
+    [Test]
+    public void TraitCurves_AbsentTraitAndGoalContributeZero()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        Add<WarehouseManager>("Warehouse");
+        MissionManager missions = Add<MissionManager>("Missions");
+        MissionManager.Instance = missions;
+        missions.LoadMissionsFromJson();
+
+        NPCRuntime npc = CreateRuntime("t_curve", "测试弟子");
+        IdentityDefinition identity = DiscipleAIConfigLoader.Load().GetIdentity("inner_disciple");
+        List<ActionDefinition> actions = DiscipleAIConfigLoader.Load().Actions;
+
+        List<ActionScoreResult> plain = DiscipleAIEvaluator.EvaluateActions(
+            npc, identity, new List<GoalInstance>(), actions, 1);
+        Assert.AreEqual(1f, plain.First(item => item.Action.id == "social").Score, 0.001f,
+            "没有善良/忠诚/改善关系 Goal 时，社交不应获得常量加分");
+
+        npc.Character.traitIds.Add("kind");
+        List<ActionScoreResult> kind = DiscipleAIEvaluator.EvaluateActions(
+            npc, identity, new List<GoalInstance>(), actions, 1);
+        Assert.AreEqual(3f, kind.First(item => item.Action.id == "social").Score, 0.001f,
+            "善良应贡献 +2");
+
+        List<GoalInstance> goals = new List<GoalInstance>
+        {
+            new GoalInstance
+            {
+                Definition = new GoalDefinition { id = "improve_relationship", displayName = "改善关系" },
+                Intensity = 4f
+            }
+        };
+        List<ActionScoreResult> withGoal = DiscipleAIEvaluator.EvaluateActions(
+            npc, identity, goals, actions, 1);
+        Assert.AreEqual(5.4f, withGoal.First(item => item.Action.id == "social").Score, 0.001f,
+            "改善关系强度 4/10 应贡献 6×0.4=2.4");
+    }
+
+    [Test]
+    public void TraitCurves_RecklessRaisesAndCautiousLowersExplore()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        PlayerManager.Instance = player;
+        Add<WarehouseManager>("Warehouse");
+        MissionManager missions = Add<MissionManager>("Missions");
+        MissionManager.Instance = missions;
+        missions.LoadMissionsFromJson();
+        IdentityDefinition identity = DiscipleAIConfigLoader.Load().GetIdentity("inner_disciple");
+        List<ActionDefinition> actions = DiscipleAIConfigLoader.Load().Actions;
+
+        NPCRuntime plainNpc = CreateRuntime("t_explore_plain", "普通弟子");
+        NPCRuntime recklessNpc = CreateRuntime("t_explore_reckless", "鲁莽弟子");
+        recklessNpc.Character.traitIds.Add("reckless");
+        NPCRuntime cautiousNpc = CreateRuntime("t_explore_cautious", "谨慎弟子");
+        cautiousNpc.Character.traitIds.Add("cautious");
+
+        float plain = DiscipleAIEvaluator.EvaluateActions(
+            plainNpc, identity, new List<GoalInstance>(), actions, 1)
+            .First(item => item.Action.id == "explore").Score;
+        float reckless = DiscipleAIEvaluator.EvaluateActions(
+            recklessNpc, identity, new List<GoalInstance>(), actions, 1)
+            .First(item => item.Action.id == "explore").Score;
+        float cautious = DiscipleAIEvaluator.EvaluateActions(
+            cautiousNpc, identity, new List<GoalInstance>(), actions, 1)
+            .First(item => item.Action.id == "explore").Score;
+
+        Assert.AreEqual(plain + 2f, reckless, 0.001f);
+        Assert.AreEqual(plain - 2f, cautious, 0.001f);
+        Assert.Less(cautious, plain);
     }
 
     // ---------------------------------------------------------------

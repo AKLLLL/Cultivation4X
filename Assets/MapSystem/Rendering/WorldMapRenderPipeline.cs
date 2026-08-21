@@ -106,6 +106,7 @@ namespace Cultivation4X.WorldMap
                 veinOverlayRenderer.Clear();
                 veinOverlayRenderer.SetVisible(false);
             }
+            RefreshDynamicLayers(map, progress, revealAll);
         }
 
         public void RefreshDynamicLayers(WorldMap map, WorldMapProgressState progress, bool revealAll)

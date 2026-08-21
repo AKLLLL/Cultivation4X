@@ -31,7 +31,8 @@ namespace Cultivation4X.WorldMap
         SpiritMine = 3,
         CaveResidence = 4,
         BeastLair = 5,
-        Ruin = 6
+        Ruin = 6,
+        ResourceNode = 7
     }
 
     public enum MapContentRevealState
@@ -58,7 +59,8 @@ namespace Cultivation4X.WorldMap
         DevelopSpiritMine = 5,
         BuildCaveResidenceOutpost = 6,
         ClearBeastLair = 7,
-        InvestigateRuin = 8
+        InvestigateRuin = 8,
+        DevelopResourceNode = 9
     }
 
     public enum WorldDangerLevel
@@ -94,12 +96,15 @@ namespace Cultivation4X.WorldMap
         public List<MapSiteData> mapSites = new List<MapSiteData>();
         public List<InfluenceSourceData> influenceSources = new List<InfluenceSourceData>();
         public List<CellInfluenceState> cellInfluences = new List<CellInfluenceState>();
+        public List<ResourceNodeRuntime> resourceNodes = new List<ResourceNodeRuntime>();
+        public List<SpiritualVeinRuntime> spiritualVeins = new List<SpiritualVeinRuntime>();
         public bool isInfluenceDirty;
     }
 
     public static class WorldMapProgressRules
     {
         public const string PlayerSectBaseId = "player_sect_base";
+        public const string PlayerSectOwnerId = "player_sect";
 
         public static bool RevealCell(WorldMap map, WorldMapProgressState progress, int cellIndex)
         {

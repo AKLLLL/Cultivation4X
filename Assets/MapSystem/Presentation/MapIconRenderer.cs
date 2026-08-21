@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace Cultivation4X.WorldMap
@@ -13,10 +12,11 @@ namespace Cultivation4X.WorldMap
     {
         private static Mesh quadMesh;
         private readonly List<GameObject> iconObjects = new List<GameObject>();
+        private readonly HashSet<GameObject> farViewPersistentIcons = new HashSet<GameObject>();
         private readonly List<Vector3> flatIconPositions = new List<Vector3>();
         [SerializeField] private TerrainRenderer terrainRenderer;
         // 默认 false 保持 TerrainTest 演示模式不变；正式游戏预制体设为 true，
-        // 图标只画在已知格上，Hidden 地点不画，Hinted 显示“可疑线索”。
+        // 真实图标只画在已知格上；Hidden 不画，Hinted 可越过遮罩显示匿名问号。
         [SerializeField] private bool respectKnowledgeMask;
         private bool hasMap;
         private bool politicalMapEnabled = true;
@@ -44,32 +44,28 @@ namespace Cultivation4X.WorldMap
                 : null;
             HashSet<int> visibleLocationCells = CollectVisibleLocationCells(
                 map, progress, knownCells, respectKnowledgeMask);
-            bool hasWorldVillage = map.locations != null &&
-                                   map.locations.Values.Any(location =>
-                                       location != null && location.type == LocationType.Village);
             foreach (MapSiteData site in progress.mapSites)
             {
                 if (site == null || site.cellIndex < 0 || site.cellIndex >= map.cells.Length) continue;
-                if (hasWorldVillage && site.siteType == MapSiteType.Village) continue;
                 bool isSectBase = site.siteType == MapSiteType.SectBase;
-                if (knownCells != null && !isSectBase && !knownCells.Contains(site.cellIndex)) continue;
-                if (respectKnowledgeMask && !isSectBase &&
-                    site.revealState == MapContentRevealState.Hidden) continue;
+                bool hinted = !isSectBase &&
+                              site.revealState == MapContentRevealState.Hinted;
+                if (knownCells != null && !isSectBase && !hinted && !knownCells.Contains(site.cellIndex)) continue;
+                if (!isSectBase && site.revealState == MapContentRevealState.Hidden) continue;
                 if (visibleLocationCells.Contains(site.cellIndex)) continue;
                 WorldCell cell = map.cells[site.cellIndex];
                 if (cell == null) continue;
 
-                bool hinted = respectKnowledgeMask && !isSectBase &&
-                              site.revealState == MapContentRevealState.Hinted;
                 Vector2 center = HexGeometry.GetCenter(cell);
                 float top = MapPresentationLayer.GetIconHeight(map, cell);
-                GameObject root = new GameObject(hinted ? "SiteHint_" + site.siteType : "SiteIcon_" + site.siteType);
+                GameObject root = new GameObject(hinted ? "SiteHint_" + site.cellIndex : "SiteIcon_" + site.siteType);
                 root.transform.SetParent(transform, false);
                 Vector3 flatPosition = transform.TransformPoint(new Vector3(center.x, top, center.y));
                 root.transform.position = terrainRenderer != null
                     ? terrainRenderer.CurveWorldPosition(flatPosition)
                     : flatPosition;
                 iconObjects.Add(root);
+                if (hinted) farViewPersistentIcons.Add(root);
                 flatIconPositions.Add(flatPosition);
 
                 GameObject quad = new GameObject("Icon", typeof(MeshFilter), typeof(MeshRenderer));
@@ -84,7 +80,7 @@ namespace Cultivation4X.WorldMap
                     ? new Color(0.72f, 0.86f, 1f, 0.86f)
                     : TerrainPresentationModels.ColorForSite(site.siteType);
                 label.Set(hinted
-                        ? "可疑线索"
+                        ? "？\n未知线索"
                         : string.IsNullOrEmpty(site.siteName)
                             ? TerrainPresentationModels.SiteLabel(site.siteType)
                             : site.siteName,
@@ -146,12 +142,13 @@ namespace Cultivation4X.WorldMap
             flatIconPositions.Add(flatPosition);
         }
 
-        /// <summary>远景模式：隐藏地点图标，避免遮挡区域色与区域名。</summary>
+        /// <summary>远景模式：隐藏普通地点图标；匿名线索保留，便于玩家寻找探索目标。</summary>
         public void SetFarViewVisible(bool visible)
         {
             foreach (GameObject iconObject in iconObjects)
             {
-                if (iconObject != null) iconObject.SetActive(!visible);
+                if (iconObject != null)
+                    iconObject.SetActive(!visible || farViewPersistentIcons.Contains(iconObject));
             }
         }
 
@@ -176,6 +173,7 @@ namespace Cultivation4X.WorldMap
                 if (iconObject != null) DestroyOwned(iconObject);
             }
             iconObjects.Clear();
+            farViewPersistentIcons.Clear();
             flatIconPositions.Clear();
             hasMap = false;
             lastCurveRevision = -1;

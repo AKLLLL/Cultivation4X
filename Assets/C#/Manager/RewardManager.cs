@@ -37,11 +37,6 @@ public class RewardManager : MonoBehaviour
             Debug.LogWarning("RewardManager：Reward为空。");
             return;
         }
-        // 金币是宗门共享资源；弟子只获得经验/修为。
-        if (reward.Gold > 0)
-        {
-            PlayerManager.Instance.AddGold(reward.Gold);
-        }
         // 发放经验
         if (reward.Exp > 0)
         {
@@ -57,12 +52,7 @@ public class RewardManager : MonoBehaviour
             );
         }
 
-        int basicMaterialReward = 0;
-        foreach (ItemReward item in reward.Items)
-            if (item.itemId == FacilityRules.BasicMaterialId) basicMaterialReward += item.count;
-        TimeManager.Instance?.RecordPreAdvanceResourceChange(reward.Gold, basicMaterialReward);
-
-        Debug.Log($"奖励发放完成：{npc.Data.npcName}，宗门灵材 +{reward.Gold}，{npc.Data.npcName}修为 +{reward.Exp}");
+        Debug.Log($"奖励发放完成：{npc.Data.npcName}，{npc.Data.npcName}修为 +{reward.Exp}");
     }
 
     public bool CanGiveReward(Reward reward)

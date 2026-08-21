@@ -83,7 +83,7 @@ public class EventManager : MonoBehaviour
         ResetDailyGeneration(day);
         ProcessDueEvents(day);
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
-        if (founding != null && founding.completed && day > 0 && day % 10 == 0)
+        if (GameFlowPermission.IsSectEstablished(founding) && day > 0 && day % 10 == 0)
             TryEnqueueOrdinaryCadenceEvent(day);
     }
 
@@ -208,18 +208,15 @@ public class EventManager : MonoBehaviour
     {
         List<ItemReward> additions = new List<ItemReward>();
         Dictionary<string, int> removals = new Dictionary<string, int>();
-        int goldChange = 0;
         foreach (EventEffect effect in effects ?? Enumerable.Empty<EventEffect>())
         {
-            if (!string.IsNullOrEmpty(effect.participant) && !participants.ContainsKey(effect.participant) && effect.type != EventEffectType.AddGold && effect.type != EventEffectType.AddReputation)
+            if (!string.IsNullOrEmpty(effect.participant) && !participants.ContainsKey(effect.participant) && effect.type != EventEffectType.AddReputation)
                 return false;
             if (effect.type == EventEffectType.AddItem) additions.Add(new ItemReward { itemId = effect.value, count = effect.amount });
             if (effect.type == EventEffectType.RemoveItem)
                 removals[effect.value] = removals.TryGetValue(effect.value, out int count) ? count + effect.amount : effect.amount;
             if (effect.type == EventEffectType.ScheduleEvent && !definitions.ContainsKey(effect.value)) return false;
-            if (effect.type == EventEffectType.AddGold) goldChange += effect.amount;
         }
-        if (goldChange < 0 && (PlayerManager.Instance == null || PlayerManager.Instance.playerData.gold < -goldChange)) return false;
         if (WarehouseManager.Instance == null && (additions.Count > 0 || removals.Count > 0)) return false;
         if (additions.Count > 0 && !WarehouseManager.Instance.CanAddRewards(additions)) return false;
         return removals.All(item => WarehouseManager.Instance.GetItemCount(item.Key) >= item.Value);
@@ -231,10 +228,6 @@ public class EventManager : MonoBehaviour
         participants.TryGetValue(effect.targetParticipant ?? string.Empty, out NPCRuntime target);
         switch (effect.type)
         {
-            case EventEffectType.AddGold:
-                PlayerManager.Instance?.AddGold(effect.amount);
-                TimeManager.Instance?.RecordPreAdvanceResourceChange(effect.amount, 0);
-                break;
             case EventEffectType.AddReputation: PlayerManager.Instance?.AddReputation(effect.amount); break;
             case EventEffectType.AddCultivation: actor?.AddCultivation(effect.amount); break;
             case EventEffectType.AddExperience: if (actor != null) NPCGrow.AddExp(actor, effect.amount); break;
@@ -250,11 +243,9 @@ public class EventManager : MonoBehaviour
             case EventEffectType.Kill: if (actor != null) NPCManager.Instance.Kill(actor, effect.value); break;
             case EventEffectType.AddItem:
                 WarehouseManager.Instance?.AddItem(effect.value, effect.amount);
-                if (effect.value == FacilityRules.BasicMaterialId) TimeManager.Instance?.RecordPreAdvanceResourceChange(0, effect.amount);
                 break;
             case EventEffectType.RemoveItem:
                 WarehouseManager.Instance?.RemoveItem(effect.value, effect.amount);
-                if (effect.value == FacilityRules.BasicMaterialId) TimeManager.Instance?.RecordPreAdvanceResourceChange(0, -effect.amount);
                 break;
             case EventEffectType.ScheduleEvent:
                 pending.Add(new PendingEvent
@@ -328,7 +319,9 @@ public class EventManager : MonoBehaviour
                 case EventConditionType.MissingTrait: if (npc == null || npc.Character.HasTrait(condition.value)) return false; break;
                 case EventConditionType.MinimumRealm: if (npc == null || (int)npc.Realm < condition.intValue) return false; break;
                 case EventConditionType.HealthIs: if (npc == null || npc.Health.ToString() != condition.value) return false; break;
-                case EventConditionType.MinimumGold: if (PlayerManager.Instance == null || PlayerManager.Instance.playerData.gold < condition.intValue) return false; break;
+                case EventConditionType.MinimumItem:
+                    if (WarehouseManager.Instance == null || !WarehouseManager.Instance.HasItem(condition.value, condition.intValue)) return false;
+                    break;
                 case EventConditionType.LivingCharacterCount: if (NPCManager.Instance.GetLivingNPC().Count < condition.intValue) return false; break;
                 case EventConditionType.HasRelationship:
                     if (npc == null || !npc.Character.relationships.Any(r => r.tag == condition.relationshipTag)) return false;
@@ -552,9 +545,6 @@ public class EventManager : MonoBehaviour
             string name = actor == null ? "角色" : actor.Character.displayName;
             switch (effect.type)
             {
-                case EventEffectType.AddGold:
-                    parts.Add($"灵材 {Signed(effect.amount)}");
-                    break;
                 case EventEffectType.AddReputation:
                     parts.Add($"声望 {Signed(effect.amount)}");
                     break;
@@ -654,7 +644,6 @@ public class EventManager : MonoBehaviour
             outcome.effects == null || outcome.effects.All(effect =>
                 effect.type != EventEffectType.Kill && effect.type != EventEffectType.Injure &&
                 effect.type != EventEffectType.PermanentTrauma && effect.type != EventEffectType.RemoveItem &&
-                !(effect.type == EventEffectType.AddGold && effect.amount < 0) &&
                 !(effect.type == EventEffectType.AddItem && effect.amount < 0)));
     }
 

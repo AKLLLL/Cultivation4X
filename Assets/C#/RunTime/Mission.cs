@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -59,9 +60,6 @@ public class Mission
     private Reward CreateReward(MissionData data)
     {
         Reward reward = new Reward();
-
-        // 金币奖励
-        reward.Gold = data.goldReward;
 
         // 经验奖励
         reward.Exp = data.expReward;
@@ -339,7 +337,8 @@ public class Mission
                 {
                     int level = PlayerManager.Instance == null ? 1 :
                         PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse);
-                    if (projection.Count >= FacilityRules.WarehouseSlots(level))
+                    if (!WarehouseManager.IsCapacityExemptItem(effect.itemId) &&
+                        projection.Count(item => !WarehouseManager.IsCapacityExemptItem(item.Key)) >= FacilityRules.WarehouseSlots(level))
                     {
                         NodeFailureReason = $"仓库容量不足，无法添加物品：{effect.itemId}";
                         return false;
@@ -362,18 +361,6 @@ public class Mission
 
             switch (effect.type)
             {
-
-                //增加金币
-                case "Reward":
-                case "AddGold":
-
-                    Reward.Gold += effect.value;
-
-                    Debug.Log(
-                    $"获得灵材:{effect.value}"
-                    );
-
-                    break;
 
                 //增加经验
                 case "AddExp":
@@ -630,7 +617,8 @@ public class Mission
     public void ApplyExcellentRewardBonus()
     {
         if (ResultTier != MissionResultTier.Excellent) return;
-        reward.Gold += Mathf.FloorToInt(reward.Gold * 0.5f);
+        ItemReward spiritStones = reward.Items.Find(item => item != null && item.itemId == FacilityRules.SpiritStoneId);
+        if (spiritStones != null) spiritStones.count += Mathf.FloorToInt(spiritStones.count * 0.5f);
         reward.Exp += Mathf.FloorToInt(reward.Exp * 0.5f);
     }
 }

@@ -47,6 +47,7 @@ public class CharacterStateTests
         Assert.AreEqual(42, restored.currentDay);
         Assert.AreEqual(17, restored.randomRollCount);
         Assert.AreEqual("cautious", restored.characters[0].traitIds[0]);
+        Assert.AreEqual(DiscipleMentalStateRules.MaxMentalState, restored.characters[0].mentalState);
     }
 
     [Test]

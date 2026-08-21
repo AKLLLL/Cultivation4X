@@ -37,11 +37,4 @@ public static class NPCGrow
       
     }
 
-    /// <summary>
-    /// 增加金币
-    /// </summary>
-    public static void AddGold(NPCRuntime npc, int gold)
-    {
-        npc.Gold += gold;
-    }
 }

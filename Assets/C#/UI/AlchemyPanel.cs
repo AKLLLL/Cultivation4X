@@ -100,7 +100,7 @@ public class AlchemyPanel : MonoBehaviour
             int days = data.usesFacilityLevelScaling ? FacilityRules.AlchemyDays(level) : data.needDays;
             int pills = FacilityRules.AlchemyPillReward(level);
             RuntimeUIFactory.Text(panel,
-                $"{data.name}\n耗时 {days} 天｜消耗 {data.goldCost} 灵材、{FormatCosts(data.itemCosts)}｜产出 丹药 x{pills}",
+                $"{data.name}\n耗时 {days} 天｜消耗 {FormatCosts(data.itemCosts)}｜产出 丹药 x{pills}",
                 18, 82);
             Button start = RuntimeUIFactory.Button(panel, "派遣弟子炼丹", 42);
             start.onClick.AddListener(() => { pendingMissionId = AlchemyMissionId; Refresh(); });

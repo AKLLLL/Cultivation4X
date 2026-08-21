@@ -396,7 +396,8 @@ public class ExternalThreatTests
         Assert.IsNotNull(defense, reason);
         Assert.AreEqual(2, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
         time.EndDay();
-        Assert.AreEqual(-3, time.UnreadDaySettlement.basicMaterialChange);
+        Assert.AreEqual(-3, time.UnreadDaySettlement.itemChanges.Single(item =>
+            item.itemId == FacilityRules.BasicMaterialId).countChange);
 
         player.playerData.founding.externalThreat = ActiveThreat(0);
         VillageState village = player.playerData.founding.village;
@@ -449,6 +450,7 @@ public class ExternalThreatTests
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
+        player.playerData.founding.sectCreated = true;
         player.playerData.founding.completed = true;
         player.playerData.founding.stage = FoundingStage.Completed;
         NPCManager npcs = Add<NPCManager>("NPCs");

@@ -7,15 +7,17 @@
 
 "itemType":"Resource",
 
+ "tags":["spirit_stone","warehouse_capacity_exempt"],
+
  "quality":"Normal",
 
     "rank":2,
 
     "price":500,
 
-    "stackable":false,
+ "stackable":true,
 
-    "maxStack":1,
+    "maxStack":999,
 
     "icon":"Items/lingshouEgg_001"
 }

@@ -15,8 +15,14 @@
     "baseIntensity": 2,
     "conditions": [],
     "weightTerms": [
-      { "source": "Environment", "key": "WarehouseScarcity.material_001",
-        "weight": 6, "threshold": 5, "curve": [ [0, 0.0], [1.0, 1.0] ] }
+      { "source": "Environment", "key": "WarehouseTagScarcity.spirit_stone",
+        "weight": 1.5, "threshold": 30, "curve": [ [0, 0.0], [1.0, 1.0] ] },
+      { "source": "Environment", "key": "WarehouseTagScarcity.spiritual_material",
+        "weight": 1.5, "threshold": 5, "curve": [ [0, 0.0], [1.0, 1.0] ] },
+      { "source": "Environment", "key": "WarehouseTagScarcity.pill",
+        "weight": 1.5, "threshold": 1, "curve": [ [0, 0.0], [1.0, 1.0] ] },
+      { "source": "Environment", "key": "WarehouseTagScarcity.mundane_resource",
+        "weight": 1.5, "threshold": 5, "curve": [ [0, 0.0], [1.0, 1.0] ] }
     ]
   },
   {
@@ -25,8 +31,8 @@
     "baseIntensity": 4,
     "conditions": [ { "type": "RelationshipCountBelow", "intValue": 2 } ],
     "weightTerms": [
-      { "source": "Trait", "key": "loyal", "weight": 2, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "kind", "weight": 1, "curve": [ [0, 1], [1, 1] ] }
+      { "source": "Trait", "key": "loyal", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "kind", "weight": 1, "curve": [ [0, 0], [1, 1] ] }
     ]
   },
   {

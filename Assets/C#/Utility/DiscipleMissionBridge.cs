@@ -37,7 +37,7 @@ public static class DiscipleMissionBridge
     {
         if (data == null) { reason = "任务配置为空"; return false; }
         if (data.nodes != null && data.nodes.Count > 0) { reason = "任务包含节点"; return false; }
-        if (data.goldCost != 0 || (data.itemCosts != null && data.itemCosts.Count > 0))
+        if (data.itemCosts != null && data.itemCosts.Count > 0)
         { reason = "需要消耗资源"; return false; }
         if (data.isFacilityAction)
         {
@@ -124,6 +124,23 @@ public static class DiscipleMissionBridge
         return npc.Character.lifeRecords.Any(record =>
             record != null && record.day == day && record.category == "Mission" &&
             !string.IsNullOrWhiteSpace(record.sourceId) && missionIds.Contains(record.sourceId));
+    }
+
+    /// <summary>
+    /// 从持久化 Mission 履历读取某行动最近一次结束日。
+    /// 只匹配该 Action 自己的 missionId，因此玩家任务不会触发自主冷却。
+    /// </summary>
+    public static int GetMostRecentMissionEndDay(NPCRuntime npc, string missionId)
+    {
+        if (npc?.Character?.lifeRecords == null || string.IsNullOrWhiteSpace(missionId)) return -1;
+        int latest = -1;
+        foreach (LifeRecord record in npc.Character.lifeRecords)
+        {
+            if (record == null || record.category != "Mission" ||
+                record.sourceId != missionId || record.day <= latest) continue;
+            latest = record.day;
+        }
+        return latest;
     }
 
     private static bool HasAnyRelation(NPCRuntime subject, NPCRuntime other)

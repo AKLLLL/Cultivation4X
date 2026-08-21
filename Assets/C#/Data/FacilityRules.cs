@@ -24,9 +24,10 @@ public class FacilityUpgradeResult
 public static class FacilityRules
 {
     public const int MaxLevel = 3;
+    public const string SpiritStoneId = "LingShi_001";
     public const string BasicMaterialId = "material_001";
 
-    public static int UpgradeGoldCost(int currentLevel) => currentLevel == 1 ? 100 : currentLevel == 2 ? 250 : 0;
+    public static int UpgradeSpiritStoneCost(int currentLevel) => currentLevel == 1 ? 100 : currentLevel == 2 ? 250 : 0;
     public static int UpgradeMaterialCost(int currentLevel) => currentLevel == 1 ? 5 : currentLevel == 2 ? 12 : 0;
     public static int MissionCandidateCount(int level) => LevelValue(level, 2, 3, 4);
     public static int MissionConcurrency(int level) => LevelValue(level, 1, 2, 3);

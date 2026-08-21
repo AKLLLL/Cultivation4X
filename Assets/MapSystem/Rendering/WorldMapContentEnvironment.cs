@@ -11,7 +11,8 @@ namespace Cultivation4X.WorldMap
         BeastTracks = 2,
         RuinedWalls = 3,
         SettlementSigns = 4,
-        CaveSigns = 5
+        CaveSigns = 5,
+        Vegetation = 6
     }
 
     [Serializable]
@@ -86,6 +87,7 @@ namespace Cultivation4X.WorldMap
                 case WorldMapEnvironmentHintKind.RuinedWalls: return "残垣";
                 case WorldMapEnvironmentHintKind.SettlementSigns: return "聚落迹象";
                 case WorldMapEnvironmentHintKind.CaveSigns: return "洞穴迹象";
+                case WorldMapEnvironmentHintKind.Vegetation: return "草木异象";
                 default: return "环境暗示";
             }
         }
@@ -96,6 +98,7 @@ namespace Cultivation4X.WorldMap
             {
                 case MapSiteType.SpiritSpring: return WorldMapEnvironmentHintKind.Moisture;
                 case MapSiteType.SpiritMine: return WorldMapEnvironmentHintKind.MineralVein;
+                case MapSiteType.ResourceNode: return WorldMapEnvironmentHintKind.Vegetation;
                 case MapSiteType.BeastLair: return WorldMapEnvironmentHintKind.BeastTracks;
                 case MapSiteType.Ruin: return WorldMapEnvironmentHintKind.RuinedWalls;
                 case MapSiteType.Village: return WorldMapEnvironmentHintKind.SettlementSigns;

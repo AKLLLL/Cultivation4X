@@ -1,0 +1,4 @@
+[
+  {"id":"qingmu_forest_herbs","resourceId":"herb_qingling","baseOutput":5,"biomeRequirements":["TemperateForest","Rainforest"],"requiresVeinElement":true,"requiredVeinElement":"Wood"},
+  {"id":"spirit_mine_stones","resourceId":"LingShi_001","baseOutput":5,"biomeRequirements":[],"requiresVeinElement":true,"requiredVeinElement":"Metal"}
+]

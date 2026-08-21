@@ -17,6 +17,7 @@ namespace Cultivation4X.WorldMap
         public Action OnConfirmSite;
         public event Action<WorldLocation, LocationAction> LocationActionRequested;
         public event Action<WorldLocation> LocationMissionsRequested;
+        public event Action<CellInteractionOption> CellInteractionRequested;
 
         private Canvas hudCanvas;
         private RectTransform hudControls;
@@ -143,11 +144,15 @@ namespace Cultivation4X.WorldMap
             bool siteSelectionMode, bool hasSectBase, bool revealAll, PlayerData sect)
         {
             bool selecting = siteSelectionMode;
+            bool hintedSelection = !selecting && selectedCellIndex >= 0 &&
+                progress?.mapSites?.Any(site => site != null && site.siteType != MapSiteType.SectBase &&
+                    site.cellIndex == selectedCellIndex &&
+                    site.revealState == MapContentRevealState.Hinted) == true;
             if (hudCanvas != null) hudCanvas.sortingOrder = selecting ? 1000 : 100;
             if (title != null) title.text = "世界地图";
             if (selectionBlocker != null) selectionBlocker.SetActive(selecting);
             if (hudControls != null) hudControls.gameObject.SetActive(selecting || hasSectBase);
-            if (infoTabs != null) infoTabs.gameObject.SetActive(!selecting && selectedCellIndex >= 0);
+            if (infoTabs != null) infoTabs.gameObject.SetActive(!selecting && selectedCellIndex >= 0 && !hintedSelection);
             if (confirmButton != null)
             {
                 confirmButton.gameObject.SetActive(selecting);
@@ -184,12 +189,31 @@ namespace Cultivation4X.WorldMap
                 RefreshInfoTabVisuals();
             }
 
+            MapSiteData hintedSite = progress?.mapSites?.FirstOrDefault(site => site != null &&
+                site.siteType != MapSiteType.SectBase && site.cellIndex == selectedCellIndex &&
+                site.revealState == MapContentRevealState.Hinted);
+            if (hintedSite != null)
+            {
+                ShowHintedSite(map, progress, selectedCellIndex);
+                return;
+            }
+
             if (selectedInfoTab == 0)
                 ShowEnvironmentTab(map, progress, selectedCellIndex, revealAll, sect);
             else if (selectedInfoTab == 1)
                 ShowLocationTab(map, progress, selectedCellIndex, sect);
             else
                 ShowActionTab(map, progress, selectedCellIndex);
+        }
+
+        private void ShowHintedSite(WorldMap map, WorldMapProgressState progress, int selectedCellIndex)
+        {
+            AddInfoRow("地点", "未知线索");
+            AddInfoRow("预计耗时", "2 天");
+            CellInteractionOption option = WorldCellInteractionRules.Generate(map, progress, selectedCellIndex)
+                .FirstOrDefault(item => item != null && item.optionType == CellInteractionOptionType.Explore);
+            if (option != null) AddCellInteractionButton(option);
+            else AddInfoText("该线索当前无法探索。", 15);
         }
 
         private void ShowEnvironmentTab(WorldMap map, WorldMapProgressState progress,
@@ -268,7 +292,7 @@ namespace Cultivation4X.WorldMap
                     : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId);
                 AddInfoRow("弟子", disciples.ToString());
                 AddInfoRow("灵气", $"{cell.totalAura:0.000}");
-                AddInfoRow("灵材", (sect?.gold ?? 0).ToString());
+                AddInfoRow("灵石", (WarehouseManager.Instance?.GetItemCount(FacilityRules.SpiritStoneId) ?? 0).ToString());
                 AddInfoRow("基础材料", materials.ToString());
                 AddInfoRow("影响范围", InfluenceSummary(map, progress, selectedCellIndex));
             }
@@ -278,32 +302,49 @@ namespace Cultivation4X.WorldMap
         private void ShowActionTab(WorldMap map, WorldMapProgressState progress, int selectedCellIndex)
         {
             WorldCell cell = map.cells[selectedCellIndex];
-            WorldLocation location = map.GetLocationAt(cell);
-            if (location == null || !WorldLocationRules.IsLocationRevealed(location, progress))
+            bool hasContent = false;
+
+            // 格子行动独立于地点；普通格始终由这一来源生成探索选项。
+            foreach (CellInteractionOption option in
+                     WorldCellInteractionRules.Generate(map, progress, selectedCellIndex))
             {
-                AddInfoText("该格没有地点，暂无可执行行动。", 15);
-                return;
+                if (option == null) continue;
+                hasContent = true;
+                AddCellInteractionButton(option);
             }
 
-            bool hasContent = false;
-            if (location.availableActions != null && location.availableActions.Count > 0)
+            // 地点行动：由 WorldLocation 提供。
+            WorldLocation location = map.GetLocationAt(cell);
+            if (location != null && WorldLocationRules.IsLocationRevealed(location, progress))
             {
-                hasContent = true;
-                foreach (LocationAction action in location.availableActions)
+                if (location.availableActions != null && location.availableActions.Count > 0)
                 {
-                    if (action == null) continue;
-                    AddActionButton(location, action);
+                    hasContent = true;
+                    foreach (LocationAction action in location.availableActions)
+                    {
+                        if (action == null) continue;
+                        AddActionButton(location, action);
+                    }
+                }
+
+                if (location.availableMissionIds != null && location.availableMissionIds.Count > 0)
+                {
+                    hasContent = true;
+                    AddLocationMissionsButton(location, location.availableMissionIds.Count);
                 }
             }
 
-            if (location.availableMissionIds != null && location.availableMissionIds.Count > 0)
-            {
-                hasContent = true;
-                AddLocationMissionsButton(location, location.availableMissionIds.Count);
-            }
-
             if (!hasContent)
-                AddInfoText("该地点暂无可执行行动。", 15);
+                AddInfoText("该格暂无可执行行动。", 15);
+        }
+
+        private void AddCellInteractionButton(CellInteractionOption option)
+        {
+            Button button = RuntimeUIFactory.Button(infoContent, option.displayName, 46);
+            button.interactable = option.available;
+            CellInteractionOption captured = option;
+            button.onClick.AddListener(() => CellInteractionRequested?.Invoke(captured));
+            infoDynamicItems.Add(button.gameObject);
         }
 
         private void AddLocationMissionsButton(WorldLocation location, int missionCount)

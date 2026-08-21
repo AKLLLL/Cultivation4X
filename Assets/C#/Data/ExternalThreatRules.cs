@@ -229,9 +229,6 @@ public static class ExternalThreatRules
         if (plan == CombatPlanType.SimpleDefense &&
             !WarehouseManager.Instance.RemoveItem(FacilityRules.BasicMaterialId, definition.defenseMaterialCost))
         { reason = "准备资源扣除失败"; return null; }
-        if (plan == CombatPlanType.SimpleDefense)
-            TimeManager.Instance?.RecordPreAdvanceResourceChange(0, -definition.defenseMaterialCost);
-
         List<CombatantPower> powers = party.Select(item => new CombatantPower
         {
             characterId = item.CharacterId,

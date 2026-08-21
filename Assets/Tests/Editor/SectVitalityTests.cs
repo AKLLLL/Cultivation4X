@@ -171,7 +171,7 @@ public class SectVitalityTests
     }
 
     [Test]
-    public void ExcellentReward_AddsHalfGoldAndCultivationButNotItems()
+    public void ExcellentReward_AddsHalfSpiritStonesAndCultivationButNotOtherItems()
     {
         Mission mission = new Mission(new MissionData { id = "excellent-bonus" },
             new MissionSaveData
@@ -181,15 +181,19 @@ public class SectVitalityTests
                 resultTier = MissionResultTier.Excellent,
                 reward = new Reward
                 {
-                    Gold = 3,
                     Exp = 5,
-                    Items = new List<ItemReward> { new ItemReward { itemId = "item", count = 2 } }
+                    Items = new List<ItemReward>
+                    {
+                        new ItemReward { itemId = "item", count = 2 },
+                        new ItemReward { itemId = FacilityRules.SpiritStoneId, count = 3 }
+                    }
                 }
             }, null);
 
         mission.ApplyExcellentRewardBonus();
 
-        Assert.AreEqual(4, mission.Reward.Gold);
+        Assert.AreEqual(4, mission.Reward.Items.Single(item =>
+            item.itemId == FacilityRules.SpiritStoneId).count);
         Assert.AreEqual(7, mission.Reward.Exp);
         Assert.AreEqual(2, mission.Reward.Items[0].count);
     }
@@ -199,6 +203,7 @@ public class SectVitalityTests
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
+        player.playerData.founding.sectCreated = true;
         player.playerData.founding.completed = true;
         player.playerData.founding.stage = FoundingStage.Completed;
         MissionManager manager = Add<MissionManager>("Missions");

@@ -5,11 +5,12 @@
     "missionId": "disciple_ai_cultivate_001",
     "identityIds": [ "inner_disciple" ],
     "baseline": 1,
+    "minIntervalDays": 3,
     "scoreTerms": [
-      { "source": "Goal", "key": "improve_cultivation", "weight": 6, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Goal", "key": "recover_state", "weight": 2, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "diligent", "weight": 1.5, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "lazy", "weight": -1.5, "curve": [ [0, 1], [1, 1] ] },
+      { "source": "Goal", "key": "improve_cultivation", "weight": 6, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Goal", "key": "recover_state", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "diligent", "weight": 1.5, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "lazy", "weight": -1.5, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Ability", "key": "AptitudeRank", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Ability", "key": "CultivationRatio", "weight": 1.5, "curve": [ [0, 0.2], [1, 1] ] }
     ]
@@ -20,9 +21,10 @@
     "missionId": "disciple_ai_rest_001",
     "identityIds": [ "inner_disciple" ],
     "baseline": 0.5,
+    "minIntervalDays": 0,
     "scoreTerms": [
-      { "source": "Goal", "key": "recover_state", "weight": 8, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "lazy", "weight": 0.5, "curve": [ [0, 1], [1, 1] ] }
+      { "source": "Goal", "key": "recover_state", "weight": 8, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "lazy", "weight": 0.5, "curve": [ [0, 0], [1, 1] ] }
     ]
   },
   {
@@ -31,10 +33,11 @@
     "missionId": "disciple_ai_explore_001",
     "identityIds": [ "inner_disciple" ],
     "baseline": 1,
+    "minIntervalDays": 0,
     "scoreTerms": [
-      { "source": "Goal", "key": "obtain_resources", "weight": 5, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "reckless", "weight": 2, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "cautious", "weight": -2, "curve": [ [0, 1], [1, 1] ] },
+      { "source": "Goal", "key": "obtain_resources", "weight": 5, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "reckless", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "cautious", "weight": -2, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Ability", "key": "AptitudeRank", "weight": 0.5, "curve": [ [0, 0], [1, 1] ] }
     ]
   },
@@ -44,11 +47,12 @@
     "missionId": "disciple_ai_social_001",
     "identityIds": [ "inner_disciple" ],
     "baseline": 1,
+    "minIntervalDays": 0,
     "scoreTerms": [
-      { "source": "Goal", "key": "improve_relationship", "weight": 6, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "kind", "weight": 2, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "loyal", "weight": 1.5, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "selfish", "weight": -1, "curve": [ [0, 1], [1, 1] ] }
+      { "source": "Goal", "key": "improve_relationship", "weight": 6, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "kind", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "loyal", "weight": 1.5, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "selfish", "weight": -1, "curve": [ [0, 0], [1, 1] ] }
     ]
   },
   {
@@ -57,9 +61,10 @@
     "missionId": "production_001",
     "identityIds": [ "inner_disciple" ],
     "baseline": 0,
+    "minIntervalDays": 0,
     "scoreTerms": [
-      { "source": "Goal", "key": "obtain_resources", "weight": 7, "curve": [ [0, 1], [1, 1] ] },
-      { "source": "Trait", "key": "diligent", "weight": 1, "curve": [ [0, 1], [1, 1] ] }
+      { "source": "Goal", "key": "obtain_resources", "weight": 7, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "diligent", "weight": 1, "curve": [ [0, 0], [1, 1] ] }
     ]
   }
 ]

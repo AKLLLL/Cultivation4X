@@ -74,7 +74,7 @@ public class SectDevelopmentPanel : MonoBehaviour
     private void Refresh()
     {
         if (PlayerManager.Instance == null || WarehouseManager.Instance == null) return;
-        resources.text = $"灵材 {PlayerManager.Instance.playerData.gold}　声望 {PlayerManager.Instance.playerData.reputation}　基础材料 {WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId)}";
+        resources.text = $"灵石 {WarehouseManager.Instance.GetItemCount(FacilityRules.SpiritStoneId)}　声望 {PlayerManager.Instance.playerData.reputation}　基础材料 {WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId)}";
         foreach (var pair in buttons)
         {
             int level = PlayerManager.Instance.GetFacilityLevel(pair.Key);
@@ -84,10 +84,10 @@ public class SectDevelopmentPanel : MonoBehaviour
                 pair.Value.interactable = false;
                 continue;
             }
-            int gold = FacilityRules.UpgradeGoldCost(level), material = FacilityRules.UpgradeMaterialCost(level);
+            int spiritStones = FacilityRules.UpgradeSpiritStoneCost(level), material = FacilityRules.UpgradeMaterialCost(level);
             pair.Value.GetComponentInChildren<TMP_Text>().text = level >= FacilityRules.MaxLevel
                 ? $"{Name(pair.Key)} Lv.{level}（已满级）"
-                : $"{Name(pair.Key)} Lv.{level} → Lv.{level + 1}　{gold}灵材 / {material}材料\n{Effect(pair.Key, level)}";
+                : $"{Name(pair.Key)} Lv.{level} → Lv.{level + 1}　{spiritStones}灵石 / {material}材料\n{Effect(pair.Key, level)}";
             pair.Value.interactable = level < FacilityRules.MaxLevel;
         }
     }

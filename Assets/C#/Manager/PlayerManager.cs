@@ -31,7 +31,6 @@ public class PlayerManager : MonoBehaviour
         WorldMapSession.Set(generatedMap, initialProgress);
         playerData = new PlayerData
         {
-            gold = 100,
             missionHallLevel = 0,
             warehouseLevel = 0,
             trainingRoomLevel = 0,
@@ -44,6 +43,7 @@ public class PlayerManager : MonoBehaviour
             founding = new FoundingState
             {
                 initialized = true,
+                sectCreated = false,
                 completed = false,
                 stage = FoundingStage.CandidateSelection,
                 candidateSeed = seed,
@@ -131,21 +131,6 @@ public class PlayerManager : MonoBehaviour
         return sectName;
     }
 
-    /// <summary>
-    /// 增加金币
-    /// </summary>
-    public void AddGold(int gold)
-    {
-        playerData.gold = Mathf.Max(0, playerData.gold + gold);
-    }
-
-    public bool SpendGold(int amount)
-    {
-        if (amount < 0 || playerData.gold < amount) return false;
-        playerData.gold -= amount;
-        return true;
-    }
-
     public void AddReputation(int amount)
     {
         playerData.reputation = Mathf.Max(0, playerData.reputation + amount);
@@ -182,8 +167,10 @@ public class PlayerManager : MonoBehaviour
             facility == FacilityType.FormationPlatform)
         { reason = "该设施当前不可升级"; return false; }
         if (level >= FacilityRules.MaxLevel) { reason = "设施已达到最高等级"; return false; }
-        if (playerData.gold < FacilityRules.UpgradeGoldCost(level)) { reason = "灵材不足"; return false; }
-        if (WarehouseManager.Instance == null || WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId) < FacilityRules.UpgradeMaterialCost(level))
+        if (WarehouseManager.Instance == null) { reason = "仓库尚未初始化"; return false; }
+        if (!WarehouseManager.Instance.HasItem(FacilityRules.SpiritStoneId, FacilityRules.UpgradeSpiritStoneCost(level)))
+        { reason = "灵石不足"; return false; }
+        if (WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId) < FacilityRules.UpgradeMaterialCost(level))
         { reason = "基础材料不足"; return false; }
         reason = null;
         return true;
@@ -195,13 +182,13 @@ public class PlayerManager : MonoBehaviour
             return new FacilityUpgradeResult { success = false, reason = reason, newLevel = GetFacilityLevel(facility) };
 
         int level = GetFacilityLevel(facility);
-        int goldCost = FacilityRules.UpgradeGoldCost(level);
+        int spiritStoneCost = FacilityRules.UpgradeSpiritStoneCost(level);
         int materialCost = FacilityRules.UpgradeMaterialCost(level);
-        playerData.gold -= goldCost;
+        if (!WarehouseManager.Instance.RemoveItem(FacilityRules.SpiritStoneId, spiritStoneCost))
+            return new FacilityUpgradeResult { success = false, reason = "灵石扣除失败", newLevel = level };
         WarehouseManager.Instance.RemoveItem(FacilityRules.BasicMaterialId, materialCost);
         SetFacilityLevel(facility, level + 1);
         TimeManager.Instance?.RecordFacilityUpgrade(facility, level + 1);
-        TimeManager.Instance?.RecordPreAdvanceResourceChange(-goldCost, -materialCost);
         EventManager.Instance?.TryTriggerSource(EventSource.FacilityUpgrade);
         return new FacilityUpgradeResult { success = true, newLevel = level + 1 };
     }
@@ -232,7 +219,8 @@ public class PlayerManager : MonoBehaviour
     public void ProcessIdleFounderDay(NPCRuntime npc)
     {
         FoundingState state = playerData.founding;
-        if (npc == null || state == null || state.completed || state.stage != FoundingStage.Cave ||
+        if (npc == null || state == null || GameFlowPermission.IsFoundingDevelopmentComplete(state) ||
+            state.stage != FoundingStage.Cave ||
             state.techniqueUnderstanding >= FoundingRules.MaxUnderstanding ||
             !state.selectedFounderIds.Contains(npc.CharacterId)) return;
 
@@ -244,7 +232,7 @@ public class PlayerManager : MonoBehaviour
     public void AddTechniqueUnderstanding(int amount, NPCRuntime actor = null)
     {
         FoundingState state = playerData.founding;
-        if (state == null || state.completed || amount <= 0) return;
+        if (state == null || GameFlowPermission.IsFoundingDevelopmentComplete(state) || amount <= 0) return;
         state.techniqueUnderstanding = Mathf.Clamp(state.techniqueUnderstanding + amount, 0, FoundingRules.MaxUnderstanding);
         if (state.techniqueUnderstanding >= FoundingRules.TechniqueMilestone && !state.techniqueMilestoneQueued)
         {
@@ -313,7 +301,7 @@ public class PlayerManager : MonoBehaviour
             canInteract = true,
             revealState = MapContentRevealState.Discovered,
             siteState = MapSiteState.Developed,
-            ownerSectId = "player_sect",
+            ownerSectId = WorldMapProgressRules.PlayerSectOwnerId,
             discoveredDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
             lastUpdatedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay
         };
@@ -324,7 +312,7 @@ public class PlayerManager : MonoBehaviour
             sourceId = sectBase.siteId,
             sourceType = InfluenceSourceType.SectBase,
             cellIndex = sectBase.cellIndex,
-            controllerSectId = "player_sect",
+            controllerSectId = WorldMapProgressRules.PlayerSectOwnerId,
             baseStrength = WorldMapInfluenceRules.SectBaseStrength,
             radius = WorldMapInfluenceRules.SectBaseRadius,
             isActive = true
@@ -334,6 +322,8 @@ public class PlayerManager : MonoBehaviour
             revealedCellIndices = new List<int>(progress?.revealedCellIndices ?? new List<int>()),
             exploredCellIndices = new List<int>(progress?.exploredCellIndices ?? new List<int>()),
             mapSites = new List<MapSiteData>(progress?.mapSites ?? new List<MapSiteData>()) { sectBase },
+            resourceNodes = new List<ResourceNodeRuntime>(progress?.resourceNodes ?? new List<ResourceNodeRuntime>()),
+            spiritualVeins = new List<SpiritualVeinRuntime>(progress?.spiritualVeins ?? new List<SpiritualVeinRuntime>()),
             influenceSources = new List<InfluenceSourceData>(progress?.influenceSources ?? new List<InfluenceSourceData>())
                 { sectBaseSource },
             cellInfluences = new List<CellInfluenceState>(),
@@ -341,16 +331,19 @@ public class PlayerManager : MonoBehaviour
         };
         WorldMapInfluenceRules.Recalculate(map, updatedProgress);
         WorldMapContentRules.RefreshHints(map, updatedProgress);
+        ResourceEcologyRules.EnsureRuntime(map, updatedProgress);
         // 宗门建立后，在影响范围内生成青石村 WorldLocation，并把宗门自身也注册为世界地点。
-        WorldLocationRules.CreateStarterVillage(map, cellIndex);
+        WorldLocationRules.CreateStarterVillage(map, cellIndex, updatedProgress);
         WorldLocationRules.CreatePlayerSect(map, cellIndex, sectName);
-        // 把候选内容（灵泉/灵矿/洞府/兽巢/遗迹/村庄）同步为 WorldLocation 门面。
+        // 只把已发现内容同步为 WorldLocation 门面；Hidden/Hinted 保持纯 MapSiteData。
         WorldLocationRules.SynchronizeFromMapSites(map, updatedProgress);
 
-        playerData.sectId = "player_sect";
+        playerData.sectId = WorldMapProgressRules.PlayerSectOwnerId;
         playerData.sectName = sectName;
         playerData.foundedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
         playerData.influenceRadius = 2;
+        // 宗门在选址确认时即真实成立；stage 只是后续流程状态。
+        state.sectCreated = true;
         state.stage = FoundingStage.Cave;
         WorldMapSession.Set(map, updatedProgress);
         // 建宗同时替换地图进度；显式通知地图表现层立即重绘影响力覆盖。
@@ -418,7 +411,8 @@ public class PlayerManager : MonoBehaviour
     public void EvaluateFoundingCompletion()
     {
         FoundingState state = playerData.founding;
-        if (state == null || state.completed || state.techniqueUnderstanding < FoundingRules.MaxUnderstanding) return;
+        if (state == null || GameFlowPermission.IsFoundingDevelopmentComplete(state) ||
+            state.techniqueUnderstanding < FoundingRules.MaxUnderstanding) return;
         bool repairedAny = GetFacilityLevel(FacilityType.TrainingRoom) > 0 ||
                            GetFacilityLevel(FacilityType.Warehouse) > 0 ||
                            GetFacilityLevel(FacilityType.ProtectionArray) > 0 ||
@@ -430,10 +424,4 @@ public class PlayerManager : MonoBehaviour
         OnFoundingChanged?.Invoke();
     }
 
-    public bool UpgradeFacility(string facility, int goldCost)
-    {
-        if (facility == "Infirmary") return false;
-        if (!System.Enum.TryParse(facility, out FacilityType type)) return false;
-        return TryUpgradeFacility(type).success;
-    }
 }

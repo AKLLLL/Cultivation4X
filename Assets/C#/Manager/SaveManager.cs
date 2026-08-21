@@ -257,6 +257,10 @@ public class SaveManager : MonoBehaviour
             state.worldMapProgress.influenceSources ?? new System.Collections.Generic.List<InfluenceSourceData>();
         state.worldMapProgress.cellInfluences =
             state.worldMapProgress.cellInfluences ?? new System.Collections.Generic.List<CellInfluenceState>();
+        state.worldMapProgress.resourceNodes =
+            state.worldMapProgress.resourceNodes ?? new System.Collections.Generic.List<ResourceNodeRuntime>();
+        state.worldMapProgress.spiritualVeins =
+            state.worldMapProgress.spiritualVeins ?? new System.Collections.Generic.List<SpiritualVeinRuntime>();
         int minimumFacilityLevel = sourceVersion < 4 ? 1 : 0;
         state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
         state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
@@ -272,6 +276,7 @@ public class SaveManager : MonoBehaviour
             state.sect.founding = new FoundingState
             {
                 initialized = true,
+                sectCreated = true,
                 completed = true,
                 stage = FoundingStage.Completed,
                 candidates = new System.Collections.Generic.List<FounderCandidateData>(),
@@ -358,20 +363,34 @@ public class SaveManager : MonoBehaviour
                 new System.Collections.Generic.List<InfluenceSourceData>();
             state.worldMapProgress.cellInfluences = state.worldMapProgress.cellInfluences ??
                 new System.Collections.Generic.List<CellInfluenceState>();
+            state.worldMapProgress.resourceNodes = state.worldMapProgress.resourceNodes ??
+                new System.Collections.Generic.List<ResourceNodeRuntime>();
+            state.worldMapProgress.spiritualVeins = state.worldMapProgress.spiritualVeins ??
+                new System.Collections.Generic.List<SpiritualVeinRuntime>();
             foreach (MapSiteData site in state.worldMapProgress.mapSites.Where(item => item != null))
             {
                 site.tags = site.tags ?? new System.Collections.Generic.List<string>();
                 site.availableActionIds = site.availableActionIds ?? new System.Collections.Generic.List<string>();
             }
-            WorldLocationRules.SynchronizeFromMapSites(state.worldMap, state.worldMapProgress);
         }
         state.activeMissions = state.activeMissions ?? new System.Collections.Generic.List<MissionSaveData>();
+        if (state.unreadDaySettlement != null)
+        {
+            state.unreadDaySettlement.itemChanges = state.unreadDaySettlement.itemChanges ??
+                new System.Collections.Generic.List<ItemDayChange>();
+            state.unreadDaySettlement.resourceProduction = state.unreadDaySettlement.resourceProduction ??
+                new System.Collections.Generic.List<ResourceProductionRecord>();
+        }
     }
 
     public static void ValidateWorldMapState(GameState state)
     {
         if (state?.worldMap == null)
             throw new InvalidDataException("存档缺少世界地图快照");
+        if (state.characters == null || state.characters.Any(character => character == null ||
+            character.mentalState < DiscipleMentalStateRules.MinMentalState ||
+            character.mentalState > DiscipleMentalStateRules.MaxMentalState))
+            throw new InvalidDataException("弟子心境数据无效");
 
         WorldMap map = state.worldMap;
         long expectedCellCount = (long)map.width * map.height;
@@ -422,7 +441,8 @@ public class SaveManager : MonoBehaviour
 
         WorldMapProgressState progress = state.worldMapProgress;
         if (progress?.revealedCellIndices == null || progress.exploredCellIndices == null || progress.mapSites == null ||
-            progress.influenceSources == null || progress.cellInfluences == null)
+            progress.influenceSources == null || progress.cellInfluences == null ||
+            progress.resourceNodes == null || progress.spiritualVeins == null)
             throw new InvalidDataException("世界地图进度数据缺失");
         if (progress.revealedCellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
             progress.revealedCellIndices.Distinct().Count() != progress.revealedCellIndices.Count)
@@ -444,12 +464,14 @@ public class SaveManager : MonoBehaviour
             progress.mapSites.GroupBy(site => site.siteId).Any(group => group.Count() != 1) ||
             progress.mapSites.GroupBy(site => site.cellIndex).Any(group => group.Count() != 1))
             throw new InvalidDataException("世界地图地点数据无效");
+        ValidateResourceEcology(map, progress, state.currentDay);
         MapSiteType[] candidateTypes = { MapSiteType.Village, MapSiteType.SpiritSpring, MapSiteType.SpiritMine,
-            MapSiteType.CaveResidence, MapSiteType.BeastLair, MapSiteType.Ruin };
+            MapSiteType.CaveResidence, MapSiteType.BeastLair, MapSiteType.Ruin, MapSiteType.ResourceNode };
         if (candidateTypes.Any(type => progress.mapSites.Count(site => site.siteType == type) != 1) ||
             progress.mapSites.Where(site => site.siteType != MapSiteType.SectBase)
                 .Any(site => IsInvalidContentSite(map, state.currentDay, site)))
             throw new InvalidDataException("世界地图候选内容无效");
+        ValidateMapSiteLocationBindings(map, progress);
         ValidateMapMissionContexts(state, map, progress);
         ValidateInfluenceCache(map, progress);
 
@@ -558,8 +580,8 @@ public class SaveManager : MonoBehaviour
             !sectBase.isRevealed || !sectBase.canInteract ||
             sectBase.revealState != MapContentRevealState.Discovered ||
             sectBase.siteState != MapSiteState.Developed ||
-            sectBase.ownerSectId != "player_sect" ||
-            state.sect.sectId != "player_sect" ||
+            sectBase.ownerSectId != WorldMapProgressRules.PlayerSectOwnerId ||
+            state.sect.sectId != WorldMapProgressRules.PlayerSectOwnerId ||
             string.IsNullOrWhiteSpace(state.sect.sectName) ||
             state.sect.sectName.Length < 2 || state.sect.sectName.Length > 12 ||
             state.sect.sectName.Any(char.IsControl) ||
@@ -602,8 +624,12 @@ public class SaveManager : MonoBehaviour
                 location.position.y < 0 || location.position.y >= map.height ||
                 (!string.IsNullOrEmpty(location.sourceMapSiteId) &&
                  (progress?.mapSites == null ||
-                  progress.mapSites.All(site => site == null || site.siteId != location.sourceMapSiteId))))
+                   progress.mapSites.All(site => site == null || site.siteId != location.sourceMapSiteId))))
                 throw new InvalidDataException("世界地点实体无效");
+            int locationCellIndex = map.GetIndex(new HexCoord(location.position.x, location.position.y));
+            if (locationCellIndex < 0 || locationCellIndex >= map.cells.Length ||
+                map.cells[locationCellIndex].locationId != location.id)
+                throw new InvalidDataException("世界地点缺少对应格子绑定");
         }
 
         foreach (WorldCell cell in map.cells)
@@ -612,6 +638,41 @@ public class SaveManager : MonoBehaviour
             WorldLocation location = map.GetLocation(cell.locationId);
             if (location == null || map.GetIndex(new HexCoord(location.position.x, location.position.y)) != cell.index)
                 throw new InvalidDataException("格子地点引用与地点位置不一致");
+        }
+    }
+
+    private static void ValidateMapSiteLocationBindings(WorldMap map, WorldMapProgressState progress)
+    {
+        foreach (WorldLocation location in map.locations.Values.Where(item => item != null &&
+                     !string.IsNullOrEmpty(item.sourceMapSiteId)))
+        {
+            MapSiteData source = progress.mapSites.SingleOrDefault(site => site != null &&
+                site.siteId == location.sourceMapSiteId);
+            if (source == null || source.siteType == MapSiteType.SectBase ||
+                source.revealState != MapContentRevealState.Discovered ||
+                location.id != "world_location_" + source.siteId)
+                throw new InvalidDataException("世界地点门面泄露了未发现内容");
+        }
+
+        foreach (MapSiteData site in progress.mapSites.Where(item => item != null &&
+                     item.siteType != MapSiteType.SectBase))
+        {
+            string expectedId = "world_location_" + site.siteId;
+            WorldLocation location = map.GetLocation(expectedId);
+            WorldCell cell = map.cells[site.cellIndex];
+            if (site.revealState != MapContentRevealState.Discovered)
+            {
+                if (location != null || !string.IsNullOrEmpty(cell.locationId) ||
+                    progress.exploredCellIndices.Contains(site.cellIndex))
+                    throw new InvalidDataException("未发现地图内容存在门面、格子绑定或探索完成标记");
+                continue;
+            }
+
+            if (location == null || location.sourceMapSiteId != site.siteId ||
+                map.GetIndex(new HexCoord(location.position.x, location.position.y)) != site.cellIndex ||
+                cell.locationId != expectedId ||
+                map.locations.Values.Count(item => item != null && item.sourceMapSiteId == site.siteId) != 1)
+                throw new InvalidDataException("已发现地图内容与世界地点门面不一致");
         }
     }
 
@@ -744,13 +805,15 @@ public class SaveManager : MonoBehaviour
             (site.siteType == MapSiteType.SpiritSpring &&
              (site.siteState == MapSiteState.Investigated || site.siteState == MapSiteState.Developed)) ||
             ((site.siteType == MapSiteType.Village || site.siteType == MapSiteType.SpiritMine ||
+              site.siteType == MapSiteType.ResourceNode ||
               site.siteType == MapSiteType.CaveResidence) && site.siteState == MapSiteState.Developed) ||
             ((site.siteType == MapSiteType.BeastLair || site.siteType == MapSiteType.Ruin) &&
              site.siteState == MapSiteState.Investigated);
         if (!validState) return true;
         if ((site.siteState == MapSiteState.None || site.siteState == MapSiteState.Investigated) &&
             !string.IsNullOrEmpty(site.ownerSectId)) return true;
-        if (site.siteState == MapSiteState.Developed && site.ownerSectId != "player_sect") return true;
+        if (site.siteState == MapSiteState.Developed &&
+            site.ownerSectId != WorldMapProgressRules.PlayerSectOwnerId) return true;
         string expectedAction = site.revealState == MapContentRevealState.Discovered && site.siteState == MapSiteState.None
             ? WorldMapContentRules.ActionIdFor(WorldMapContentRules.ActionForSite(site)) :
             site.revealState == MapContentRevealState.Discovered && site.siteType == MapSiteType.SpiritSpring &&
@@ -770,6 +833,7 @@ public class SaveManager : MonoBehaviour
             WorldMapContentRules.DevelopSpiritSpringMissionId,
             WorldMapContentRules.EstablishVillageRelationMissionId,
             WorldMapContentRules.DevelopSpiritMineMissionId,
+            WorldMapContentRules.DevelopResourceNodeMissionId,
             WorldMapContentRules.BuildCaveResidenceOutpostMissionId,
             WorldMapContentRules.ClearBeastLairMissionId,
             WorldMapContentRules.InvestigateRuinMissionId };
@@ -798,7 +862,7 @@ public class SaveManager : MonoBehaviour
             if (context.actionType != MapActionType.Explore)
             {
                 MapSiteData targetSite = WorldMapContentRules.FindSite(progress, context.targetSiteId);
-                if (targetSite == null || targetSite.siteType != WorldMapContentRules.SiteTypeForAction(context.actionType))
+                if (targetSite == null || !WorldMapContentRules.ActionMatchesSite(context.actionType, targetSite.siteType))
                     throw new InvalidDataException("地图任务目标类型无效");
             }
             if (mission.missionId != expectedMissionId ||
@@ -807,7 +871,10 @@ public class SaveManager : MonoBehaviour
             Reward expectedReward = WorldMapContentRules.CreateReward(map, context);
             if (mission.state == MissionState.AwaitingReward && mission.resultTier == MissionResultTier.Excellent)
             {
-                expectedReward.Gold += Mathf.FloorToInt(expectedReward.Gold * 0.5f);
+                ItemReward spiritStones = expectedReward.Items.FirstOrDefault(item =>
+                    item != null && item.itemId == FacilityRules.SpiritStoneId);
+                if (spiritStones != null)
+                    spiritStones.count += Mathf.FloorToInt(spiritStones.count * 0.5f);
                 expectedReward.Exp += Mathf.FloorToInt(expectedReward.Exp * 0.5f);
             }
             if (!RewardsEqual(expectedReward, mission.reward))
@@ -821,7 +888,7 @@ public class SaveManager : MonoBehaviour
 
     private static bool RewardsEqual(Reward left, Reward right)
     {
-        if (left == null || right == null || left.Gold != right.Gold || left.Exp != right.Exp ||
+        if (left == null || right == null || left.Exp != right.Exp ||
             left.Items == null || right.Items == null || left.Items.Count != right.Items.Count) return false;
         for (int index = 0; index < left.Items.Count; index++)
         {
@@ -831,6 +898,41 @@ public class SaveManager : MonoBehaviour
                 return false;
         }
         return true;
+    }
+
+    private static void ValidateResourceEcology(WorldMap map, WorldMapProgressState progress, int currentDay)
+    {
+        if (progress.resourceNodes.Any(node => node == null || string.IsNullOrWhiteSpace(node.nodeId) ||
+                string.IsNullOrWhiteSpace(node.definitionId) || string.IsNullOrWhiteSpace(node.siteId) ||
+                string.IsNullOrWhiteSpace(node.regionId) || node.cellIndex < 0 || node.cellIndex >= map.cells.Length ||
+                map.cells[node.cellIndex].regionId != node.regionId || ResourceDefinitionDatabase.GetNode(node.definitionId) == null ||
+                float.IsNaN(node.productionRemainder) || float.IsInfinity(node.productionRemainder) ||
+                node.productionRemainder < 0f || node.productionRemainder >= 1f || node.lastCalculatedOutput < 0 ||
+                node.lastSettledLost < 0 || node.lastSettledLost > node.lastCalculatedOutput ||
+                node.lastSettledMonth < 0 || node.lastSettledMonth > currentDay / ResourceManager.DaysPerMonth ||
+                progress.mapSites.All(site => site?.siteId != node.siteId)) ||
+            progress.resourceNodes.GroupBy(node => node.nodeId, StringComparer.Ordinal).Any(group => group.Count() != 1) ||
+            progress.resourceNodes.GroupBy(node => node.siteId, StringComparer.Ordinal).Any(group => group.Count() != 1))
+            throw new InvalidDataException("资源节点运行时数据无效");
+
+        WorldMapProgressState expected = new WorldMapProgressState
+        {
+            mapSites = progress.mapSites,
+            resourceNodes = new System.Collections.Generic.List<ResourceNodeRuntime>(),
+            spiritualVeins = new System.Collections.Generic.List<SpiritualVeinRuntime>()
+        };
+        ResourceEcologyRules.EnsureRuntime(map, expected);
+        if (expected.resourceNodes.Count != progress.resourceNodes.Count ||
+            expected.resourceNodes.Any(node => !progress.resourceNodes.Any(actual =>
+                actual.nodeId == node.nodeId && actual.definitionId == node.definitionId && actual.siteId == node.siteId &&
+                actual.regionId == node.regionId && actual.cellIndex == node.cellIndex)))
+            throw new InvalidDataException("资源节点与地图地点不一致");
+        if (expected.spiritualVeins.Count != progress.spiritualVeins.Count ||
+            expected.spiritualVeins.Any(vein => !progress.spiritualVeins.Any(actual =>
+                actual != null && actual.veinId == vein.veinId && actual.sourceVeinId == vein.sourceVeinId &&
+                actual.definitionId == vein.definitionId && actual.regionId == vein.regionId &&
+                actual.element == vein.element && actual.grade == vein.grade && actual.origin == vein.origin)))
+            throw new InvalidDataException("区域灵脉派生数据无效");
     }
 
     private static void PrepareInfluenceStateForValidation(GameState state)

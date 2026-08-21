@@ -19,7 +19,6 @@ public class MissionData
     public int requiredMissionHallLevel = 1;
     public FacilityType requiredFacility;
     public int requiredFacilityLevel;
-    public int goldCost;
     public List<ItemReward> itemCosts = new List<ItemReward>();
     public bool isFacilityAction;
     public bool usesFacilityLevelScaling = true;
@@ -32,8 +31,6 @@ public class MissionData
 
     // 完成所需天数
     public int needDays;
-    // 奖励金币
-    public int goldReward;
     // 经验奖励
     public int expReward;
     //物品奖励

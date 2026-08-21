@@ -101,6 +101,8 @@ public static class DiscipleAIConfigLoader
             }
             if (string.IsNullOrWhiteSpace(action.missionId))
                 Debug.LogError($"[DiscipleAI] Action 缺少 missionId: {action.id}");
+            if (action.minIntervalDays < 0)
+                Debug.LogError($"[DiscipleAI] Action minIntervalDays 不能为负: {action.id}");
             if (action.identityIds != null)
                 foreach (string identityId in action.identityIds)
                     if (!identityIds.Contains(identityId))

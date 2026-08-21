@@ -71,6 +71,8 @@ public class VillageState
 public class FoundingState
 {
     public bool initialized;
+    /// <summary>宗门是否已经真实成立（选址完成即成立）。真实状态，不与流程阶段 stage 强绑定。</summary>
+    public bool sectCreated;
     public bool completed;
     public FoundingStage stage;
     public int candidateSeed;

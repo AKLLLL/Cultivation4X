@@ -227,11 +227,21 @@ public class NPCManager : MonoBehaviour
         NPCRuntime source = GetRuntime(sourceId);
         NPCRuntime target = GetRuntime(targetId);
         if (source == null || target == null || sourceId == targetId) return false;
-        if (source.Character.relationships.Any(r => r.targetCharacterId == targetId && r.tag == tag)) return false;
+        source.Character.relationships = source.Character.relationships ?? new List<RelationshipRecord>();
+        target.Character.relationships = target.Character.relationships ?? new List<RelationshipRecord>();
+        if (source.Character.relationships.Any(r => r.targetCharacterId == targetId && r.tag == tag)
+            || target.Character.relationships.Any(r => r.targetCharacterId == sourceId && r.tag == tag)) return false;
         source.Character.relationships.Add(new RelationshipRecord
         {
             sourceCharacterId = sourceId,
             targetCharacterId = targetId,
+            tag = tag,
+            createdDay = CurrentDay
+        });
+        target.Character.relationships.Add(new RelationshipRecord
+        {
+            sourceCharacterId = targetId,
+            targetCharacterId = sourceId,
             tag = tag,
             createdDay = CurrentDay
         });
@@ -336,6 +346,7 @@ public class NPCManager : MonoBehaviour
     {
         foreach (var npc in runtimes)
         {
+            DiscipleMentalStateRules.RestoreDaily(npc);
             bool wasInjured = npc.State == NPCState.Injured;
             npc.OnDayPassed();
             if (wasInjured && npc.State == NPCState.Idle) Recover(npc);

@@ -84,7 +84,13 @@ public class ActionDefinition
     public string missionId;
     public List<string> identityIds = new List<string>();
     public float baseline;
-    public int minIntervalDays = 1;
+    /// <summary>
+    /// 该自主行动的最小间隔天数。
+    /// &gt;0：最近一次结束日 D 之后，D..D+minIntervalDays 不再被自主选择（D+minIntervalDays+1 恢复）。
+    /// 0：不增加额外间隔，只沿用“终局当日不立即续接”的通用规则。
+    /// 冷却只由该 Action 自己的 missionId 履历计算，玩家任务不触发。
+    /// </summary>
+    public int minIntervalDays = 0;
     public List<ScoreTerm> scoreTerms = new List<ScoreTerm>();
 }
 

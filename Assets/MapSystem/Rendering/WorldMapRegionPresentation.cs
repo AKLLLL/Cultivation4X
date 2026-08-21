@@ -69,8 +69,7 @@ namespace Cultivation4X.WorldMap
         public static bool ShowMarker(WorldMapMarkerKind kind, WorldMapZoomLevel zoom)
         {
             if (zoom != WorldMapZoomLevel.Far) return true;
-            return kind != WorldMapMarkerKind.ContentHint &&
-                   kind != WorldMapMarkerKind.EnvironmentHint &&
+            return kind != WorldMapMarkerKind.EnvironmentHint &&
                    kind != WorldMapMarkerKind.EnvironmentMoisture &&
                    kind != WorldMapMarkerKind.EnvironmentMineralVein &&
                    kind != WorldMapMarkerKind.EnvironmentBeastTracks &&

@@ -13,7 +13,6 @@ public class NPCRuntime
 
     public int Exp;
 
-    public int Gold;
     // 当前状态
     public NPCState State;
 
@@ -38,7 +37,6 @@ public class NPCRuntime
         //读取初始值
         Level = data.level;
         Exp = data.exp;
-        Gold = 0;
 
         State = NPCState.Idle;
 
@@ -51,7 +49,6 @@ public class NPCRuntime
         Character = state;
         Level = state.level;
         Exp = state.exp;
-        Gold = 0;
         State = state.activityState;
         StateRemainDays = state.stateRemainDays;
     }
@@ -60,6 +57,7 @@ public class NPCRuntime
     public HealthState Health => Character.health;
     public CultivationRealm Realm => Character.realm;
     public int Cultivation => Character.cultivation;
+    public int MentalState => Character.mentalState;
     public int Attack
     {
         get
@@ -137,6 +135,13 @@ public class NPCRuntime
     {
         if (!Character.IsAlive || amount <= 0) return;
         Character.cultivation += amount;
+    }
+
+    public void ChangeMentalState(int amount)
+    {
+        if (!Character.IsAlive || amount == 0) return;
+        Character.mentalState = Mathf.Clamp(Character.mentalState + amount,
+            DiscipleMentalStateRules.MinMentalState, DiscipleMentalStateRules.MaxMentalState);
     }
 
     public void AddCombatExperience(int amount)

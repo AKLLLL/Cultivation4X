@@ -34,7 +34,8 @@ namespace Cultivation4X.WorldMap
         Explore = 1,
         ManageLabor = 2,
         ViewStatus = 3,
-        ManageSect = 4
+        ManageSect = 4,
+        DevelopResourceNode = 5
     }
 
     /// <summary>

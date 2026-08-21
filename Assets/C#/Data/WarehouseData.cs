@@ -14,6 +14,7 @@ public class WarehouseData
     [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
     public List<ItemStack> items = new List<ItemStack>
     {
+        new ItemStack { itemId = FacilityRules.SpiritStoneId, count = 100 },
         new ItemStack { itemId = FacilityRules.BasicMaterialId, count = 5 }
     };
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using TMPro;
@@ -251,6 +252,49 @@ public class UIPaginationTests
         Assert.AreEqual(Vector2.zero, backdrop.rectTransform.anchorMin);
         Assert.AreEqual(Vector2.one, backdrop.rectTransform.anchorMax);
         Assert.IsTrue(backdrop.raycastTarget);
+    }
+
+    [Test]
+    public void NpcDetail_UsesThreePagesAndHistoryRowsWrapInsideScroll()
+    {
+        GameObject owner = Track(new GameObject("NpcDetailPaginationTest", typeof(RectTransform)));
+        NPCInfoPanel panel = owner.AddComponent<NPCInfoPanel>();
+        NPCData data = Track(ScriptableObject.CreateInstance<NPCData>());
+        data.npcID = "npc-detail";
+        data.npcName = "测试弟子";
+        CharacterState state = new CharacterState
+        {
+            characterId = "npc-detail", displayName = "测试弟子", mentalState = 83,
+            lifeRecords = new List<LifeRecord>
+            {
+                new LifeRecord { day = 2, category = "Mission", text = "较早记录" },
+                new LifeRecord { day = 9, category = "Event", text = new string('长', 160) }
+            }
+        };
+
+        panel.Show(new NPCRuntime(data, state));
+
+        RectTransform ownerRect = owner.GetComponent<RectTransform>();
+        Assert.AreEqual(Vector3.one, ownerRect.localScale,
+            "弟子详情不得继承旧面板 0.5 缩放，否则 TMP 字体会模糊");
+        Assert.AreEqual(new Vector2(0.16f, 0.12f), ownerRect.anchorMin);
+        Assert.AreEqual(new Vector2(0.84f, 0.88f), ownerRect.anchorMax);
+        IDictionary buttons = (IDictionary)typeof(NPCInfoPanel)
+            .GetField("pageButtons", InstanceFlags).GetValue(panel);
+        Assert.AreEqual(3, buttons.Count);
+        RectTransform content = (RectTransform)typeof(NPCInfoPanel)
+            .GetField("pageContent", InstanceFlags).GetValue(panel);
+        Assert.IsNotNull(content.parent.parent.GetComponent<ScrollRect>());
+        StringAssert.Contains("心境", string.Join("\n",
+            content.GetComponentsInChildren<TMP_Text>().Select(text => text.text)));
+
+        object historyKey = Enum.Parse(buttons.GetType().GetGenericArguments()[0], "History");
+        ((Button)buttons[historyKey]).onClick.Invoke();
+        TMP_Text[] historyRows = content.GetComponentsInChildren<TMP_Text>();
+        Assert.AreEqual(2, historyRows.Length);
+        StringAssert.StartsWith("第 9 天", historyRows[0].text);
+        Assert.IsTrue(historyRows.All(text => text.enableWordWrapping));
+        Assert.IsTrue(historyRows.All(text => text.GetComponent<LayoutElement>().preferredHeight < 0f));
     }
 
     [Test]

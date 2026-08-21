@@ -6,10 +6,10 @@
   "missionRank": 1,
   "requiredFacilityLevel": 0,
   "isPlayerAssignable": false,
-  "goldCost": 0,
+
   "itemCosts": [],
   "needDays": 2,
-  "goldReward": 0,
+
   "expReward": 0,
   "itemRewards": [],
   "requiredAttack": 0,

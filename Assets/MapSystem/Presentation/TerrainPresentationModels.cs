@@ -268,6 +268,7 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Village: return new Color(0.35f, 0.85f, 0.45f);
                 case MapSiteType.SpiritSpring: return new Color(0.25f, 0.85f, 1.00f);
                 case MapSiteType.SpiritMine: return new Color(0.75f, 0.85f, 1.00f);
+                case MapSiteType.ResourceNode: return new Color(0.35f, 0.85f, 0.40f);
                 case MapSiteType.CaveResidence: return new Color(0.62f, 0.45f, 0.28f);
                 case MapSiteType.BeastLair: return new Color(0.85f, 0.28f, 0.25f);
                 case MapSiteType.Ruin: return new Color(0.55f, 0.50f, 0.65f);
@@ -283,6 +284,7 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Village: return "村庄";
                 case MapSiteType.SpiritSpring: return "灵泉";
                 case MapSiteType.SpiritMine: return "灵矿";
+                case MapSiteType.ResourceNode: return "青木森林";
                 case MapSiteType.CaveResidence: return "洞府";
                 case MapSiteType.BeastLair: return "兽穴";
                 case MapSiteType.Ruin: return "遗迹";

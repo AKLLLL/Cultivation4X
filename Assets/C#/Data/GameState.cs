@@ -5,10 +5,9 @@ using Cultivation4X.WorldMap;
 public static class SaveDataVersion
 {
     /// <summary>
-    /// 15：开局流程重排。弟子/功法/宗门名称先于选址完成，WorldSelection 成为
-    /// SectPlacement 语义，选址确认后才创建宗门驻地。
+    /// 17：角色快照新增持久化心境值，不兼容旧档。
     /// </summary>
-    public const int Current = 15;
+    public const int Current = 17;
 }
 
 [Serializable]

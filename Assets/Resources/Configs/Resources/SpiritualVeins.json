@@ -1,0 +1,4 @@
+[
+  {"id":"natural_grade_1","origin":"Natural","grade":1,"outputMultiplier":1.5},
+  {"id":"natural_grade_2","origin":"Natural","grade":2,"outputMultiplier":2.0}
+]

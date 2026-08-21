@@ -61,7 +61,7 @@ public class WorldMapContentEffectsTests
         WorldMapContentEffects.ApplyDaily(1);
         Assert.AreEqual(beforeCultivation + 1, idle.Cultivation);
         Assert.AreEqual(beforeCultivation, busy.Cultivation);
-        Assert.AreEqual(beforeMaterials + 1, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
+        Assert.AreEqual(beforeMaterials, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
         WorldMapContentEffects.ApplyDaily(2);
         Assert.AreEqual(beforeCultivation + 2, idle.Cultivation);
     }

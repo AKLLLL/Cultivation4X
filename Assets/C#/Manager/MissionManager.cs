@@ -561,9 +561,8 @@ public class MissionManager : MonoBehaviour
             { reason = "该剧情行动已经在进行"; return false; }
         }
         if (!TryGetMissionCosts(data, out Dictionary<string, int> costs, out reason)) return false;
-        if (PlayerManager.Instance.playerData.gold < data.goldCost) { reason = "灵材不足"; return false; }
         foreach (var cost in costs)
-            if (WarehouseManager.Instance.GetItemCount(cost.Key) < cost.Value) { reason = "材料不足"; return false; }
+            if (!WarehouseManager.Instance.HasItem(cost.Key, cost.Value)) { reason = "资源不足"; return false; }
         reason = null;
         return true;
     }
@@ -582,9 +581,8 @@ public class MissionManager : MonoBehaviour
             item.Data.foundingAction == data.foundingAction))
         { reason = "同类劳动力任务已在进行"; return false; }
         if (!TryGetMissionCosts(data, out Dictionary<string, int> costs, out reason)) return false;
-        if (PlayerManager.Instance.playerData.gold < data.goldCost) { reason = "灵材不足"; return false; }
         foreach (var cost in costs)
-            if (WarehouseManager.Instance.GetItemCount(cost.Key) < cost.Value) { reason = "材料不足"; return false; }
+            if (!WarehouseManager.Instance.HasItem(cost.Key, cost.Value)) { reason = "资源不足"; return false; }
         reason = null;
         return true;
     }
@@ -592,7 +590,6 @@ public class MissionManager : MonoBehaviour
     private bool TryGetMissionCosts(MissionData data, out Dictionary<string, int> costs, out string reason)
     {
         costs = new Dictionary<string, int>();
-        if (data.goldCost < 0) { reason = "任务灵材成本无效"; return false; }
         foreach (ItemReward cost in data.itemCosts ?? new List<ItemReward>())
         {
             if (cost == null || string.IsNullOrWhiteSpace(cost.itemId) || cost.count < 0 || !IsKnownItem(cost.itemId))
@@ -609,18 +606,14 @@ public class MissionManager : MonoBehaviour
     private bool TrySpendMissionCosts(MissionData data, out string reason)
     {
         if (!TryGetMissionCosts(data, out Dictionary<string, int> costs, out reason)) return false;
-        if (!PlayerManager.Instance.SpendGold(data.goldCost)) { reason = "灵材不足"; return false; }
         List<KeyValuePair<string, int>> removed = new List<KeyValuePair<string, int>>();
         foreach (var cost in costs)
         {
             if (WarehouseManager.Instance.RemoveItem(cost.Key, cost.Value)) { removed.Add(cost); continue; }
-            PlayerManager.Instance.AddGold(data.goldCost);
             foreach (var rollback in removed) WarehouseManager.Instance.AddItem(rollback.Key, rollback.Value);
-            reason = "材料扣除失败";
+            reason = "资源扣除失败";
             return false;
         }
-        int basicMaterialCost = costs.TryGetValue(FacilityRules.BasicMaterialId, out int material) ? material : 0;
-        TimeManager.Instance?.RecordPreAdvanceResourceChange(-data.goldCost, -basicMaterialCost);
         reason = null;
         return true;
     }
@@ -628,13 +621,8 @@ public class MissionManager : MonoBehaviour
     private void RefundMissionCosts(MissionData data)
     {
         if (data == null) return;
-        PlayerManager.Instance?.AddGold(Mathf.Max(0, data.goldCost));
         foreach (ItemReward cost in data.itemCosts ?? new List<ItemReward>())
             if (cost != null && cost.count > 0) WarehouseManager.Instance?.AddItem(cost.itemId, cost.count);
-        int material = (data.itemCosts ?? new List<ItemReward>())
-            .Where(item => item != null && item.itemId == FacilityRules.BasicMaterialId)
-            .Sum(item => Mathf.Max(0, item.count));
-        TimeManager.Instance?.RecordPreAdvanceResourceChange(Mathf.Max(0, data.goldCost), material);
     }
 
     private bool CanStartFoundingAction(MissionData data, NPCRuntime npc, out string reason)
@@ -791,6 +779,7 @@ public class MissionManager : MonoBehaviour
         RegisterMapTemplate(WorldMapContentRules.DevelopSpiritSpringMissionId, "开发灵泉", 3, 8, 12, 60);
         RegisterMapTemplate(WorldMapContentRules.EstablishVillageRelationMissionId, "建立村庄关系", 3, 7, 11, 55);
         RegisterMapTemplate(WorldMapContentRules.DevelopSpiritMineMissionId, "开发灵矿", 3, 8, 12, 60);
+        RegisterMapTemplate(WorldMapContentRules.DevelopResourceNodeMissionId, "开发资源节点", 3, 8, 12, 60);
         RegisterMapTemplate(WorldMapContentRules.BuildCaveResidenceOutpostMissionId, "建立洞府据点规则", 3, 9, 10, 62);
         RegisterMapTemplate(WorldMapContentRules.ClearBeastLairMissionId, "清理兽巢", 2, 11, 7, 65);
         RegisterMapTemplate(WorldMapContentRules.InvestigateRuinMissionId, "调查遗迹", 2, 6, 12, 58);
@@ -818,6 +807,7 @@ public class MissionManager : MonoBehaviour
             case MapActionType.DevelopSpiritSpring: return WorldMapContentRules.DevelopSpiritSpringMissionId;
             case MapActionType.EstablishVillageRelation: return WorldMapContentRules.EstablishVillageRelationMissionId;
             case MapActionType.DevelopSpiritMine: return WorldMapContentRules.DevelopSpiritMineMissionId;
+            case MapActionType.DevelopResourceNode: return WorldMapContentRules.DevelopResourceNodeMissionId;
             case MapActionType.BuildCaveResidenceOutpost: return WorldMapContentRules.BuildCaveResidenceOutpostMissionId;
             case MapActionType.ClearBeastLair: return WorldMapContentRules.ClearBeastLairMissionId;
             case MapActionType.InvestigateRuin: return WorldMapContentRules.InvestigateRuinMissionId;
@@ -832,6 +822,7 @@ public class MissionManager : MonoBehaviour
             tier == MissionResultTier.Insufficient ? "能力不足" : "达标";
         npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
             "Mission", $"{result}：{data.name}", data.id);
+        DiscipleMentalStateRules.ApplyMissionResult(npc, data.id, tier);
     }
 
     private void RecordResult(Mission mission, MissionState state)
@@ -991,7 +982,7 @@ public class MissionManager : MonoBehaviour
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
         if (data.isStoryAction)
         {
-            if (!FoundingRules.HasReachedCave(founding)) return false;
+            if (!GameFlowPermission.HasReachedCave(founding)) return false;
             if (data.foundingAction == FoundingActionKind.RepairFacility &&
                 Enum.TryParse(data.foundingTargetId, out FacilityType repaired) &&
                 PlayerManager.Instance.GetFacilityLevel(repaired) > 0) return false;
@@ -1006,7 +997,7 @@ public class MissionManager : MonoBehaviour
             return true;
         }
 
-        if (founding == null || !founding.completed) return false;
+        if (!GameFlowPermission.IsSectEstablished(founding)) return false;
         int reputation = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation;
         return data.missionRank <= FacilityRules.MaxMissionRankForReputation(reputation) &&
                data.requiredFacilityLevel <= (PlayerManager.Instance == null ? 0 : PlayerManager.Instance.GetFacilityLevel(data.requiredFacility));
@@ -1074,14 +1065,8 @@ public class MissionManager : MonoBehaviour
     private static void GiveSectReward(Reward reward)
     {
         if (reward == null) return;
-        if (reward.Gold > 0) PlayerManager.Instance?.AddGold(reward.Gold);
         foreach (ItemReward item in reward.Items ?? new List<ItemReward>())
             if (item != null && item.count > 0) WarehouseManager.Instance?.AddItem(item.itemId, item.count);
-
-        int basicMaterialReward = (reward.Items ?? new List<ItemReward>())
-            .Where(item => item != null && item.itemId == FacilityRules.BasicMaterialId)
-            .Sum(item => Mathf.Max(0, item.count));
-        TimeManager.Instance?.RecordPreAdvanceResourceChange(reward.Gold, basicMaterialReward);
     }
 
 

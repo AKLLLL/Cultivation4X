@@ -9,7 +9,7 @@ using System.Reflection;
 public class WorldMapContentTests
 {
     [Test]
-    public void Candidates_AreDeterministicAndContainExactlySixTypes()
+    public void Candidates_AreDeterministicAndContainExactlySevenTypes()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5101 });
         WorldMapProgressState first = new WorldMapProgressState();
@@ -17,20 +17,20 @@ public class WorldMapContentTests
         WorldMapContentRules.EnsureCandidates(map, first);
         WorldMapContentRules.EnsureCandidates(map, second);
 
-        Assert.AreEqual(6, first.mapSites.Count);
-        Assert.AreEqual(6, first.mapSites.Select(site => site.siteType).Distinct().Count());
+        Assert.AreEqual(7, first.mapSites.Count);
+        Assert.AreEqual(7, first.mapSites.Select(site => site.siteType).Distinct().Count());
         Assert.AreEqual(JsonConvert.SerializeObject(first.mapSites), JsonConvert.SerializeObject(second.mapSites));
-        Assert.AreEqual(6, first.mapSites.Select(site => site.cellIndex).Distinct().Count());
+        Assert.AreEqual(7, first.mapSites.Select(site => site.cellIndex).Distinct().Count());
         Assert.IsTrue(first.mapSites.All(site => site.revealState == MapContentRevealState.Hidden));
     }
 
     [Test]
-    public void Hint_RequiresKnownInfluencedCellAndNeverLeaksUnknownDetails()
+    public void FoundingHints_FourRemoteTypesAndNeverLeaksUnknownDetails()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5102 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
-        MapSiteData site = progress.mapSites.First();
+        MapSiteData site = progress.mapSites.Single(item => item.siteType == MapSiteType.Ruin);
 
         WorldMapContentRules.RefreshHints(map, progress);
         Assert.AreEqual(MapContentRevealState.Hidden, site.revealState);
@@ -39,12 +39,29 @@ public class WorldMapContentTests
         StringAssert.Contains("认知：未知", text);
         StringAssert.DoesNotContain(site.siteName, text);
 
-        // Stable-hash hint tests can force a valid hinted state without making the UI reveal an unknown cell.
-        site.revealState = MapContentRevealState.Hinted;
-        WorldMapContentRules.SynchronizeLegacyFlags(site);
+        progress.mapSites.Add(new MapSiteData
+        {
+            siteId = WorldMapProgressRules.PlayerSectBaseId, siteName = "测试宗",
+            siteType = MapSiteType.SectBase, cellIndex = map.cells.First(cell =>
+                progress.mapSites.All(candidate => candidate.cellIndex != cell.index)).index,
+            revealState = MapContentRevealState.Discovered, siteState = MapSiteState.Developed,
+            isRevealed = true, canInteract = true
+        });
+        WorldMapContentRules.RefreshHints(map, progress);
+        MapSiteType[] globalHintTypes =
+        {
+            MapSiteType.SpiritMine, MapSiteType.BeastLair, MapSiteType.Ruin, MapSiteType.ResourceNode
+        };
+        Assert.IsTrue(progress.mapSites.Where(item => globalHintTypes.Contains(item.siteType))
+            .All(item => item.revealState == MapContentRevealState.Hinted));
+        Assert.AreEqual("未知线索", WorldMapPresentationMarkerFactory.CreateContentMarkers(map, progress)
+            .Single(marker => marker.cellIndex == site.cellIndex).label);
+        Assert.AreEqual(WorldMapMarkerKind.ContentHint,
+            WorldMapPresentationMarkerFactory.CreateContentMarkers(map, progress)
+                .Single(marker => marker.cellIndex == site.cellIndex).kind);
         text = WorldMapCellDetailsFormatter.Format(map, site.cellIndex, WorldMapViewMode.Landform,
             false, null, progress, EstablishedSect(site.cellIndex));
-        StringAssert.DoesNotContain("可疑线索", text);
+        StringAssert.DoesNotContain(site.siteName, text);
 
         Assert.IsTrue(WorldMapPresentationPolicy.MarkerVisible(new WorldMapPresentationMarker
         {
@@ -55,22 +72,62 @@ public class WorldMapContentTests
     }
 
     [Test]
-    public void Explore_IsOneShotAndExcellentCanDiscoverCandidateDeterministically()
+    public void Explore_HintedQualifiedDiscoversAndCannotRepeat()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5103 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
         MapSiteData site = progress.mapSites.First();
+        site.revealState = MapContentRevealState.Hinted;
+        WorldMapContentRules.SynchronizeLegacyFlags(site);
         var context = new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = site.cellIndex };
 
         Assert.IsTrue(WorldMapContentRules.CanExplore(map, progress, site.cellIndex, out _));
         Assert.IsTrue(WorldMapContentRules.CompleteSuccessfulAction(map, progress, context,
-            MissionResultTier.Excellent, 4, out _));
+            MissionResultTier.Qualified, 4, out _));
         Assert.IsFalse(WorldMapContentRules.CanExplore(map, progress, site.cellIndex, out _));
         Assert.AreEqual(1, progress.exploredCellIndices.Count);
         Assert.AreEqual(1, progress.revealedCellIndices.Count);
+        Assert.AreEqual(MapContentRevealState.Discovered, site.revealState);
         Assert.IsFalse(WorldMapContentRules.CompleteSuccessfulAction(map, progress, context,
             MissionResultTier.Excellent, 4, out _));
+    }
+
+    [Test]
+    public void Explore_HiddenCandidateDiscoversItThroughOrdinaryCellEntry()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5121 });
+        WorldMapProgressState progress = new WorldMapProgressState();
+        WorldMapContentRules.EnsureCandidates(map, progress);
+        MapSiteData site = progress.mapSites.Single(item => item.siteType == MapSiteType.SpiritSpring);
+        Assert.AreEqual(MapContentRevealState.Hidden, site.revealState);
+        var context = new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = site.cellIndex };
+
+        Assert.IsTrue(WorldMapContentRules.CanExplore(map, progress, site.cellIndex, out _));
+        Assert.IsTrue(WorldMapContentRules.CompleteSuccessfulAction(map, progress, context,
+            MissionResultTier.Qualified, 4, out _));
+
+        Assert.AreEqual(MapContentRevealState.Discovered, site.revealState);
+        CollectionAssert.Contains(progress.exploredCellIndices, site.cellIndex);
+        CollectionAssert.Contains(progress.revealedCellIndices, site.cellIndex);
+    }
+
+    [Test]
+    public void Explore_InsufficientKeepsHintRetryable()
+    {
+        WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5120 });
+        WorldMapProgressState progress = new WorldMapProgressState();
+        WorldMapContentRules.EnsureCandidates(map, progress);
+        MapSiteData site = progress.mapSites.Single(item => item.siteType == MapSiteType.BeastLair);
+        site.revealState = MapContentRevealState.Hinted;
+        WorldMapContentRules.SynchronizeLegacyFlags(site);
+        var context = new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = site.cellIndex };
+
+        Assert.IsFalse(WorldMapContentRules.CompleteSuccessfulAction(map, progress, context,
+            MissionResultTier.Insufficient, 3, out _));
+        Assert.AreEqual(MapContentRevealState.Hinted, site.revealState);
+        Assert.IsEmpty(progress.exploredCellIndices);
+        Assert.IsTrue(WorldMapContentRules.CanExplore(map, progress, site.cellIndex, out _));
     }
 
     [Test]
@@ -123,7 +180,7 @@ public class WorldMapContentTests
         WorldMapInfluenceRules.Recalculate(map, progress);
 
         MapSiteType[] types = { MapSiteType.Village, MapSiteType.SpiritMine,
-            MapSiteType.CaveResidence, MapSiteType.BeastLair, MapSiteType.Ruin };
+            MapSiteType.CaveResidence, MapSiteType.BeastLair, MapSiteType.Ruin, MapSiteType.ResourceNode };
         foreach (MapSiteType type in types)
         {
             MapSiteData site = progress.mapSites.Single(item => item.siteType == type);
@@ -138,7 +195,7 @@ public class WorldMapContentTests
             Assert.IsTrue(WorldMapContentRules.CanStartAction(map, progress, context, out string reason),
                 $"{type}: {reason}");
             Reward reward = WorldMapContentRules.CreateReward(map, context);
-            Assert.Greater(reward.Gold, 0);
+            Assert.Greater(reward.Items.Single(item => item.itemId == FacilityRules.SpiritStoneId).count, 0);
             Assert.Greater(reward.Exp, 0);
             Assert.IsTrue(WorldMapContentRules.CompleteSuccessfulAction(map, progress, context,
                 MissionResultTier.Qualified, 2, out reason), reason);
@@ -190,7 +247,7 @@ public class WorldMapContentTests
             WorldMapContentRules.SynchronizeLegacyFlags(site);
         }
         var markers = WorldMapPresentationMarkerFactory.CreateContentMarkers(map, progress);
-        Assert.AreEqual(6, markers.Count);
+        Assert.AreEqual(7, markers.Count);
         Assert.AreEqual(WorldMapMarkerKind.Village,
             markers.Single(marker => marker.id == WorldMapContentRules.CandidateId(MapSiteType.Village)).kind);
         Assert.AreEqual(WorldMapMarkerKind.SpiritMine,
@@ -247,7 +304,7 @@ public class WorldMapContentTests
     }
 
     [Test]
-    public void SemanticMarkers_PreserveSixSiteAndSixEnvironmentKinds()
+    public void SemanticMarkers_PreserveSevenSiteAndSevenEnvironmentKinds()
     {
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5114 });
         WorldMapProgressState progress = new WorldMapProgressState();
@@ -262,9 +319,9 @@ public class WorldMapContentTests
 
         var sites = WorldMapPresentationMarkerFactory.CreateContentMarkers(map, progress);
         var hints = WorldMapPresentationMarkerFactory.CreateEnvironmentHintMarkers(map, progress);
-        Assert.AreEqual(6, sites.Select(marker => marker.kind).Distinct().Count());
-        Assert.AreEqual(6, hints.Select(marker => marker.kind).Distinct().Count());
-        Assert.AreEqual(6, hints.Select(marker => marker.environmentHintKind).Distinct().Count());
+        Assert.AreEqual(7, sites.Select(marker => marker.kind).Distinct().Count());
+        Assert.AreEqual(7, hints.Select(marker => marker.kind).Distinct().Count());
+        Assert.AreEqual(7, hints.Select(marker => marker.environmentHintKind).Distinct().Count());
 
         WorldMapMarkerKind[] semanticKinds = sites.Select(marker => marker.kind)
             .Concat(hints.Select(marker => marker.kind)).Distinct().ToArray();
@@ -279,14 +336,14 @@ public class WorldMapContentTests
                    string.Join(";", buffer.colors.Select(color =>
                 $"{color.r:0.000},{color.g:0.000},{color.b:0.000},{color.a:0.000}"));
         }).ToList();
-        Assert.AreEqual(12, semanticKinds.Length);
-        Assert.AreEqual(12, signatures.Distinct().Count());
+        Assert.AreEqual(14, semanticKinds.Length);
+        Assert.AreEqual(14, signatures.Distinct().Count());
     }
 
     [Test]
-    public void VersionFifteen_RoundTripsAndRejectsIllegalContentState()
+    public void VersionSeventeen_RoundTripsAndRejectsIllegalContentState()
     {
-        Assert.AreEqual(15, SaveDataVersion.Current);
+        Assert.AreEqual(17, SaveDataVersion.Current);
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5105 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
@@ -336,6 +393,8 @@ public class WorldMapContentTests
             .First(index => WorldMapContentRules.TryPrepareSectBasePlacement(map, progress, index, out _));
         MapSiteData spring = progress.mapSites.Single(site => site.siteType == MapSiteType.SpiritSpring);
         Assert.AreEqual(1, HexCoord.Distance(map.cells[home].coord, map.cells[spring.cellIndex].coord));
+        spring.revealState = MapContentRevealState.Hinted;
+        WorldMapContentRules.SynchronizeLegacyFlags(spring);
 
         var explore = new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = spring.cellIndex };
         Assert.IsTrue(WorldMapContentRules.CompleteSuccessfulAction(map, progress, explore,
@@ -399,7 +458,8 @@ public class WorldMapContentTests
         Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(deadActor));
 
         GameState rewardTamper = Clone(valid);
-        rewardTamper.activeMissions[0].reward.Gold++;
+        rewardTamper.activeMissions[0].reward.Items.Single(item =>
+            item.itemId == FacilityRules.SpiritStoneId).count++;
         Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(rewardTamper));
 
         GameState villageMission = EstablishedStateWithMapMission(MissionState.AwaitingReward);
@@ -410,6 +470,7 @@ public class WorldMapContentTests
         village.revealState = MapContentRevealState.Discovered;
         village.discoveredDay = village.lastUpdatedDay = 1;
         WorldMapContentRules.SynchronizeLegacyFlags(village);
+        WorldLocationRules.SynchronizeFromMapSites(villageMission.worldMap, villageMission.worldMapProgress);
         villageMission.activeMissions[0].missionId = WorldMapContentRules.EstablishVillageRelationMissionId;
         villageMission.activeMissions[0].mapContext = new MapMissionContext
         {
@@ -422,6 +483,59 @@ public class WorldMapContentTests
         Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(villageMission));
         villageMission.activeMissions[0].mapContext.actionType = MapActionType.DevelopSpiritMine;
         Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(villageMission));
+    }
+
+    [Test]
+    public void VersionSeventeen_RejectsMentalStateOutsideStrictRange()
+    {
+        GameState invalid = EstablishedStateWithMapMission(MissionState.AwaitingReward);
+        invalid.characters[0].mentalState = DiscipleMentalStateRules.MaxMentalState + 1;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(invalid));
+
+        invalid.characters[0].mentalState = DiscipleMentalStateRules.MinMentalState - 1;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(invalid));
+    }
+
+    [Test]
+    public void SaveV16_RejectsHintedFacadeAndRequiresDiscoveredFacade()
+    {
+        GameState valid = EstablishedStateWithMapMission(MissionState.AwaitingReward);
+        MapMissionContext context = valid.activeMissions[0].mapContext;
+        MapSiteData target = valid.worldMapProgress.mapSites.Single(site =>
+            site.cellIndex == context.targetCellIndex);
+        string facadeId = "world_location_" + target.siteId;
+        Assert.IsNull(valid.worldMap.GetLocation(facadeId));
+
+        GameState leakedHint = Clone(valid);
+        MapSiteData leakedSite = leakedHint.worldMapProgress.mapSites.Single(site =>
+            site.cellIndex == context.targetCellIndex);
+        WorldCell leakedCell = leakedHint.worldMap.cells[leakedSite.cellIndex];
+        var leakedLocation = new WorldLocation
+        {
+            id = facadeId,
+            sourceMapSiteId = leakedSite.siteId,
+            type = LocationType.Ruins,
+            name = leakedSite.siteName,
+            position = new UnityEngine.Vector2Int(leakedCell.coord.col, leakedCell.coord.row),
+            state = LocationState.Active,
+            availableActions = new List<LocationAction>(),
+            availableMissionIds = new List<string>()
+        };
+        leakedHint.worldMap.locations[facadeId] = leakedLocation;
+        leakedCell.locationId = facadeId;
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(leakedHint));
+
+        GameState discovered = Clone(valid);
+        discovered.activeMissions.Clear();
+        MapSiteData discoveredSite = discovered.worldMapProgress.mapSites.Single(site =>
+            site.cellIndex == context.targetCellIndex);
+        discoveredSite.revealState = MapContentRevealState.Discovered;
+        discoveredSite.discoveredDay = discoveredSite.lastUpdatedDay = discovered.currentDay;
+        WorldMapContentRules.SynchronizeLegacyFlags(discoveredSite);
+        Assert.Throws<InvalidDataException>(() => SaveManager.ValidateWorldMapState(discovered));
+
+        WorldLocationRules.SynchronizeFromMapSites(discovered.worldMap, discovered.worldMapProgress);
+        Assert.DoesNotThrow(() => SaveManager.ValidateWorldMapState(discovered));
     }
 
     [Test]
@@ -523,7 +637,9 @@ public class WorldMapContentTests
         progress.influenceSources[0].sourceId = WorldMapProgressRules.PlayerSectBaseId;
         progress.isInfluenceDirty = true;
         WorldMapInfluenceRules.Recalculate(map, progress);
-        int target = map.cells.First(cell => cell.index != home).index;
+        WorldMapContentRules.RefreshHints(map, progress);
+        int target = progress.mapSites.First(site => site.siteType != MapSiteType.SectBase &&
+            site.revealState == MapContentRevealState.Hinted).cellIndex;
         var context = new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = target };
         Reward reward = WorldMapContentRules.CreateReward(map, context);
         var mission = new MissionSaveData

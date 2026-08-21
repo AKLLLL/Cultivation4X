@@ -28,11 +28,13 @@ namespace Cultivation4X.WorldMap
         public const string DevelopActionId = "develop";
         public const string EstablishVillageRelationActionId = "establish_village_relation";
         public const string DevelopSpiritMineActionId = "develop_spirit_mine";
+        public const string DevelopResourceNodeActionId = "develop_resource_node";
         public const string BuildCaveResidenceOutpostActionId = "build_cave_residence_outpost";
         public const string ClearBeastLairActionId = "clear_beast_lair";
         public const string InvestigateRuinActionId = "investigate_ruin";
         public const string EstablishVillageRelationMissionId = "map_village_relation";
         public const string DevelopSpiritMineMissionId = "map_spirit_mine_develop";
+        public const string DevelopResourceNodeMissionId = "map_resource_node_develop";
         public const string BuildCaveResidenceOutpostMissionId = "map_cave_residence_outpost";
         public const string ClearBeastLairMissionId = "map_beast_lair_clear";
         public const string InvestigateRuinMissionId = "map_ruin_investigate";
@@ -40,7 +42,15 @@ namespace Cultivation4X.WorldMap
         private static readonly MapSiteType[] CandidateTypes =
         {
             MapSiteType.Village, MapSiteType.SpiritSpring, MapSiteType.SpiritMine,
-            MapSiteType.CaveResidence, MapSiteType.BeastLair, MapSiteType.Ruin
+            MapSiteType.CaveResidence, MapSiteType.BeastLair, MapSiteType.Ruin, MapSiteType.ResourceNode
+        };
+
+        private static readonly HashSet<MapSiteType> FoundingHintTypes = new HashSet<MapSiteType>
+        {
+            MapSiteType.SpiritMine,
+            MapSiteType.BeastLair,
+            MapSiteType.Ruin,
+            MapSiteType.ResourceNode
         };
 
         public static void EnsureCandidates(WorldMap map, WorldMapProgressState progress,
@@ -63,6 +73,7 @@ namespace Cultivation4X.WorldMap
             progress.mapSites = progress.mapSites
                 .OrderBy(site => site.siteType == MapSiteType.SectBase ? 0 : 1)
                 .ThenBy(site => site.siteId, StringComparer.Ordinal).ToList();
+            ResourceEcologyRules.EnsureRuntime(map, progress);
             WorldLocationRules.SynchronizeFromMapSites(map, progress);
         }
 
@@ -122,6 +133,7 @@ namespace Cultivation4X.WorldMap
             }
             foreach (KeyValuePair<MapSiteData, int> replacement in replacements)
                 replacement.Key.cellIndex = replacement.Value;
+            ResourceEcologyRules.EnsureRuntime(map, progress);
             WorldLocationRules.SynchronizeFromMapSites(map, progress);
             reason = null;
             return true;
@@ -130,9 +142,17 @@ namespace Cultivation4X.WorldMap
         public static void RefreshHints(WorldMap map, WorldMapProgressState progress)
         {
             if (map?.cells == null || progress?.mapSites == null) return;
+            bool hasSectBase = WorldMapProgressRules.GetSectBase(progress) != null;
             foreach (MapSiteData site in progress.mapSites.Where(IsCandidate))
             {
                 if (site.revealState != MapContentRevealState.Hidden) continue;
+                // V1 测试闭环：立宗后直接提供四类远方内容的准确匿名线索。
+                if (hasSectBase && FoundingHintTypes.Contains(site.siteType))
+                {
+                    site.revealState = MapContentRevealState.Hinted;
+                    SynchronizeLegacyFlags(site);
+                    continue;
+                }
                 CellInfluenceRuntimeState state = WorldMapInfluenceRules.GetCellState(map, progress, site.cellIndex);
                 int chance = HintChance(state);
                 if (chance <= 0) continue;
@@ -162,7 +182,7 @@ namespace Cultivation4X.WorldMap
             { reason = "地图内容目标无效"; return false; }
             if (site.revealState != MapContentRevealState.Discovered)
             { reason = "地图内容尚未发现"; return false; }
-            if (site.siteType != SiteTypeForAction(context.actionType))
+            if (!ActionMatchesSite(context.actionType, site.siteType))
             { reason = "地图行动与目标内容类型不一致"; return false; }
             if (context.actionType == MapActionType.InvestigateSpiritSpring)
             {
@@ -178,13 +198,13 @@ namespace Cultivation4X.WorldMap
                 { reason = "灵泉不在可开发影响范围内"; return false; }
                 reason = null; return true;
             }
-            MapSiteType expectedType = SiteTypeForAction(context.actionType);
-            if (site.siteType != expectedType || site.siteState != MapSiteState.None)
+            if (!ActionMatchesSite(context.actionType, site.siteType) || site.siteState != MapSiteState.None)
             { reason = "该地图内容已经处理"; return false; }
             bool permitted = context.actionType == MapActionType.EstablishVillageRelation
                 ? WorldMapInfluenceRules.CanEstablishVillageRelation(map, progress, site.cellIndex)
-                : context.actionType == MapActionType.DevelopSpiritMine
-                    ? WorldMapInfluenceRules.CanDevelopResource(map, progress, site.cellIndex)
+                : context.actionType == MapActionType.DevelopSpiritMine || context.actionType == MapActionType.DevelopResourceNode
+                    ? GameDebugConfig.BypassResourceDevelopmentInfluence ||
+                      WorldMapInfluenceRules.CanDevelopResource(map, progress, site.cellIndex)
                     : context.actionType == MapActionType.BuildCaveResidenceOutpost
                         ? WorldMapInfluenceRules.CanBuildOutpost(map, progress, site.cellIndex)
                         : context.actionType == MapActionType.ClearBeastLair
@@ -202,19 +222,24 @@ namespace Cultivation4X.WorldMap
             if (!CanStartAction(map, progress, context, out summary)) return false;
             if (context.actionType == MapActionType.Explore)
             {
+                if (tier == MissionResultTier.Insufficient)
+                {
+                    summary = "探索未能完成";
+                    return false;
+                }
                 if (progress.exploredCellIndices == null) progress.exploredCellIndices = new List<int>();
                 progress.exploredCellIndices.Add(context.targetCellIndex);
                 WorldMapProgressRules.RevealCell(map, progress, context.targetCellIndex);
                 MapSiteData candidate = progress.mapSites?.FirstOrDefault(site => IsCandidate(site) &&
-                    site.cellIndex == context.targetCellIndex);
-                if (candidate != null && tier == MissionResultTier.Excellent &&
-                    (candidate.siteType == MapSiteType.SpiritSpring ||
-                     DiscoveryRoll(map, candidate.siteId, candidate.cellIndex) < 65u))
+                    site.cellIndex == context.targetCellIndex &&
+                    site.revealState != MapContentRevealState.Discovered);
+                if (candidate != null)
                 {
                     candidate.revealState = MapContentRevealState.Discovered;
                     candidate.discoveredDay = currentDay;
                     candidate.lastUpdatedDay = currentDay;
                     SynchronizeLegacyFlags(candidate);
+                    WorldLocationRules.SynchronizeFromMapSites(map, progress);
                     summary = ExplorationSummary(map, context.targetCellIndex) + $"，发现{candidate.siteName}";
                 }
                 else summary = ExplorationSummary(map, context.targetCellIndex);
@@ -224,7 +249,7 @@ namespace Cultivation4X.WorldMap
             site.siteState = context.actionType == MapActionType.InvestigateSpiritSpring ||
                 context.actionType == MapActionType.ClearBeastLair || context.actionType == MapActionType.InvestigateRuin
                 ? MapSiteState.Investigated : MapSiteState.Developed;
-            if (site.siteState == MapSiteState.Developed) site.ownerSectId = "player_sect";
+            if (site.siteState == MapSiteState.Developed) site.ownerSectId = WorldMapProgressRules.PlayerSectOwnerId;
             site.lastUpdatedDay = currentDay;
             RefreshAvailableActions(site);
             SynchronizeLegacyFlags(site);
@@ -242,35 +267,46 @@ namespace Cultivation4X.WorldMap
             {
                 int danger = (int)WorldMapProgressRules.GetDanger(cell);
                 int aura = cell.totalAura >= 1.2f ? 2 : cell.totalAura >= 0.6f ? 1 : 0;
-                reward.Gold = 10 + danger * 5 + aura * 4;
+                AddSpiritStones(reward, 10 + danger * 5 + aura * 4);
                 reward.Exp = 6 + danger * 3 + aura * 2;
                 reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 1 + danger });
             }
             else if (context.actionType == MapActionType.InvestigateSpiritSpring)
-            { reward.Gold = 20; reward.Exp = 15; }
+            { AddSpiritStones(reward, 20); reward.Exp = 15; }
             else if (context.actionType == MapActionType.DevelopSpiritSpring)
             {
-                reward.Gold = 35; reward.Exp = 20;
+                AddSpiritStones(reward, 35); reward.Exp = 20;
                 reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 3 });
             }
             else
             {
                 switch (context.actionType)
                 {
-                    case MapActionType.EstablishVillageRelation: reward.Gold = 28; reward.Exp = 18; break;
+                    case MapActionType.EstablishVillageRelation: AddSpiritStones(reward, 28); reward.Exp = 18; break;
                     case MapActionType.DevelopSpiritMine:
-                        reward.Gold = 32; reward.Exp = 22;
+                        AddSpiritStones(reward, 32); reward.Exp = 22;
+                        reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 2 }); break;
+                    case MapActionType.DevelopResourceNode:
+                        AddSpiritStones(reward, 32); reward.Exp = 22;
                         reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 2 }); break;
                     case MapActionType.BuildCaveResidenceOutpost:
-                        reward.Gold = 30; reward.Exp = 24;
+                        AddSpiritStones(reward, 30); reward.Exp = 24;
                         reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 2 }); break;
                     case MapActionType.ClearBeastLair:
-                        reward.Gold = 24; reward.Exp = 20;
+                        AddSpiritStones(reward, 24); reward.Exp = 20;
                         reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 1 }); break;
-                    case MapActionType.InvestigateRuin: reward.Gold = 26; reward.Exp = 25; break;
+                    case MapActionType.InvestigateRuin: AddSpiritStones(reward, 26); reward.Exp = 25; break;
                 }
             }
             return reward;
+        }
+
+        private static void AddSpiritStones(Reward reward, int count)
+        {
+            if (reward == null || count <= 0) return;
+            ItemReward existing = reward.Items.FirstOrDefault(item => item?.itemId == FacilityRules.SpiritStoneId);
+            if (existing == null) reward.Items.Add(new ItemReward { itemId = FacilityRules.SpiritStoneId, count = count });
+            else existing.count += count;
         }
 
         public static MapSiteData FindSite(WorldMapProgressState progress, string siteId) =>
@@ -286,6 +322,7 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.CaveResidence: return "洞府";
                 case MapSiteType.BeastLair: return "兽巢";
                 case MapSiteType.Ruin: return "遗迹";
+                case MapSiteType.ResourceNode: return "青木森林";
                 default: return "宗门驻地";
             }
         }
@@ -328,7 +365,9 @@ namespace Cultivation4X.WorldMap
         private static IEnumerable<int> RankedCells(WorldMap map, CandidateRankingContext ranking,
             MapSiteType type, QiRevivalStage stage) =>
             map.cells.Where(cell => cell != null)
-                .OrderByDescending(IsPreferredContentCell)
+                .OrderByDescending(cell => type == MapSiteType.ResourceNode &&
+                    (cell.biome == BiomeType.TemperateForest || cell.biome == BiomeType.Rainforest))
+                .ThenByDescending(IsPreferredContentCell)
                 .ThenByDescending(cell => ScoreSuitability(map, ranking, cell, type, stage))
                 .ThenBy(cell => StableUnsigned(map.effectiveSeed,
                     "map-content-" + type + "-" + cell.index))
@@ -377,6 +416,13 @@ namespace Cultivation4X.WorldMap
                     score += cell.biome == BiomeType.Desert || cell.biome == BiomeType.Alpine ? 210 : 0;
                     score += regionType == MapRegionType.Desert || regionType == MapRegionType.Hills || regionType == MapRegionType.Valley ? 120 : 0;
                     score += (int)((cell.elementalAura.earth + cell.elementalAura.metal) * 70f); break;
+                case MapSiteType.ResourceNode:
+                    score += cell.biome == BiomeType.TemperateForest || cell.biome == BiomeType.Rainforest ? 500 : 0;
+                    score += regionType == MapRegionType.Forest ? 180 : 0;
+                    score += cell.internalPositionTag == MapInternalPositionTag.AncientGrove ||
+                             cell.internalPositionTag == MapInternalPositionTag.HerbSlope ||
+                             cell.internalPositionTag == MapInternalPositionTag.DeepForest ? 80 : 0;
+                    score += (int)(cell.elementalAura.wood * 220f); break;
             }
             return score;
         }
@@ -440,6 +486,7 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Village: return new List<string> { "human", "settlement" };
                 case MapSiteType.SpiritSpring: return new List<string> { "water", "aura", "resource" };
                 case MapSiteType.SpiritMine: return new List<string> { "mineral", "aura", "resource" };
+                case MapSiteType.ResourceNode: return new List<string> { "forest", "herb", "resource" };
                 case MapSiteType.CaveResidence: return new List<string> { "cave", "cultivator" };
                 case MapSiteType.BeastLair: return new List<string> { "beast", "danger" };
                 default: return new List<string> { "ruin", "ancient" };
@@ -458,7 +505,8 @@ namespace Cultivation4X.WorldMap
                 {
                     case MapSiteType.SpiritSpring: site.availableActionIds.Add(InvestigateActionId); break;
                     case MapSiteType.Village: site.availableActionIds.Add(EstablishVillageRelationActionId); break;
-                    case MapSiteType.SpiritMine: site.availableActionIds.Add(DevelopSpiritMineActionId); break;
+                    case MapSiteType.SpiritMine:
+                    case MapSiteType.ResourceNode: site.availableActionIds.Add(DevelopResourceNodeActionId); break;
                     case MapSiteType.CaveResidence: site.availableActionIds.Add(BuildCaveResidenceOutpostActionId); break;
                     case MapSiteType.BeastLair: site.availableActionIds.Add(ClearBeastLairActionId); break;
                     case MapSiteType.Ruin: site.availableActionIds.Add(InvestigateRuinActionId); break;
@@ -479,7 +527,8 @@ namespace Cultivation4X.WorldMap
             switch (site.siteType)
             {
                 case MapSiteType.Village: return MapActionType.EstablishVillageRelation;
-                case MapSiteType.SpiritMine: return MapActionType.DevelopSpiritMine;
+                case MapSiteType.SpiritMine:
+                case MapSiteType.ResourceNode: return MapActionType.DevelopResourceNode;
                 case MapSiteType.CaveResidence: return MapActionType.BuildCaveResidenceOutpost;
                 case MapSiteType.BeastLair: return MapActionType.ClearBeastLair;
                 case MapSiteType.Ruin: return MapActionType.InvestigateRuin;
@@ -496,6 +545,7 @@ namespace Cultivation4X.WorldMap
                 case MapActionType.DevelopSpiritSpring: return DevelopSpiritSpringMissionId;
                 case MapActionType.EstablishVillageRelation: return EstablishVillageRelationMissionId;
                 case MapActionType.DevelopSpiritMine: return DevelopSpiritMineMissionId;
+                case MapActionType.DevelopResourceNode: return DevelopResourceNodeMissionId;
                 case MapActionType.BuildCaveResidenceOutpost: return BuildCaveResidenceOutpostMissionId;
                 case MapActionType.ClearBeastLair: return ClearBeastLairMissionId;
                 case MapActionType.InvestigateRuin: return InvestigateRuinMissionId;
@@ -511,6 +561,7 @@ namespace Cultivation4X.WorldMap
                 case MapActionType.DevelopSpiritSpring: return DevelopActionId;
                 case MapActionType.EstablishVillageRelation: return EstablishVillageRelationActionId;
                 case MapActionType.DevelopSpiritMine: return DevelopSpiritMineActionId;
+                case MapActionType.DevelopResourceNode: return DevelopResourceNodeActionId;
                 case MapActionType.BuildCaveResidenceOutpost: return BuildCaveResidenceOutpostActionId;
                 case MapActionType.ClearBeastLair: return ClearBeastLairActionId;
                 case MapActionType.InvestigateRuin: return InvestigateRuinActionId;
@@ -526,6 +577,7 @@ namespace Cultivation4X.WorldMap
                 case MapActionType.DevelopSpiritSpring: return MapSiteType.SpiritSpring;
                 case MapActionType.EstablishVillageRelation: return MapSiteType.Village;
                 case MapActionType.DevelopSpiritMine: return MapSiteType.SpiritMine;
+                case MapActionType.DevelopResourceNode: return MapSiteType.ResourceNode;
                 case MapActionType.BuildCaveResidenceOutpost: return MapSiteType.CaveResidence;
                 case MapActionType.ClearBeastLair: return MapSiteType.BeastLair;
                 case MapActionType.InvestigateRuin: return MapSiteType.Ruin;
@@ -534,6 +586,13 @@ namespace Cultivation4X.WorldMap
         }
 
         private static bool IsCandidate(MapSiteData site) => site != null && site.siteType != MapSiteType.SectBase;
+
+        public static bool ActionMatchesSite(MapActionType action, MapSiteType siteType)
+        {
+            if (action == MapActionType.DevelopResourceNode)
+                return siteType == MapSiteType.ResourceNode || siteType == MapSiteType.SpiritMine;
+            return siteType == SiteTypeForAction(action);
+        }
 
         private static int HintChance(CellInfluenceRuntimeState state)
         {
@@ -556,7 +615,5 @@ namespace Cultivation4X.WorldMap
         private static uint StableUnsigned(int seed, string label) =>
             unchecked((uint)SeedDerivation.Derive(seed, label));
 
-        private static uint DiscoveryRoll(WorldMap map, string siteId, int cellIndex) =>
-            StableUnsigned(map.effectiveSeed, "map-content-discover-" + siteId + "-" + cellIndex) % 100u;
     }
 }

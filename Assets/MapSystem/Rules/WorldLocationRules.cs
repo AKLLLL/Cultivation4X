@@ -20,11 +20,20 @@ namespace Cultivation4X.WorldMap
         /// </summary>
         public static WorldLocation CreateStarterVillage(WorldMap map, int sectCellIndex)
         {
+            return CreateStarterVillage(map, sectCellIndex, null);
+        }
+
+        public static WorldLocation CreateStarterVillage(WorldMap map, int sectCellIndex,
+            WorldMapProgressState progress)
+        {
             if (map?.cells == null || sectCellIndex < 0 || sectCellIndex >= map.cells.Length)
                 return null;
             if (map.GetLocation(StarterVillageId) != null) return map.GetLocation(StarterVillageId);
 
-            int villageCell = SelectStarterVillageCell(map, sectCellIndex);
+            HashSet<int> reservedMapSiteCells = new HashSet<int>(progress?.mapSites?
+                .Where(site => site != null)
+                .Select(site => site.cellIndex) ?? Enumerable.Empty<int>());
+            int villageCell = SelectStarterVillageCell(map, sectCellIndex, reservedMapSiteCells);
             if (villageCell < 0) return null;
 
             WorldCell cell = map.cells[villageCell];
@@ -91,7 +100,7 @@ namespace Cultivation4X.WorldMap
                 type = LocationType.Sect,
                 position = new Vector2Int(cell.coord.col, cell.coord.row),
                 name = string.IsNullOrWhiteSpace(sectName) ? "玩家宗门" : sectName,
-                ownerId = "player_sect",
+                ownerId = WorldMapProgressRules.PlayerSectOwnerId,
                 level = 1,
                 state = LocationState.Active,
                 availableActions = new List<LocationAction>
@@ -119,8 +128,8 @@ namespace Cultivation4X.WorldMap
             return location;
         }
         /// <summary>
-        /// 把既有 MapSiteData 内容同步为 WorldLocation 门面。
-        /// MapSiteData 仍负责真实玩法数据；WorldLocation 只负责地图展示与行动入口。
+        /// 把已发现的 MapSiteData 内容同步为 WorldLocation 门面。
+        /// MapSiteData 仍负责真实玩法数据；Hidden/Hinted 不创建门面。
         /// </summary>
         public static void SynchronizeFromMapSites(WorldMap map, WorldMapProgressState progress)
         {
@@ -130,8 +139,7 @@ namespace Cultivation4X.WorldMap
             foreach (MapSiteData site in progress.mapSites)
             {
                 if (site == null || site.siteType == MapSiteType.SectBase) continue;
-                if (site.siteType == MapSiteType.Village && map.GetLocation(StarterVillageId) != null)
-                    continue;
+                if (site.revealState != MapContentRevealState.Discovered) continue;
                 if (site.cellIndex < 0 || site.cellIndex >= map.cells.Length) continue;
                 LocationType type = MapLocationType(site.siteType);
                 if (type == LocationType.None) continue;
@@ -146,10 +154,8 @@ namespace Cultivation4X.WorldMap
                         : site.siteName;
                     location.ownerId = site.ownerSectId;
                     location.state = LocationStateFromSite(site);
-                    location.availableActions = location.availableActions ??
-                        new List<LocationAction>();
-                    location.availableMissionIds = location.availableMissionIds ??
-                        new List<string>();
+                    location.availableActions = MapSiteActions(site);
+                    location.availableMissionIds = MapSiteDefaultMissionIds(site.siteType);
                 }
                 else
                 {
@@ -164,17 +170,7 @@ namespace Cultivation4X.WorldMap
                         level = 1,
                         state = LocationStateFromSite(site),
                         sourceMapSiteId = site.siteId,
-                        availableActions = new List<LocationAction>
-                        {
-                            new LocationAction
-                            {
-                                id = site.siteId + "_status",
-                                actionType = LocationActionType.ViewStatus,
-                                displayName = "查看地点状态",
-                                cost = 0,
-                                available = true
-                            }
-                        },
+                        availableActions = MapSiteActions(site),
                         availableMissionIds = MapSiteDefaultMissionIds(site.siteType)
                     };
                     map.locations[id] = location;
@@ -232,6 +228,7 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Village: return LocationType.Village;
                 case MapSiteType.SpiritSpring:
                 case MapSiteType.SpiritMine:
+                case MapSiteType.ResourceNode:
                 case MapSiteType.CaveResidence:
                     return LocationType.ResourceNode;
                 case MapSiteType.BeastLair: return LocationType.MonsterNest;
@@ -253,8 +250,11 @@ namespace Cultivation4X.WorldMap
             switch (siteType)
             {
                 case MapSiteType.SpiritSpring:
-                case MapSiteType.SpiritMine:
                     return new List<string> { "resource_001" };
+                case MapSiteType.SpiritMine:
+                case MapSiteType.ResourceNode:
+                    // 资源开发需要 MapMissionContext，由地点行动进入 OpenSelectedAction。
+                    return new List<string>();
                 case MapSiteType.CaveResidence:
                 case MapSiteType.Ruin:
                     return new List<string> { "exploration_001" };
@@ -273,6 +273,32 @@ namespace Cultivation4X.WorldMap
             }
         }
 
+        private static List<LocationAction> MapSiteActions(MapSiteData site)
+        {
+            List<LocationAction> actions = new List<LocationAction>
+            {
+                new LocationAction
+                {
+                    id = site.siteId + "_status",
+                    actionType = LocationActionType.ViewStatus,
+                    displayName = "查看地点状态",
+                    cost = 0,
+                    available = true
+                }
+            };
+            if ((site.siteType == MapSiteType.SpiritMine || site.siteType == MapSiteType.ResourceNode) &&
+                site.siteState != MapSiteState.Developed)
+                actions.Add(new LocationAction
+                {
+                    id = site.siteId + "_develop",
+                    actionType = LocationActionType.DevelopResourceNode,
+                    displayName = site.siteType == MapSiteType.SpiritMine ? "开发灵矿" : "开发青木森林",
+                    cost = 0,
+                    available = true
+                });
+            return actions;
+        }
+
         private static string MapSiteDefaultName(MapSiteType siteType)
         {
             switch (siteType)
@@ -280,6 +306,7 @@ namespace Cultivation4X.WorldMap
                 case MapSiteType.Village: return "村庄";
                 case MapSiteType.SpiritSpring: return "灵泉";
                 case MapSiteType.SpiritMine: return "灵矿";
+                case MapSiteType.ResourceNode: return "青木森林";
                 case MapSiteType.CaveResidence: return "洞府";
                 case MapSiteType.BeastLair: return "兽巢";
                 case MapSiteType.Ruin: return "遗迹";
@@ -287,17 +314,18 @@ namespace Cultivation4X.WorldMap
             }
         }
 
-        private static int SelectStarterVillageCell(WorldMap map, int sectCellIndex)
+        private static int SelectStarterVillageCell(WorldMap map, int sectCellIndex,
+            HashSet<int> reservedMapSiteCells)
         {
             int[] firstRing = map.GetNeighborIndices(sectCellIndex)
-                .Where(index => IsVillageCandidate(map, index, sectCellIndex))
+                .Where(index => IsVillageCandidate(map, index, sectCellIndex, reservedMapSiteCells))
                 .ToArray();
             if (firstRing.Length > 0)
                 return PickStable(map, firstRing, sectCellIndex);
 
             int[] secondRing = map.GetNeighborIndices(sectCellIndex)
                 .SelectMany(map.GetNeighborIndices)
-                .Where(index => IsVillageCandidate(map, index, sectCellIndex))
+                .Where(index => IsVillageCandidate(map, index, sectCellIndex, reservedMapSiteCells))
                 .Distinct()
                 .ToArray();
             return secondRing.Length > 0
@@ -305,9 +333,11 @@ namespace Cultivation4X.WorldMap
                 : -1;
         }
 
-        private static bool IsVillageCandidate(WorldMap map, int index, int sectCellIndex)
+        private static bool IsVillageCandidate(WorldMap map, int index, int sectCellIndex,
+            HashSet<int> reservedMapSiteCells)
         {
-            if (index == sectCellIndex || index < 0 || index >= map.cells.Length) return false;
+            if (index == sectCellIndex || index < 0 || index >= map.cells.Length ||
+                reservedMapSiteCells?.Contains(index) == true) return false;
             WorldCell cell = map.cells[index];
             return cell != null && cell.isBuildable &&
                    cell.landform != LandformType.DeepWater &&

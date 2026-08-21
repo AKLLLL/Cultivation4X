@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Cultivation4X.WorldMap;
 using UnityEngine;
 
 /// <summary>
@@ -22,8 +23,8 @@ public class TimeManager : MonoBehaviour
     public event Action<int> OnDayPassed;
     public event Action<DaySettlementSummary> OnDaySettlementReady;
     private readonly System.Collections.Generic.List<FacilityUpgradeRecord> facilityUpgrades = new System.Collections.Generic.List<FacilityUpgradeRecord>();
-    private int preAdvanceGoldChange;
-    private int preAdvanceMaterialChange;
+    private readonly System.Collections.Generic.Dictionary<string, int> preAdvanceItemChanges =
+        new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
     private readonly System.Collections.Generic.List<string> threatNotices = new System.Collections.Generic.List<string>();
     private bool isAdvancingDay;
     public DaySettlementSummary UnreadDaySettlement { get; private set; }
@@ -61,14 +62,18 @@ public class TimeManager : MonoBehaviour
 
             Debug.Log($"今天是第 {CurrentDay} 天");
 
-            // 固定顺序：角色恢复/修炼 -> 任务推进 -> 外部威胁 -> 事件抽取 -> 结算 -> 自动保存。
+            // 固定顺序：角色恢复/修炼 -> 任务推进 -> 外部威胁 -> 事件抽取 -> 月产出 -> 结算 -> 自动保存。
             NPCManager.Instance?.OnDayPassed();
             Cultivation4X.WorldMap.WorldMapContentEffects.ApplyDaily(CurrentDay);
             OnDayPassed?.Invoke(CurrentDay);
             ExternalThreatRules.ProcessDay(CurrentDay);
             EventManager.Instance?.ProcessDay(CurrentDay);
+            System.Collections.Generic.List<ResourceProductionRecord> monthlyProduction =
+                CurrentDay > 0 && CurrentDay % ResourceManager.DaysPerMonth == 0
+                    ? ResourceManager.MonthUpdate(CurrentDay, CurrentDay / ResourceManager.DaysPerMonth)
+                    : new System.Collections.Generic.List<ResourceProductionRecord>();
             isAdvancingDay = false;
-            UnreadDaySettlement = BuildSettlement(before);
+            UnreadDaySettlement = BuildSettlement(before, monthlyProduction);
             SaveManager.Instance?.AutoSave();
             OnDaySettlementReady?.Invoke(UnreadDaySettlement);
         }
@@ -87,11 +92,11 @@ public class TimeManager : MonoBehaviour
         facilityUpgrades.Add(new FacilityUpgradeRecord { facility = facility, newLevel = newLevel });
     }
 
-    public void RecordPreAdvanceResourceChange(int goldChange, int basicMaterialChange)
+    public void RecordPreAdvanceItemChange(string itemId, int countChange)
     {
-        if (isAdvancingDay) return;
-        preAdvanceGoldChange += goldChange;
-        preAdvanceMaterialChange += basicMaterialChange;
+        if (isAdvancingDay || string.IsNullOrWhiteSpace(itemId) || countChange == 0) return;
+        preAdvanceItemChanges.TryGetValue(itemId, out int current);
+        preAdvanceItemChanges[itemId] = current + countChange;
     }
 
     public void RecordThreatNotice(string notice)
@@ -111,9 +116,8 @@ public class TimeManager : MonoBehaviour
     {
         DayStartSnapshot result = new DayStartSnapshot
         {
-            gold = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.gold,
             reputation = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation,
-            material = WarehouseManager.Instance == null ? 0 : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId)
+            items = CaptureWarehouseCounts()
         };
         if (NPCManager.Instance != null)
             foreach (NPCRuntime npc in NPCManager.Instance.GetAllNPC())
@@ -125,14 +129,24 @@ public class TimeManager : MonoBehaviour
         return result;
     }
 
-    private DaySettlementSummary BuildSettlement(DayStartSnapshot before)
+    private DaySettlementSummary BuildSettlement(DayStartSnapshot before,
+        System.Collections.Generic.List<ResourceProductionRecord> monthlyProduction)
     {
+        System.Collections.Generic.Dictionary<string, int> after = CaptureWarehouseCounts();
         DaySettlementSummary result = new DaySettlementSummary
         {
             day = CurrentDay,
-            goldChange = ((PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.gold) - before.gold) + preAdvanceGoldChange,
             reputationChange = (PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation) - before.reputation,
-            basicMaterialChange = ((WarehouseManager.Instance == null ? 0 : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId)) - before.material) + preAdvanceMaterialChange,
+            itemChanges = before.items.Keys.Concat(after.Keys).Concat(preAdvanceItemChanges.Keys)
+                .Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal)
+                .Select(id => new ItemDayChange
+                {
+                    itemId = id,
+                    countChange = (after.TryGetValue(id, out int current) ? current : 0) -
+                                  (before.items.TryGetValue(id, out int previous) ? previous : 0) +
+                                  (preAdvanceItemChanges.TryGetValue(id, out int prior) ? prior : 0)
+                }).Where(change => change.countChange != 0).ToList(),
+            resourceProduction = monthlyProduction ?? new System.Collections.Generic.List<ResourceProductionRecord>(),
             missionResults = MissionManager.Instance == null ? new System.Collections.Generic.List<MissionDayResult>() : MissionManager.Instance.ConsumeDailyResults(),
             newEventTitles = (EventManager.Instance == null ? new System.Collections.Generic.List<string>() : EventManager.Instance.ConsumeNewEventTitles())
                 .Concat(threatNotices).ToList(),
@@ -140,8 +154,7 @@ public class TimeManager : MonoBehaviour
         };
         facilityUpgrades.Clear();
         threatNotices.Clear();
-        preAdvanceGoldChange = 0;
-        preAdvanceMaterialChange = 0;
+        preAdvanceItemChanges.Clear();
         if (NPCManager.Instance != null)
             foreach (NPCRuntime npc in NPCManager.Instance.GetAllNPC())
             {
@@ -159,10 +172,23 @@ public class TimeManager : MonoBehaviour
 
     private class DayStartSnapshot
     {
-        public int gold;
         public int reputation;
-        public int material;
+        public System.Collections.Generic.Dictionary<string, int> items =
+            new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
         public System.Collections.Generic.Dictionary<string, CharacterSnapshot> characters = new System.Collections.Generic.Dictionary<string, CharacterSnapshot>();
+    }
+
+    private static System.Collections.Generic.Dictionary<string, int> CaptureWarehouseCounts()
+    {
+        var result = new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (ItemStack item in WarehouseManager.Instance?.GetWarehouseData()?.items ??
+                 new System.Collections.Generic.List<ItemStack>())
+        {
+            if (item == null || string.IsNullOrWhiteSpace(item.itemId) || item.count <= 0) continue;
+            result.TryGetValue(item.itemId, out int current);
+            result[item.itemId] = current + item.count;
+        }
+        return result;
     }
 
     private class CharacterSnapshot

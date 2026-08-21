@@ -402,11 +402,16 @@ namespace Cultivation4X.WorldMap
             bool selecting = PlayerManager.Instance?.playerData?.founding?.stage == FoundingStage.WorldSelection;
             if (details != null)
             {
-                details.text = selectedCellIndex < 0 && selecting
-                    ? "请在地图上选择可建设格作为洞府。"
-                    : WorldMapCellDetailsFormatter.Format(map, selectedCellIndex, viewMode, selecting,
-                        VisibleMarkersForDetails(), WorldMapSession.Progress, PlayerManager.Instance?.playerData);
-                details.text += DebugRegionSummary();
+                MapSiteData hintedSite = WorldMapSession.Progress?.mapSites?.FirstOrDefault(site => site != null &&
+                    site.siteType != MapSiteType.SectBase && site.cellIndex == selectedCellIndex &&
+                    site.revealState == MapContentRevealState.Hinted);
+                details.text = hintedSite != null
+                    ? "未知线索\n预计耗时：2 天"
+                    : selectedCellIndex < 0 && selecting
+                        ? "请在地图上选择可建设格作为洞府。"
+                        : WorldMapCellDetailsFormatter.Format(map, selectedCellIndex, viewMode, selecting,
+                            VisibleMarkersForDetails(), WorldMapSession.Progress, PlayerManager.Instance?.playerData) +
+                          DebugRegionSummary();
                 float availableWidth = details.rectTransform.rect.width;
                 if (availableWidth <= 1f)
                     availableWidth = Mathf.Max(120f, (hudControls == null ? 240f : hudControls.rect.width) - 64f);
@@ -443,7 +448,7 @@ namespace Cultivation4X.WorldMap
                 item != null && item.cellIndex == selectedCellIndex && item.siteType != MapSiteType.SectBase) : null;
             SetButtonLabel(investigateSpringButton, site == null ? "调查" : WorldMapContentRules.SiteTypeLabel(site.siteType));
             SetButtonLabel(developSpringButton, "开发灵泉");
-            SetActionButton(exploreCellButton, established && site?.revealState != MapContentRevealState.Discovered,
+            SetActionButton(exploreCellButton, established && site?.revealState == MapContentRevealState.Hinted,
                 new MapMissionContext { actionType = MapActionType.Explore, targetCellIndex = selectedCellIndex });
             MapActionType action = WorldMapContentRules.ActionForSite(site);
             MapMissionContext actionContext = new MapMissionContext
@@ -466,6 +471,7 @@ namespace Cultivation4X.WorldMap
                 case MapActionType.DevelopSpiritSpring: return "开发灵泉";
                 case MapActionType.EstablishVillageRelation: return "建立村庄关系";
                 case MapActionType.DevelopSpiritMine: return "开发灵矿";
+                case MapActionType.DevelopResourceNode: return "开发资源节点";
                 case MapActionType.BuildCaveResidenceOutpost: return "建立洞府据点规则";
                 case MapActionType.ClearBeastLair: return "清理兽巢";
                 case MapActionType.InvestigateRuin: return "调查遗迹";
@@ -507,7 +513,8 @@ namespace Cultivation4X.WorldMap
         }
 
         private IEnumerable<WorldMapPresentationMarker> VisibleMarkersForDetails() =>
-            presentationMarkers.Where(marker => marker != null && CanShowGameplayCell(marker.cellIndex));
+            presentationMarkers.Where(marker => marker != null &&
+                (marker.kind == WorldMapMarkerKind.ContentHint || CanShowGameplayCell(marker.cellIndex)));
 
         private bool CanShowGameplayCell(int cellIndex)
         {

@@ -145,6 +145,18 @@ namespace Cultivation4X.WorldMap
                     break;
                 case WorldMapMarkerKind.ContentHint:
                     buffer.AddRing(center, size * 0.34f, line, color, 4);
+                    buffer.AddLine(center + new Vector2(-0.16f, 0.16f) * size,
+                        center + new Vector2(-0.08f, 0.30f) * size, line, color);
+                    buffer.AddLine(center + new Vector2(-0.08f, 0.30f) * size,
+                        center + new Vector2(0.10f, 0.30f) * size, line, color);
+                    buffer.AddLine(center + new Vector2(0.10f, 0.30f) * size,
+                        center + new Vector2(0.16f, 0.15f) * size, line, color);
+                    buffer.AddLine(center + new Vector2(0.16f, 0.15f) * size,
+                        center + new Vector2(0f, 0.01f) * size, line, color);
+                    buffer.AddLine(center + new Vector2(0f, 0.01f) * size,
+                        center + new Vector2(0f, -0.10f) * size, line, color);
+                    buffer.AddRing(center + new Vector2(0f, -0.23f) * size,
+                        size * 0.035f, line, color, 6);
                     break;
                 case WorldMapMarkerKind.SpiritSpring:
                     buffer.AddRing(center, size * 0.40f, line, color, 16);

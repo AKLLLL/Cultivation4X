@@ -70,6 +70,41 @@ public class WorldMap3DControllerTests
     }
 
     [Test]
+    public void RenderPipeline_FirstApplyImmediatelyRendersHintMarker()
+    {
+        WorldMap map = CreateSmallMap(7402);
+        var progress = new WorldMapProgressState
+        {
+            mapSites = new List<MapSiteData>
+            {
+                new MapSiteData
+                {
+                    siteId = "hint", siteName = "不应显示", siteType = MapSiteType.Ruin,
+                    cellIndex = 1, revealState = MapContentRevealState.Hinted
+                }
+            }
+        };
+        GameObject root = new GameObject("InitialHintRenderTest");
+        try
+        {
+            WorldMapRenderPipeline pipeline = root.AddComponent<WorldMapRenderPipeline>();
+            MapIconRenderer icons = root.AddComponent<MapIconRenderer>();
+            typeof(WorldMapRenderPipeline).GetField("iconRenderer",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(pipeline, icons);
+
+            pipeline.ApplyMap(map, progress, 0, false);
+
+            Assert.AreEqual(1, icons.IconCount,
+                "首次 ApplyMap 必须同步刷新动态图标，不能等待后续进度变化");
+        }
+        finally
+        {
+            Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
     public void InteractionController_SelectCellRaisesEventOnce()
     {
         GameObject root = new GameObject("InteractionTest");

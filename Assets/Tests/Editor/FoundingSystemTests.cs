@@ -117,9 +117,11 @@ public class FoundingSystemTests
     [Test]
     public void NewFoundingGame_UsesZeroFacilitiesButKeepsStarterResources()
     {
+        WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
+        WarehouseManager.Instance = warehouse;
         PlayerManager player = Add<PlayerManager>("Player");
         player.InitializeNewFoundingGame(91);
-        Assert.AreEqual(100, player.playerData.gold);
+        Assert.AreEqual(100, warehouse.GetItemCount(FacilityRules.SpiritStoneId));
         Assert.AreEqual(0, player.GetFacilityLevel(FacilityType.MissionHall));
         Assert.AreEqual(10, player.playerData.founding.candidates.Count);
     }
@@ -311,6 +313,49 @@ public class FoundingSystemTests
         Assert.AreEqual(0, player.playerData.founding.village.reservedLabor);
         Assert.AreEqual(7, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
         Assert.AreEqual(0, missions.GetActiveMissions().Count);
+    }
+
+    [Test]
+    public void GameFlowPermission_SectEstablishedOnlyDependsOnRealState()
+    {
+        FoundingState founded = new FoundingState { sectCreated = true, stage = FoundingStage.CandidateSelection, completed = false };
+        FoundingState developing = new FoundingState { sectCreated = true, stage = FoundingStage.Cave, completed = false };
+        FoundingState developed = new FoundingState { sectCreated = true, stage = FoundingStage.Completed, completed = true };
+        FoundingState beforeFounding = new FoundingState { sectCreated = false, stage = FoundingStage.CandidateSelection, completed = false };
+
+        Assert.IsTrue(GameFlowPermission.IsSectEstablished(founded),
+            "sectCreated 是真实状态，不要求 stage 或 completed");
+        Assert.IsTrue(GameFlowPermission.IsSectEstablished(developing));
+        Assert.IsTrue(GameFlowPermission.IsSectEstablished(developed));
+        Assert.IsFalse(GameFlowPermission.IsSectEstablished(beforeFounding));
+        Assert.IsFalse(GameFlowPermission.IsFoundingDevelopmentComplete(developing));
+        Assert.IsTrue(GameFlowPermission.IsFoundingDevelopmentComplete(developed));
+        Assert.IsFalse(GameFlowPermission.HasReachedCave(founded));
+        Assert.IsTrue(GameFlowPermission.HasReachedCave(developing));
+    }
+
+    [Test]
+    public void OrdinaryMissionVisibility_RequiresSectCreatedInsteadOfDevelopmentComplete()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        MissionManager manager = Add<MissionManager>("Missions");
+        PlayerManager.Instance = player;
+        MissionManager.Instance = manager;
+        player.playerData.founding = new FoundingState
+        {
+            initialized = true,
+            sectCreated = false,
+            completed = false,
+            stage = FoundingStage.Cave,
+            village = new VillageState(),
+            externalThreat = new ActiveThreatState()
+        };
+        MissionData ordinary = new MissionData { id = "perm-ordinary", missionRank = 1, requiredFacilityLevel = 0 };
+
+        Assert.IsFalse(manager.IsMissionVisible(ordinary), "发展未完成前普通任务仍应按宗门成立状态解锁");
+        player.playerData.founding.sectCreated = true;
+        Assert.IsTrue(manager.IsMissionVisible(ordinary), "选址完成即宗门成立，普通任务应立即可见");
+        Assert.IsFalse(player.playerData.founding.completed);
     }
 
     private T Add<T>(string name) where T : Component

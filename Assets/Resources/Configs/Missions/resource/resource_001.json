@@ -9,11 +9,11 @@
 
     "needDays": 6,
 
-    "goldReward": 60,
+
     "expReward": 100,
 
     "itemRewards":
-    [
+    [{"itemId":"LingShi_001","count":60},
     {
      "itemId":"herb_001",
      "count":3
@@ -24,7 +24,7 @@
     "requiredIntelligence": 8,
     "preferredTechniqueTags":["wood","herb","recovery"],
     "preferredTraitIds":["diligent","cautious"],
-    
+
     "nodes":
     [
         {
