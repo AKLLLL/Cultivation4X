@@ -6,5 +6,6 @@ public enum MissionState
     WaitingNode,
     Completed,
     Failed,
-    AwaitingReward
+    AwaitingReward,
+    Cancelled
 }

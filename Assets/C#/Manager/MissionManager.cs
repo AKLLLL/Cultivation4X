@@ -254,6 +254,7 @@ public class MissionManager : MonoBehaviour
             Debug.LogWarning(reason);
             return;
         }
+        TryCancelAutonomousMission(npc, out _);
         if (!npc.CanDispatch())
         {
             Debug.Log(
@@ -318,9 +319,10 @@ public class MissionManager : MonoBehaviour
 
     public bool TryStartMapMission(MapMissionContext context, NPCRuntime npc, out string reason)
     {
-        if (npc == null || !npc.CanDispatch()) { reason = "弟子当前无法执行地图任务"; return false; }
+        if (npc == null || !CanDispatchOrCancelAutonomous(npc)) { reason = "弟子当前无法执行地图任务"; return false; }
         if (!WorldMapContentRules.CanStartAction(WorldMapSession.Current, WorldMapSession.Progress, context, out reason))
             return false;
+        TryCancelAutonomousMission(npc, out _);
         if (activeMissions.Any(item => item?.MapContext != null &&
             (item.State == MissionState.Active || item.State == MissionState.WaitingNode || item.State == MissionState.AwaitingReward) &&
             item.MapContext.actionType == context.actionType &&
@@ -541,7 +543,7 @@ public class MissionManager : MonoBehaviour
     {
         MissionData data = GetMissionData(missionId);
         if (data == null) { reason = "任务不存在"; return false; }
-        if (npc == null || !npc.CanDispatch()) { reason = "弟子当前无法执行任务"; return false; }
+        if (npc == null || !CanDispatchOrCancelAutonomous(npc)) { reason = "弟子当前无法执行任务"; return false; }
         if (PlayerManager.Instance == null || WarehouseManager.Instance == null) { reason = "资源系统尚未初始化"; return false; }
         if (!IsMissionVisible(data)) { reason = "当前宗门状态未开放该任务"; return false; }
         if (data.threatMissionKind == ThreatMissionKind.Investigation && ExternalThreatRules.IsInvestigationRunning())
@@ -822,7 +824,38 @@ public class MissionManager : MonoBehaviour
             tier == MissionResultTier.Insufficient ? "能力不足" : "达标";
         npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
             "Mission", $"{result}：{data.name}", data.id);
+        if (tier != MissionResultTier.Insufficient && data.techniqueMasteryReward > 0f)
+            npc.AddTechniqueMastery(data.techniqueMasteryReward);
         DiscipleMentalStateRules.ApplyMissionResult(npc, data.id, tier);
+    }
+
+    public static bool IsAutonomousMission(MissionData data)
+    {
+        return data != null && !data.isPlayerAssignable && !string.IsNullOrWhiteSpace(data.id) &&
+            data.id.StartsWith("disciple_ai_", StringComparison.Ordinal);
+    }
+
+    public bool CanDispatchOrCancelAutonomous(NPCRuntime npc)
+    {
+        if (npc == null || !npc.Character.IsAlive) return false;
+        if (npc.CanDispatch()) return true;
+        Mission mission = npc.CurrentMission;
+        return mission != null && mission.State == MissionState.Active && IsAutonomousMission(mission.Data) &&
+            (mission.Data.nodes == null || mission.Data.nodes.Count == 0);
+    }
+
+    public bool TryCancelAutonomousMission(NPCRuntime npc, out string reason)
+    {
+        if (npc == null) { reason = "弟子不存在"; return false; }
+        if (npc.CanDispatch()) { reason = null; return true; }
+        Mission mission = npc.CurrentMission;
+        if (mission == null || !mission.CancelAutonomousByPlayer())
+        { reason = "当前行动不能无损中止"; return false; }
+        npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            "Decision", $"玩家安排中止自由行动：{mission.Data.name}", mission.Data.id);
+        SaveManager.Instance?.AutoSave();
+        reason = null;
+        return true;
     }
 
     private void RecordResult(Mission mission, MissionState state)

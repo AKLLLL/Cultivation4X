@@ -242,17 +242,19 @@ public sealed class SectWorldInterface : MonoBehaviour
     private void ShowSectAffairs()
     {
         AddSectInfoText("弟子安排", 16);
-        AddSectInfoRow("修炼比例", "50%");
-        AddSectInfoRow("宗门事务", "20%");
-        AddSectInfoRow("自由活动", "30%");
-        AddSectInfoRow("外出权限", "开启");
-
-        AddSectInfoText("月计划系统将在后续接入，当前仅展示界面入口。", 13);
+        int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+        AddSectInfoText($"当前第 {MonthlyPlanRules.MonthIndex(day)} 月；可编排第 {MonthlyPlanRules.EditableMonth(day)} 月。", 13);
+        FoundingState founding = PlayerManager.Instance?.playerData?.founding;
+        if (founding != null && founding.sectCreated)
+        {
+            Button monthlyPlan = AddSectButton("弟子月度计划", 46);
+            monthlyPlan.onClick.AddListener(() => FindRuntime<MonthlyPlanPanel>()?.OpenFromSectLayout());
+        }
+        else AddSectInfoText("正式立宗后开放月度计划。", 13);
         Button steward = AddSectButton( "打开任务堂／执事堂", 46);
         steward.onClick.AddListener(OpenStewardHall);
         Button threat = AddSectButton( "外部威胁", 46);
         threat.onClick.AddListener(() => FindRuntime<ExternalThreatPanel>()?.OpenFromSectLayout());
-        FoundingState founding = PlayerManager.Instance?.playerData?.founding;
         if (founding != null && founding.stage == FoundingStage.Cave)
         {
             Button foundingButton = AddSectButton( "洞府整备／立宗进度", 46);
@@ -415,7 +417,7 @@ public sealed class SectWorldInterface : MonoBehaviour
         Clear(summaryPanel);
         RuntimeUIFactory.Text(summaryPanel, "修炼室", 30, 48);
         RuntimeUIFactory.Text(summaryPanel,
-            $"设施等级：Lv.{level}\n当前效果：每日修为 +{FacilityRules.TrainingGain(level)}\n存活弟子：{LivingDiscipleCount()}",
+            $"设施等级：Lv.{level}\n当前效果：纳气效率 x{(level <= 0 ? 0.8f : level == 1 ? 1f : level == 2 ? 1.1f : 1.2f):0.0}\n存活弟子：{LivingDiscipleCount()}",
             19, 86);
         AddEntry(summaryPanel, "查看弟子", OpenSectDisciplesPage);
         AddCloseButton(summaryPanel);

@@ -101,6 +101,11 @@ public class TimeManager : MonoBehaviour
 
     public void RecordThreatNotice(string notice)
     {
+        RecordDayNotice(notice);
+    }
+
+    public void RecordDayNotice(string notice)
+    {
         if (!string.IsNullOrWhiteSpace(notice)) threatNotices.Add(notice);
     }
 
@@ -124,7 +129,8 @@ public class TimeManager : MonoBehaviour
             {
                 if (string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
                 result.characters[npc.CharacterId] = new CharacterSnapshot
-                { cultivation = npc.Cultivation, realm = npc.Realm, health = npc.Health };
+                { cultivation = npc.Cultivation, naqiProgress = npc.Character.naqiProgress,
+                    techniqueMastery = npc.Character.techniqueMastery, realm = npc.Realm, health = npc.Health };
             }
         return result;
     }
@@ -162,9 +168,16 @@ public class TimeManager : MonoBehaviour
                 before.characters.TryGetValue(npc.CharacterId, out CharacterSnapshot old);
                 old = old ?? new CharacterSnapshot { realm = npc.Realm, health = npc.Health };
                 int cultivationChange = npc.Cultivation - old.cultivation;
-                if (cultivationChange != 0 || old.realm != npc.Realm || old.health != npc.Health)
+                float naqiChange = npc.Character.naqiProgress - old.naqiProgress;
+                float masteryChange = npc.Character.techniqueMastery - old.techniqueMastery;
+                if (cultivationChange != 0 || naqiChange != 0f || masteryChange != 0f ||
+                    npc.Character.completedMajorCycleToday || old.realm != npc.Realm || old.health != npc.Health)
                     result.characterChanges.Add(new CharacterDayChange { characterId = npc.CharacterId, displayName = npc.Character.displayName,
-                        cultivationChange = cultivationChange, realmBefore = old.realm, realmAfter = npc.Realm,
+                        cultivationChange = cultivationChange, dailyAura = npc.Cultivation,
+                        naqiProgressChange = naqiChange, techniqueMasteryChange = masteryChange,
+                        completedMajorCycle = npc.Character.completedMajorCycleToday,
+                        qiDisorderResponse = npc.Character.qiDisorderResponse,
+                        realmBefore = old.realm, realmAfter = npc.Realm,
                         healthBefore = old.health, healthAfter = npc.Health });
             }
         return result;
@@ -194,6 +207,8 @@ public class TimeManager : MonoBehaviour
     private class CharacterSnapshot
     {
         public int cultivation;
+        public float naqiProgress;
+        public float techniqueMastery;
         public CultivationRealm realm;
         public HealthState health;
     }

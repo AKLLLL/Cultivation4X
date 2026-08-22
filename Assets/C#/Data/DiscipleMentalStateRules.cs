@@ -14,7 +14,8 @@ public static class DiscipleMentalStateRules
     public const int RestSuccessChange = 5;
     public const int RestFailureChange = -5;
     public const int GlobalAutonomyCooldownDays = 3;
-    public const string CultivationMissionId = "disciple_ai_cultivate_001";
+    public const string StudyMissionId = "disciple_ai_cultivate_001";
+    public const string CultivationMissionId = StudyMissionId;
     public const string RestMissionId = "disciple_ai_rest_001";
 
     public static void RestoreDaily(NPCRuntime npc)
@@ -27,20 +28,18 @@ public static class DiscipleMentalStateRules
     {
         if (npc?.Character == null || string.IsNullOrWhiteSpace(missionId)) return;
         bool failed = tier == MissionResultTier.Insufficient;
-        if (missionId == CultivationMissionId)
-            npc.ChangeMentalState(failed ? CultivationFailureChange : CultivationSuccessChange);
-        else if (missionId == RestMissionId)
+        if (missionId == RestMissionId)
             npc.ChangeMentalState(failed ? RestFailureChange : RestSuccessChange);
     }
 
     public static bool IsCultivationAction(ActionDefinition action)
     {
-        return action != null && action.missionId == CultivationMissionId;
+        return false;
     }
 
     public static bool IsAutonomyCoolingDown(NPCRuntime npc, int currentDay)
     {
-        int lastEndDay = DiscipleMissionBridge.GetMostRecentMissionEndDay(npc, CultivationMissionId);
+        int lastEndDay = DiscipleMissionBridge.GetMostRecentMissionEndDay(npc, StudyMissionId);
         return lastEndDay >= 0 && currentDay <= lastEndDay + GlobalAutonomyCooldownDays;
     }
 

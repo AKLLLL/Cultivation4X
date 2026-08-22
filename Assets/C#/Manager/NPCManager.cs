@@ -97,6 +97,7 @@ public class NPCManager : MonoBehaviour
                 baseIntelligence = candidate.intelligence,
                 baseAgility = candidate.agility,
                 baseComprehension = candidate.comprehension,
+                techniqueMastery = candidate.comprehension,
                 baseCombatComprehension = candidate.combatComprehension,
                 basePhysique = candidate.physique,
                 aptitudeRank = Mathf.Clamp(candidate.aptitudeRank, 1, 5),
@@ -327,6 +328,7 @@ public class NPCManager : MonoBehaviour
             age = template.age,
             level = template.level,
             exp = template.exp,
+            techniqueMastery = template.comprehension,
             traitIds = new List<string>(template.initialTraits)
         };
         NPCRuntime runtime = new NPCRuntime(template, state);
@@ -346,24 +348,45 @@ public class NPCManager : MonoBehaviour
     {
         foreach (var npc in runtimes)
         {
+            NaqiGrowthRules.StartDay(npc);
             DiscipleMentalStateRules.RestoreDaily(npc);
             bool wasInjured = npc.State == NPCState.Injured;
             npc.OnDayPassed();
             if (wasInjured && npc.State == NPCState.Idle) Recover(npc);
-            if (npc.Character.IsAlive && npc.State == NPCState.Idle)
+            if (!npc.Character.IsAlive) continue;
+            int day = CurrentDay;
+            Mission activeMission = npc.CurrentMission;
+            if (activeMission != null && (activeMission.State == MissionState.Active || activeMission.State == MissionState.WaitingNode))
             {
-                int level = PlayerManager.Instance == null ? 1 : PlayerManager.Instance.GetFacilityLevel(FacilityType.TrainingRoom);
-                int amount = npc.Character.hasGeneratedProfile
-                    ? Mathf.Max(1, npc.AptitudeRank) + Mathf.Max(0, level)
-                    : FacilityRules.TrainingGain(level);
-                if (npc.Character.HasTrait("diligent")) amount += 1;
-                if (npc.Character.HasTrait("lazy")) amount = Mathf.Max(1, amount - 1);
-                amount += FoundingRules.GetActiveEffectTotal(TechniqueEffectType.CultivationGainFlat);
-                npc.AddCultivation(amount);
-                PlayerManager.Instance?.ProcessIdleFounderDay(npc);
-                EventManager.Instance?.TryTriggerSource(EventSource.Training, npc);
+                MonthlyActivityType consumed = MissionManager.IsAutonomousMission(activeMission.Data)
+                    ? MonthlyActivityType.Free
+                    : MonthlyPlanRules.PeekScheduledActivity(npc, day);
+                MonthlyPlanRules.Consume(npc, day, consumed);
+                NaqiGrowthRules.EndDay(npc);
+                continue;
             }
+            MonthlyActivityType activity = MonthlyPlanRules.PeekScheduledActivity(npc, day);
+            MonthlyPlanRules.Consume(npc, day, activity);
+            if (npc.State == NPCState.Idle)
+            {
+                if (activity == MonthlyActivityType.Training)
+                    NaqiGrowthRules.ProcessTrainingDay(npc, day);
+                else if (activity == MonthlyActivityType.SectDuty)
+                    ProcessSectDutyDay();
+            }
+            NaqiGrowthRules.EndDay(npc);
         }
+    }
+
+    private static void ProcessSectDutyDay()
+    {
+        PlayerData player = PlayerManager.Instance?.playerData;
+        if (player == null) return;
+        player.sectDutyWorkCredit++;
+        if (player.sectDutyWorkCredit < 5) return;
+        player.sectDutyWorkCredit -= 5;
+        if (WarehouseManager.Instance == null || !WarehouseManager.Instance.TryAddItem(FacilityRules.BasicMaterialId, 1))
+            TimeManager.Instance?.RecordDayNotice("宗门事务产出的基础材料因仓库容量不足而损失");
     }
 
     private int CurrentDay => TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
@@ -444,6 +467,10 @@ public class NPCManager : MonoBehaviour
                 !string.IsNullOrWhiteSpace(item.targetCharacterId))
             .ToList();
         state.lifeRecords = state.lifeRecords ?? new List<LifeRecord>();
+        state.cultivation = Mathf.Clamp(state.cultivation, 0, 100);
+        state.naqiProgress = Mathf.Clamp(state.naqiProgress, 0f, 100f);
+        state.techniqueMastery = Mathf.Clamp(state.techniqueMastery, 0f, 100f);
+        state.qiDisorderRemainingDays = Mathf.Max(0, state.qiDisorderRemainingDays);
     }
 
 }

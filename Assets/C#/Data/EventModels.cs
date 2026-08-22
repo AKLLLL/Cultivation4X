@@ -29,7 +29,8 @@ public enum EventEffectType
     ScheduleEvent,
     Recruit,
     AddTechniqueUnderstanding,
-    AddVillageRelation
+    AddVillageRelation,
+    SetQiDisorderResponse
 }
 
 public enum EventSource

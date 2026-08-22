@@ -330,12 +330,16 @@ public class SaveManager : MonoBehaviour
             if (character.hasGeneratedProfile && character.baseCombatComprehension <= 0)
                 character.baseCombatComprehension = Mathf.Max(0, character.baseComprehension);
         }
+        if (state.sect != null)
+            state.sect.monthlyPlans = state.sect.monthlyPlans ?? new System.Collections.Generic.List<MonthlyDisciplePlan>();
         state.version = SaveDataVersion.Current;
     }
 
     private static void NormalizeCurrentVersionCollections(GameState state)
     {
         if (state == null) return;
+        if (state.sect != null)
+            state.sect.monthlyPlans = state.sect.monthlyPlans ?? new System.Collections.Generic.List<MonthlyDisciplePlan>();
         if (state.worldMap != null)
         {
             state.worldMap.regions = state.worldMap.regions ?? new System.Collections.Generic.List<MapRegionData>();
@@ -389,8 +393,36 @@ public class SaveManager : MonoBehaviour
             throw new InvalidDataException("存档缺少世界地图快照");
         if (state.characters == null || state.characters.Any(character => character == null ||
             character.mentalState < DiscipleMentalStateRules.MinMentalState ||
-            character.mentalState > DiscipleMentalStateRules.MaxMentalState))
-            throw new InvalidDataException("弟子心境数据无效");
+            character.mentalState > DiscipleMentalStateRules.MaxMentalState ||
+            character.cultivation < 0 || character.cultivation > 100 ||
+            character.naqiProgress < 0f || character.naqiProgress > 100f ||
+            character.techniqueMastery < 0f || character.techniqueMastery > 100f ||
+            character.qiDisorderRemainingDays < 0 ||
+            !Enum.IsDefined(typeof(QiDisorderResponse), character.qiDisorderResponse)))
+            throw new InvalidDataException("弟子纳气、心境或紊乱数据无效");
+        if (state.sect == null || state.sect.sectDutyWorkCredit < 0 || state.sect.sectDutyWorkCredit >= 5 ||
+            state.sect.monthlyPlans == null || state.sect.monthlyPlans.Any(plan => plan == null ||
+                string.IsNullOrWhiteSpace(plan.characterId) || plan.monthIndex < 1 ||
+                plan.trainingPercent < 0 || plan.trainingPercent > 100 || plan.trainingPercent % 10 != 0 ||
+                plan.sectDutyPercent < 0 || plan.sectDutyPercent > 100 || plan.sectDutyPercent % 10 != 0 ||
+                plan.freePercent < 0 || plan.freePercent > 100 || plan.freePercent % 10 != 0 ||
+                plan.trainingPercent + plan.sectDutyPercent + plan.freePercent != 100 ||
+                plan.usedTrainingDays < 0 || plan.usedSectDutyDays < 0 || plan.usedFreeDays < 0 ||
+                plan.transferredTrainingDays < 0 || plan.transferredTrainingDays > 30 ||
+                plan.usedTrainingDays + plan.transferredTrainingDays > plan.trainingPercent * MonthlyPlanRules.DaysPerMonth / 100 ||
+                plan.usedSectDutyDays > plan.sectDutyPercent * MonthlyPlanRules.DaysPerMonth / 100 ||
+                plan.usedFreeDays > plan.freePercent * MonthlyPlanRules.DaysPerMonth / 100 + plan.transferredTrainingDays ||
+                plan.usedTrainingDays + plan.usedSectDutyDays + plan.usedFreeDays > MonthlyPlanRules.DaysPerMonth))
+            throw new InvalidDataException("月度弟子计划数据无效");
+        if (state.activeMissions == null || state.activeMissions.Any(mission => mission == null ||
+            mission.state == MissionState.Cancelled || mission.remainingDays < 0 || mission.elapsedDays < 0))
+            throw new InvalidDataException("活动任务状态无效");
+        if (state.eventInbox == null || state.pendingEvents == null ||
+            state.eventInbox.GroupBy(item => RepeatableEventKey(item?.eventId, item?.participantIds)).Any(group =>
+                !string.IsNullOrEmpty(group.Key) && group.Count() > 1) ||
+            state.pendingEvents.GroupBy(item => RepeatableEventKey(item?.eventId, item?.participantIds)).Any(group =>
+                !string.IsNullOrEmpty(group.Key) && group.Count() > 1))
+            throw new InvalidDataException("可重复事件键无效");
 
         WorldMap map = state.worldMap;
         long expectedCellCount = (long)map.width * map.height;
@@ -1045,5 +1077,13 @@ public class SaveManager : MonoBehaviour
             .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
             .GroupBy(pair => pair.Key)
             .ToDictionary(group => group.Key, group => group.First().Value);
+    }
+
+    private static string RepeatableEventKey(string eventId,
+        System.Collections.Generic.Dictionary<string, string> participantIds)
+    {
+        if (string.IsNullOrWhiteSpace(eventId) || participantIds == null ||
+            !participantIds.TryGetValue("actor", out string actorId) || string.IsNullOrWhiteSpace(actorId)) return null;
+        return eventId + "|" + actorId;
     }
 }

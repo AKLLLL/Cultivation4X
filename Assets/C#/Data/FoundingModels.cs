@@ -254,7 +254,7 @@ public static class FoundingRules
         string name;
         switch (effect.type)
         {
-            case TechniqueEffectType.CultivationGainFlat: name = "每日修为"; break;
+            case TechniqueEffectType.CultivationGainFlat: name = "旧修炼增益（炼气V1停用）"; break;
             case TechniqueEffectType.CombatPowerFlat: name = "战力"; break;
             case TechniqueEffectType.TechniqueUnderstandingGainFlat: name = "理解增长"; break;
             case TechniqueEffectType.MatchedMissionScoreFlat: name = "匹配任务评分"; break;

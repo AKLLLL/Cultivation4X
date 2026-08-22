@@ -257,7 +257,7 @@ public static class DiscipleAIEvaluator
         switch (key)
         {
             case "CultivationRatio":
-                reasonLabel = "瓶颈临近";
+                reasonLabel = "传承掌握";
                 return CultivationRatio(npc);
             case "AptitudeRank":
                 reasonLabel = "天资";
@@ -313,10 +313,7 @@ public static class DiscipleAIEvaluator
             ? currentDay
             : TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
         if (DiscipleMentalStateRules.IsAutonomyCoolingDown(npc, day))
-            return "自由修炼后冷却中";
-        if (DiscipleMentalStateRules.IsCultivationAction(action) &&
-            npc.MentalState < DiscipleMentalStateRules.MaxMentalState)
-            return "心境未满";
+            return "自主研读后冷却中";
         if (action.minIntervalDays > 0)
         {
             int lastEndDay = DiscipleMissionBridge.GetMostRecentMissionEndDay(npc, action.missionId);
@@ -329,6 +326,8 @@ public static class DiscipleAIEvaluator
         if (data.itemCosts != null && data.itemCosts.Count > 0) return "需要消耗资源";
         if (data.missionType == MissionType.WorldEvent || data.generatedByMap || data.isStoryAction)
             return "不属于自主任务";
+        if (!MonthlyPlanRules.CanStartAutonomousMission(npc, data.needDays, day, out string budgetReason))
+            return budgetReason;
 
         if (data.isFacilityAction)
         {
@@ -351,8 +350,7 @@ public static class DiscipleAIEvaluator
     public static float CultivationRatio(NPCRuntime npc)
     {
         if (npc == null || !npc.Character.IsAlive) return 0f;
-        int need = npc.Realm == CultivationRealm.Mortal || npc.Realm == CultivationRealm.QiRefining ? 100 : 300;
-        return Mathf.Clamp01(npc.Cultivation / (float)need);
+        return Mathf.Clamp01(npc.Character.techniqueMastery / 100f);
     }
 
     private static bool HealthMatches(HealthState health, string value)

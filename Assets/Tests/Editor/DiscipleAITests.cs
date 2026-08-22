@@ -218,7 +218,7 @@ public class DiscipleAITests
         Assert.IsNotNull(cultivateMission);
         Assert.IsFalse(cultivateMission.isPlayerAssignable);
         Assert.IsFalse(MissionManager.Instance.IsMissionVisible(cultivateMission));
-        Assert.IsTrue(MissionManager.Instance.IsMissionVisible(MissionManager.Instance.GetMissionData("cultivation_001")));
+        Assert.IsFalse(MissionManager.Instance.IsMissionVisible(MissionManager.Instance.GetMissionData("cultivation_001")));
     }
 
     [Test]
@@ -285,27 +285,25 @@ public class DiscipleAITests
     // ---------------------------------------------------------------
 
     [Test]
-    public void TryBreakthrough_FailureWritesFailureRecordInsideGrowthSystem()
+    public void TryBreakthrough_QiRefiningV1DoesNotAutoBreakthrough()
     {
         NPCRuntime npc = CreateRuntime("t_break_fail", "测试弟子",
             new CharacterState { characterId = "t_break_fail", displayName = "测试弟子", cultivation = 100, realm = CultivationRealm.QiRefining });
 
-        Assert.IsFalse(npc.TryBreakthrough(-1f)); // chance 被 clamp 到 0，必失败
-        Assert.AreEqual(0, npc.Cultivation);
-        Assert.IsTrue(npc.Character.lifeRecords.Any(record =>
-            record.category == "Breakthrough" && record.text.Contains("突破失败")));
+        Assert.IsFalse(npc.TryBreakthrough(-1f));
+        Assert.AreEqual(100, npc.Cultivation);
+        Assert.IsFalse(npc.Character.lifeRecords.Any(record => record.category == "Breakthrough"));
     }
 
     [Test]
-    public void TryBreakthrough_SuccessDoesNotWriteFailureRecord()
+    public void TryBreakthrough_MortalV1DoesNotAutoBreakthrough()
     {
         NPCRuntime npc = CreateRuntime("t_break_ok", "测试弟子",
             new CharacterState { characterId = "t_break_ok", displayName = "测试弟子", cultivation = 100, realm = CultivationRealm.QiRefining });
 
-        Assert.IsTrue(npc.TryBreakthrough(1f)); // chance 被 clamp 到 1，必成功
-        Assert.AreEqual(CultivationRealm.Foundation, npc.Realm);
-        Assert.IsFalse(npc.Character.lifeRecords.Any(record => record.text.Contains("突破失败")));
-        Assert.IsTrue(npc.Character.lifeRecords.Any(record => record.text.Contains("突破至")));
+        npc.Character.realm = CultivationRealm.Mortal;
+        Assert.IsFalse(npc.TryBreakthrough(1f));
+        Assert.AreEqual(CultivationRealm.Mortal, npc.Realm);
     }
 
     // ---------------------------------------------------------------
@@ -473,7 +471,7 @@ public class DiscipleAITests
     // ---------------------------------------------------------------
 
     [Test]
-    public void CultivationCooldown_BlocksAllAutonomyForThreeDaysThenMentalStateStillBlocksCultivation()
+    public void StudyCooldown_BlocksAllAutonomyForThreeDaysThenStudyIgnoresMentalState()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
@@ -497,14 +495,14 @@ public class DiscipleAITests
             List<ActionScoreResult> results =
                 DiscipleAIEvaluator.EvaluateActions(npc, identity, new List<GoalInstance>(), actions, day);
             Assert.IsTrue(results.All(item => !item.Eligible));
-            Assert.IsTrue(results.All(item => item.FilterReason == "自由修炼后冷却中"),
+            Assert.IsTrue(results.All(item => item.FilterReason == "自主研读后冷却中"),
                 $"第 {day} 天所有自主行为都应处于冷却中");
             Assert.IsTrue(npc.CanDispatch(), "自主冷却不得阻止玩家派遣");
         }
 
         List<ActionScoreResult> resumed =
             DiscipleAIEvaluator.EvaluateActions(npc, identity, new List<GoalInstance>(), actions, 14);
-        Assert.AreEqual("心境未满", resumed.First(item => item.Action.id == "cultivate").FilterReason);
+        Assert.IsTrue(resumed.First(item => item.Action.id == "cultivate").Eligible);
         Assert.IsTrue(resumed.First(item => item.Action.id == "rest").Eligible,
             "D+4 应允许非修炼自主行为");
         npc.Character.mentalState = 100;
@@ -524,30 +522,30 @@ public class DiscipleAITests
             npc, new MissionData { id = DiscipleMentalStateRules.CultivationMissionId, name = "自由修炼" },
             MissionResultTier.Qualified
         });
-        Assert.AreEqual(80, npc.MentalState);
+        Assert.AreEqual(100, npc.MentalState);
         record.Invoke(null, new object[]
         {
             npc, new MissionData { id = DiscipleMentalStateRules.CultivationMissionId, name = "自由修炼" },
             MissionResultTier.Insufficient
         });
-        Assert.AreEqual(30, npc.MentalState);
+        Assert.AreEqual(100, npc.MentalState);
         record.Invoke(null, new object[]
         {
             npc, new MissionData { id = DiscipleMentalStateRules.RestMissionId, name = "静养" },
             MissionResultTier.Qualified
         });
-        Assert.AreEqual(35, npc.MentalState);
+        Assert.AreEqual(100, npc.MentalState);
         record.Invoke(null, new object[]
         {
             npc, new MissionData { id = DiscipleMentalStateRules.RestMissionId, name = "静养" },
             MissionResultTier.Insufficient
         });
-        Assert.AreEqual(30, npc.MentalState);
+        Assert.AreEqual(95, npc.MentalState);
 
         npc.Character.mentalState = 3;
         DiscipleMentalStateRules.ApplyMissionResult(npc,
             DiscipleMentalStateRules.CultivationMissionId, MissionResultTier.Insufficient);
-        Assert.AreEqual(0, npc.MentalState);
+        Assert.AreEqual(3, npc.MentalState);
         npc.Character.mentalState = 99;
         DiscipleMentalStateRules.ApplyMissionResult(npc,
             DiscipleMentalStateRules.RestMissionId, MissionResultTier.Excellent);

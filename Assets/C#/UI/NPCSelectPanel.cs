@@ -76,10 +76,12 @@ public class NPCSelectPanel : MonoBehaviour
                 continue;
             }
 
-            button.interactable = runtime.CanDispatch();
+            button.interactable = MissionManager.Instance != null
+                ? MissionManager.Instance.CanDispatchOrCancelAutonomous(runtime)
+                : runtime.CanDispatch();
 
 
-            if (runtime.CanDispatch())
+            if (button.interactable)
             {
                 button.onClick.AddListener(() =>
                 {

@@ -134,7 +134,14 @@ public class NPCInfoPanel : MonoBehaviour
     {
         AddSection("修行状态");
         AddRow("境界", FormatRealm(currentNPC.Realm));
-        AddRow("修为", currentNPC.Cultivation.ToString());
+        AddRow("今日灵气", $"{currentNPC.Cultivation} / 100");
+        AddRow("纳气进度", $"{currentNPC.Character.naqiProgress:0.0}%");
+        FoundingState founding = PlayerManager.Instance?.playerData?.founding;
+        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(founding?.selectedTechniqueId);
+        AddRow("宗门传承", technique == null ? "未选择" : technique.name);
+        AddRow("传承掌握", $"{currentNPC.Character.techniqueMastery:0.0}%");
+        if (currentNPC.Character.qiDisorderRemainingDays > 0)
+            AddRow("灵气紊乱", $"{currentNPC.Character.qiDisorderResponse}（{currentNPC.Character.qiDisorderRemainingDays}日）");
         AddRow("心境", $"{currentNPC.MentalState} / {DiscipleMentalStateRules.MaxMentalState}");
         AddRow("健康", FormatHealth(currentNPC.Health));
         AddSection("弟子概况");
@@ -148,7 +155,7 @@ public class NPCInfoPanel : MonoBehaviour
         AddSection("基础能力");
         AddRow("力量", currentNPC.Attack.ToString());
         AddRow("敏捷", currentNPC.Agility.ToString());
-        AddRow("体质", currentNPC.Physique.ToString());
+        AddRow("根骨", currentNPC.Physique.ToString());
         AddRow("悟性", currentNPC.Comprehension.ToString());
         AddRow("战斗悟性", currentNPC.CombatComprehension.ToString());
         AddRow("战斗经验", currentNPC.CombatExperience.ToString());

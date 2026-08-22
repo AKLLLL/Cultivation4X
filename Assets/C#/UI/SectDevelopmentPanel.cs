@@ -103,7 +103,7 @@ public class SectDevelopmentPanel : MonoBehaviour
     {
         switch (type) { case FacilityType.MissionHall: return $"候选 {FacilityRules.MissionCandidateCount(level)} / 并行 {FacilityRules.MissionConcurrency(level)}";
             case FacilityType.Warehouse: return $"物品种类上限 {FacilityRules.WarehouseSlots(level)}";
-            case FacilityType.TrainingRoom: return $"每日基础修为 +{FacilityRules.TrainingGain(level)}";
+            case FacilityType.TrainingRoom: return $"纳气效率倍率 x{(level <= 0 ? 0.8f : level == 1 ? 1f : level == 2 ? 1.1f : 1.2f):0.0}";
             case FacilityType.SecretRealm: return $"探索 {FacilityRules.SecretRealmDays(level)} 天 / 材料 {FacilityRules.SecretRealmMaterialReward(level)}";
             default: return $"炼丹 {FacilityRules.AlchemyDays(level)} 天 / 丹药 {FacilityRules.AlchemyPillReward(level)}"; }
     }

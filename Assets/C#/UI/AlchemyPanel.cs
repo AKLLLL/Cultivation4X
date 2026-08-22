@@ -78,8 +78,9 @@ public class AlchemyPanel : MonoBehaviour
             return;
         }
 
-        MissionData data = MissionManager.Instance.GetMissionData(AlchemyMissionId);
-        if (data == null)
+        List<MissionData> recipes = new[] { AlchemyMissionId, "production_regulating_pill_001" }
+            .Distinct().Select(MissionManager.Instance.GetMissionData).Where(item => item != null).ToList();
+        if (recipes.Count == 0)
         {
             RuntimeUIFactory.Text(panel, "炼丹任务配置不存在。", 18, 42);
             AddCloseButton();
@@ -87,7 +88,8 @@ public class AlchemyPanel : MonoBehaviour
         }
 
         Mission running = MissionManager.Instance.GetActiveMissions().FirstOrDefault(item =>
-            item.Data.id == AlchemyMissionId && (item.State == MissionState.Active || item.State == MissionState.WaitingNode));
+            item.Data.isFacilityAction && item.Data.requiredFacility == FacilityType.AlchemyRoom &&
+            (item.State == MissionState.Active || item.State == MissionState.WaitingNode));
         if (running != null)
         {
             RuntimeUIFactory.Text(panel,
@@ -97,13 +99,18 @@ public class AlchemyPanel : MonoBehaviour
         else
         {
             int level = PlayerManager.Instance.GetFacilityLevel(FacilityType.AlchemyRoom);
-            int days = data.usesFacilityLevelScaling ? FacilityRules.AlchemyDays(level) : data.needDays;
-            int pills = FacilityRules.AlchemyPillReward(level);
-            RuntimeUIFactory.Text(panel,
-                $"{data.name}\n耗时 {days} 天｜消耗 {FormatCosts(data.itemCosts)}｜产出 丹药 x{pills}",
-                18, 82);
-            Button start = RuntimeUIFactory.Button(panel, "派遣弟子炼丹", 42);
-            start.onClick.AddListener(() => { pendingMissionId = AlchemyMissionId; Refresh(); });
+            foreach (MissionData data in recipes)
+            {
+                int days = data.usesFacilityLevelScaling ? FacilityRules.AlchemyDays(level) : data.needDays;
+                int pills = data.usesFacilityLevelScaling ? FacilityRules.AlchemyPillReward(level) :
+                    (data.itemRewards == null ? 0 : data.itemRewards.Sum(item => item.count));
+                RuntimeUIFactory.Text(panel,
+                    $"{data.name}\n耗时 {days} 天｜消耗 {FormatCosts(data.itemCosts)}｜产出 丹药 x{pills}",
+                    18, 82);
+                Button start = RuntimeUIFactory.Button(panel, $"派遣弟子：{data.name}", 42);
+                string missionId = data.id;
+                start.onClick.AddListener(() => { pendingMissionId = missionId; Refresh(); });
+            }
         }
 
         if (!string.IsNullOrEmpty(pendingMissionId)) AddNpcChoices(pendingMissionId);
@@ -117,7 +124,7 @@ public class AlchemyPanel : MonoBehaviour
         bool added = false;
         foreach (NPCRuntime npc in living)
         {
-            if (!npc.CanDispatch()) continue;
+            if (!MissionManager.Instance.CanDispatchOrCancelAutonomous(npc)) continue;
             added = true;
             bool canStart = MissionManager.Instance.CanTriggerMission(missionId, npc, out string reason);
             Button button = RuntimeUIFactory.Button(panel, canStart ? npc.Character.displayName : $"{npc.Character.displayName}（{reason}）", 38);

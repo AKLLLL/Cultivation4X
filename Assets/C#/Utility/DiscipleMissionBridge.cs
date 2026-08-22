@@ -25,6 +25,8 @@ public static class DiscipleMissionBridge
         Mission mission = MissionManager.Instance.CreateMission(action.missionId);
         if (mission == null) { reason = "任务模板不存在"; return null; }
         if (!CanStartData(mission.Data, out reason)) return null;
+        int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+        if (!MonthlyPlanRules.CanStartAutonomousMission(npc, mission.Data.needDays, day, out reason)) return null;
 
         mission.StartMission(npc);
         MissionManager.Instance.AddActiveMission(mission);

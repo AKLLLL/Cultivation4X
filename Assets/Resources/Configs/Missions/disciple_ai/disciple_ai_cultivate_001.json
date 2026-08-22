@@ -1,7 +1,7 @@
 {
   "id": "disciple_ai_cultivate_001",
-  "name": "自由修炼",
-  "description": "弟子自行安排修炼，沉淀修为。",
+  "name": "研读传承",
+  "description": "弟子利用自由时间研读宗门传承，只提高个人功法掌握度。",
   "missionType": "Cultivation",
   "missionRank": 1,
   "requiredFacilityLevel": 0,
@@ -10,7 +10,8 @@
   "itemCosts": [],
   "needDays": 5,
 
-  "expReward": 50,
+  "expReward": 0,
+  "techniqueMasteryReward": 5,
   "itemRewards": [],
   "requiredAttack": 0,
   "requiredIntelligence": 0,

@@ -166,6 +166,23 @@ public class EventManager : MonoBehaviour
         return true;
     }
 
+    public bool TryEnqueueRepeatableEventById(string eventId, NPCRuntime actor)
+    {
+        if (string.IsNullOrWhiteSpace(eventId) || actor == null || inbox.Count >= InboxCapacity) return false;
+        string actorId = actor.CharacterId;
+        Func<Dictionary<string, string>, bool> sameActor = ids => ids != null &&
+            ids.TryGetValue("actor", out string id) && id == actorId;
+        if (inbox.Any(item => item.eventId == eventId && sameActor(item.participantIds)) ||
+            pending.Any(item => item.eventId == eventId && sameActor(item.participantIds)) ||
+            (activeEvent != null && activeEvent.Definition.id == eventId &&
+             activeEvent.Participants.TryGetValue("actor", out NPCRuntime activeActor) && activeActor.CharacterId == actorId))
+            return true;
+        Dictionary<string, string> fixedIds = new Dictionary<string, string> { { "actor", actorId } };
+        if (!TryCreateEvent(eventId, fixedIds, out ActiveCharacterEvent created)) return false;
+        Enqueue(created, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
+        return true;
+    }
+
     public bool ChooseOption(string optionId)
     {
         if (activeEvent == null) return false;
@@ -261,6 +278,14 @@ public class EventManager : MonoBehaviour
                 break;
             case EventEffectType.AddVillageRelation:
                 PlayerManager.Instance?.AddVillageRelation(effect.amount, actor);
+                break;
+            case EventEffectType.SetQiDisorderResponse:
+                if (actor?.Character != null)
+                {
+                    if (!Enum.TryParse(effect.value, out QiDisorderResponse response)) response = QiDisorderResponse.None;
+                    actor.Character.qiDisorderResponse = response;
+                    if (response == QiDisorderResponse.None) actor.Character.qiDisorderRemainingDays = 0;
+                }
                 break;
         }
     }
@@ -549,7 +574,7 @@ public class EventManager : MonoBehaviour
                     parts.Add($"声望 {Signed(effect.amount)}");
                     break;
                 case EventEffectType.AddCultivation:
-                    parts.Add($"{name}修为 {Signed(effect.amount)}");
+                    parts.Add($"{name}当日灵气 {Signed(effect.amount)}");
                     break;
                 case EventEffectType.AddExperience:
                     parts.Add($"{name}经验 {Signed(effect.amount)}");
@@ -586,6 +611,9 @@ public class EventManager : MonoBehaviour
                     break;
                 case EventEffectType.AddVillageRelation:
                     parts.Add($"青石村关系 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.SetQiDisorderResponse:
+                    parts.Add($"{name}选择了紊乱应对方式");
                     break;
             }
         }

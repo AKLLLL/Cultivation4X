@@ -93,7 +93,7 @@ public class FoundingSystemTests
     }
 
     [Test]
-    public void MortalRealm_PreservesOldNumericValuesAndCanBreakThrough()
+    public void MortalRealm_PreservesOldNumericValuesButV1DoesNotAutoBreakThrough()
     {
         Assert.AreEqual(-1, (int)CultivationRealm.Mortal);
         Assert.AreEqual(0, (int)CultivationRealm.QiRefining);
@@ -110,8 +110,8 @@ public class FoundingSystemTests
             cultivation = 100
         };
         NPCRuntime runtime = new NPCRuntime(data, state);
-        Assert.IsTrue(runtime.TryBreakthrough(1f));
-        Assert.AreEqual(CultivationRealm.QiRefining, runtime.Realm);
+        Assert.IsFalse(runtime.TryBreakthrough(1f));
+        Assert.AreEqual(CultivationRealm.Mortal, runtime.Realm);
     }
 
     [Test]

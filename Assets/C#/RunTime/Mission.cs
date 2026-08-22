@@ -367,9 +367,7 @@ public class Mission
 
                     Reward.Exp += effect.value;
 
-                    Debug.Log(
-                    $"获得修为:{effect.value}"
-                    );
+                    Debug.Log($"获得旧经验奖励（V1冻结）:{effect.value}");
 
                     break;
 
@@ -620,5 +618,15 @@ public class Mission
         ItemReward spiritStones = reward.Items.Find(item => item != null && item.itemId == FacilityRules.SpiritStoneId);
         if (spiritStones != null) spiritStones.count += Mathf.FloorToInt(spiritStones.count * 0.5f);
         reward.Exp += Mathf.FloorToInt(reward.Exp * 0.5f);
+    }
+
+    public bool CancelAutonomousByPlayer()
+    {
+        if (State != MissionState.Active || !MissionManager.IsAutonomousMission(Data) ||
+            (Data.nodes != null && Data.nodes.Count > 0)) return false;
+        State = MissionState.Cancelled;
+        CurrentNode = null;
+        MissionManager.Instance?.RemoveMission(this);
+        return true;
     }
 }

@@ -133,9 +133,10 @@ public class NPCRuntime
 
     public void AddCultivation(int amount)
     {
-        if (!Character.IsAlive || amount <= 0) return;
-        Character.cultivation += amount;
+        NaqiGrowthRules.AddDailyAura(this, amount);
     }
+
+    public void AddTechniqueMastery(float amount) => NaqiGrowthRules.AddTechniqueMastery(this, amount);
 
     public void ChangeMentalState(int amount)
     {
@@ -152,6 +153,9 @@ public class NPCRuntime
 
     public bool TryBreakthrough(float bonusChance = 0f)
     {
+        // 炼气 V1 只结算纳气进度，不沿用旧的自动突破。
+        if (Character.realm == CultivationRealm.Mortal || Character.realm == CultivationRealm.QiRefining)
+            return false;
         int need = Character.realm == CultivationRealm.Mortal || Character.realm == CultivationRealm.QiRefining ? 100 : 300;
         if (!Character.IsAlive || Character.realm == CultivationRealm.GoldenCore || Character.cultivation < need)
             return false;

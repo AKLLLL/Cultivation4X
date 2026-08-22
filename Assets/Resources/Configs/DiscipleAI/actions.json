@@ -1,7 +1,7 @@
 [
   {
     "id": "cultivate",
-    "displayName": "自由修炼",
+    "displayName": "研读传承",
     "missionId": "disciple_ai_cultivate_001",
     "identityIds": [ "inner_disciple" ],
     "baseline": 1,

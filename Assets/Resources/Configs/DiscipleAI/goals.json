@@ -1,7 +1,7 @@
 [
   {
     "id": "improve_cultivation",
-    "displayName": "提升修为",
+    "displayName": "提升功法掌握",
     "baseIntensity": 4,
     "conditions": [ { "type": "RealmAtMost", "value": "GoldenCore" } ],
     "weightTerms": [

@@ -402,7 +402,7 @@ public class MissionPanel : MonoBehaviour
     private static string FormatMissionOutputs(MissionData data)
     {
         List<string> outputs = new List<string>();
-        if (data.expReward > 0) outputs.Add($"{data.expReward}修为");
+        if (data.techniqueMasteryReward > 0f) outputs.Add($"传承掌握 +{data.techniqueMasteryReward:0.#}%");
         foreach (IGrouping<string, ItemReward> group in (data.itemRewards ?? new List<ItemReward>())
                      .Where(item => item != null && item.count > 0 && !string.IsNullOrWhiteSpace(item.itemId))
                      .GroupBy(item => item.itemId))

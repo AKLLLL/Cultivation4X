@@ -19,6 +19,14 @@ public enum CultivationRealm
     GoldenCore
 }
 
+public enum QiDisorderResponse
+{
+    None,
+    Pending,
+    Paused,
+    Continuing
+}
+
 public enum RelationshipTag
 {
     MasterApprentice,
@@ -67,6 +75,11 @@ public class CharacterState
     public int level = 1;
     public int exp;
     public int cultivation;
+    public float naqiProgress;
+    public float techniqueMastery;
+    public QiDisorderResponse qiDisorderResponse;
+    public int qiDisorderRemainingDays;
+    public bool completedMajorCycleToday;
     public int mentalState = DiscipleMentalStateRules.MaxMentalState;
     public CultivationRealm realm;
     public HealthState health = HealthState.Healthy;

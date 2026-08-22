@@ -7,9 +7,8 @@ using UnityEngine;
 /// 弟子自主行为调度器（V1 唯一新增全局单例）。
 ///
 /// 职责只限于调度：
-/// 1. Settlement Growth Check（结算成长检查）：触发 TryBreakthrough，归属成长系统；
-/// 2. 识别自主 Mission 终局证据，处理社交关系结果与完成后冷却；
-/// 3. 对空闲弟子生成 Goal、评分并启动行动。
+/// 1. 识别自主 Mission 终局证据，处理社交关系结果与完成后冷却；
+/// 2. 对空闲弟子生成 Goal、评分并启动行动。炼气 V1 不在此自动突破。
 ///
 /// 计算在 DiscipleAIEvaluator，执行在 DiscipleMissionBridge，
 /// 决策履历在 ExperienceGenerator，关系履历在 NPCManager。
@@ -95,7 +94,6 @@ public class DiscipleDecisionManager : MonoBehaviour
                 .ToList();
             if (disciples.Count == 0) return;
 
-            RunSettlementGrowthCheck(disciples);
             ProcessEndedAutonomousMissions(disciples, day);
             ProcessDecisions(disciples, config, identity, day);
 
@@ -105,16 +103,6 @@ public class DiscipleDecisionManager : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogError($"[DiscipleAI] 结算处理失败: {exception}");
-        }
-    }
-
-    private void RunSettlementGrowthCheck(List<NPCRuntime> disciples)
-    {
-        // Settlement Growth Check：成长系统自决阈值与成败记录，AI 不读结果、不写记录。
-        foreach (NPCRuntime npc in disciples)
-        {
-            if (npc.State != NPCState.Idle || npc.CurrentMission != null) continue;
-            npc.TryBreakthrough();
         }
     }
 

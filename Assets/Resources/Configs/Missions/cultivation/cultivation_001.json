@@ -4,9 +4,10 @@
     "name":"闭关修炼",
 
     "description":
-    "弟子进入闭关状态提升修为。",
+    "旧版闭关模板，炼气V1暂不向玩家开放。",
 
     "missionType":"Cultivation",
+    "isPlayerAssignable":false,
 
     "needDays":30,
 

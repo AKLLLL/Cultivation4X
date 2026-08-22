@@ -5,9 +5,9 @@ using Cultivation4X.WorldMap;
 public static class SaveDataVersion
 {
     /// <summary>
-    /// 17：角色快照新增持久化心境值，不兼容旧档。
+    /// 18：加入炼气纳气、月度弟子计划与灵气紊乱状态，不兼容旧档。
     /// </summary>
-    public const int Current = 17;
+    public const int Current = 18;
 }
 
 [Serializable]
