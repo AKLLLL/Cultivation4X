@@ -14,12 +14,15 @@ namespace Cultivation4X.WorldMap
         private readonly List<GameObject> iconObjects = new List<GameObject>();
         private readonly HashSet<GameObject> farViewPersistentIcons = new HashSet<GameObject>();
         private readonly List<Vector3> flatIconPositions = new List<Vector3>();
+        private readonly Dictionary<int, WorldLocationMarkerView> locationMarkers =
+            new Dictionary<int, WorldLocationMarkerView>();
         [SerializeField] private TerrainRenderer terrainRenderer;
         // 默认 false 保持 TerrainTest 演示模式不变；正式游戏预制体设为 true，
         // 真实图标只画在已知格上；Hidden 不画，Hinted 可越过遮罩显示匿名问号。
         [SerializeField] private bool respectKnowledgeMask;
         private bool hasMap;
         private bool politicalMapEnabled = true;
+        private int selectedCellIndex = -1;
         private int lastCurveRevision = -1;
 
         public int IconCount => iconObjects.Count;
@@ -79,12 +82,9 @@ namespace Cultivation4X.WorldMap
                 Color labelColor = hinted
                     ? new Color(0.72f, 0.86f, 1f, 0.86f)
                     : TerrainPresentationModels.ColorForSite(site.siteType);
-                label.Set(hinted
-                        ? "？\n未知线索"
-                        : string.IsNullOrEmpty(site.siteName)
-                            ? TerrainPresentationModels.SiteLabel(site.siteType)
-                            : site.siteName,
-                    labelColor);
+                label.Set(hinted ? "？" : SiteSymbol(site.siteType), labelColor);
+                label.SetCharacterSize(hinted ? 0.18f : 0.16f);
+                label.SetYAxisBillboard(true);
             }
 
             if (map.locations != null)
@@ -98,9 +98,10 @@ namespace Cultivation4X.WorldMap
                         new HexCoord(location.position.x, location.position.y));
                     if (locationCell < 0 || locationCell >= map.cells.Length) continue;
                     if (!visibleLocationCells.Contains(locationCell)) continue;
-                    AddWorldLocationIcon(map, location);
+                    AddWorldLocationIcon(map, location, locationCell);
                 }
             }
+            SetSelectedCell(selectedCellIndex);
         }
 
         private static HashSet<int> CollectVisibleLocationCells(WorldMap map,
@@ -111,9 +112,7 @@ namespace Cultivation4X.WorldMap
             foreach (WorldLocation location in map.locations.Values)
             {
                 if (location == null) continue;
-                bool revealed = respectKnowledgeMask
-                    ? WorldLocationRules.IsLocationRevealed(location, progress)
-                    : true;
+                bool revealed = WorldLocationRules.IsLocationRevealed(location, progress);
                 if (!revealed) continue;
                 int cellIndex = map.GetIndex(new HexCoord(location.position.x, location.position.y));
                 if (cellIndex < 0 || cellIndex >= map.cells.Length) continue;
@@ -124,7 +123,7 @@ namespace Cultivation4X.WorldMap
             return result;
         }
 
-        private void AddWorldLocationIcon(WorldMap map, WorldLocation location)
+        private void AddWorldLocationIcon(WorldMap map, WorldLocation location, int cellIndex)
         {
             WorldCell cell = map.cells[map.GetIndex(
                 new HexCoord(location.position.x, location.position.y))];
@@ -140,6 +139,15 @@ namespace Cultivation4X.WorldMap
                 : flatPosition;
             iconObjects.Add(root);
             flatIconPositions.Add(flatPosition);
+            WorldLocationMarkerView marker = root.GetComponent<WorldLocationMarkerView>();
+            if (marker != null) locationMarkers[cellIndex] = marker;
+        }
+
+        public void SetSelectedCell(int cellIndex)
+        {
+            selectedCellIndex = cellIndex;
+            foreach (KeyValuePair<int, WorldLocationMarkerView> pair in locationMarkers)
+                if (pair.Value != null) pair.Value.SetSelected(pair.Key == cellIndex);
         }
 
         /// <summary>远景模式：隐藏普通地点图标；匿名线索保留，便于玩家寻找探索目标。</summary>
@@ -175,6 +183,7 @@ namespace Cultivation4X.WorldMap
             iconObjects.Clear();
             farViewPersistentIcons.Clear();
             flatIconPositions.Clear();
+            locationMarkers.Clear();
             hasMap = false;
             lastCurveRevision = -1;
         }
@@ -213,6 +222,22 @@ namespace Cultivation4X.WorldMap
             };
             quadMesh.RecalculateNormals();
             return quadMesh;
+        }
+
+        private static string SiteSymbol(MapSiteType siteType)
+        {
+            switch (siteType)
+            {
+                case MapSiteType.SectBase: return "宗";
+                case MapSiteType.Village: return "村";
+                case MapSiteType.SpiritSpring: return "泉";
+                case MapSiteType.SpiritMine: return "矿";
+                case MapSiteType.ResourceNode: return "材";
+                case MapSiteType.CaveResidence: return "府";
+                case MapSiteType.BeastLair: return "危";
+                case MapSiteType.Ruin: return "墟";
+                default: return "点";
+            }
         }
 
         private static Material MaterialFor(MapSiteType siteType, bool hinted)

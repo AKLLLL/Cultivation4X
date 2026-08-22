@@ -9,7 +9,10 @@ public static class RuntimeUIFactory
         Canvas canvas = owner.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = order;
-        owner.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        CanvasScaler scaler = owner.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
         owner.AddComponent<GraphicRaycaster>();
         return canvas;
     }
@@ -87,6 +90,63 @@ public static class RuntimeUIFactory
         LayoutElement layout = button.GetComponent<LayoutElement>();
         layout.flexibleWidth = 1;
         return button;
+    }
+
+    /// <summary>
+    /// 新主界面使用的紧凑页签条。旧 TabBar 保持等分行为，避免改变兼容面板。
+    /// </summary>
+    public static RectTransform CompactTabBar(Transform parent, string name)
+    {
+        float height = UIComponentStyles.CompactTabBarHeight;
+        GameObject obj = new GameObject(name, typeof(RectTransform),
+            typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+        obj.transform.SetParent(parent, false);
+        HorizontalLayoutGroup layout = obj.GetComponent<HorizontalLayoutGroup>();
+        layout.spacing = UIComponentStyles.CompactTabSpacing;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+        LayoutElement element = obj.GetComponent<LayoutElement>();
+        element.minHeight = height;
+        element.preferredHeight = height;
+        element.flexibleHeight = 0f;
+        return obj.GetComponent<RectTransform>();
+    }
+
+    public static Button CompactTabButton(Transform parent, string label, bool selected)
+    {
+        Button button = Button(parent, label, UIComponentStyles.CompactTabBarHeight);
+        button.GetComponent<Image>().color = selected
+            ? UIComponentStyles.TabSelected
+            : UIComponentStyles.TabNormal;
+        LayoutElement element = button.GetComponent<LayoutElement>();
+        element.minWidth = UIComponentStyles.CompactTabButtonWidth;
+        element.preferredWidth = UIComponentStyles.CompactTabButtonWidth;
+        element.flexibleWidth = 0f;
+        element.minHeight = UIComponentStyles.CompactTabBarHeight;
+        element.preferredHeight = UIComponentStyles.CompactTabBarHeight;
+        element.flexibleHeight = 0f;
+        return button;
+    }
+
+    public static RectTransform InfoCard(Transform parent, string name)
+    {
+        GameObject obj = new GameObject(name, typeof(RectTransform), typeof(Image),
+            typeof(VerticalLayoutGroup), typeof(ContentSizeFitter), typeof(LayoutElement));
+        obj.transform.SetParent(parent, false);
+        obj.GetComponent<Image>().color = UIComponentStyles.InfoCard;
+        VerticalLayoutGroup layout = obj.GetComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(10, 10, 8, 8);
+        layout.spacing = UIComponentStyles.InfoCardSpacing;
+        layout.childControlWidth = true;
+        layout.childForceExpandWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandHeight = false;
+        obj.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        obj.GetComponent<LayoutElement>().flexibleHeight = 0f;
+        return obj.GetComponent<RectTransform>();
     }
 
     public static RectTransform ScrollContent(Transform parent, string name)

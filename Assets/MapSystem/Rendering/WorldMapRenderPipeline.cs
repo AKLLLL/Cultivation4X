@@ -134,6 +134,8 @@ namespace Cultivation4X.WorldMap
             if (currentMap == null) return;
             if (selectionOverlayRenderer != null)
                 selectionOverlayRenderer.Render(currentMap, selectedCellIndex, siteSelectionMode);
+            if (iconRenderer != null) iconRenderer.SetSelectedCell(
+                siteSelectionMode ? -1 : selectedCellIndex);
         }
 
         /// <summary>

@@ -31,6 +31,7 @@ namespace Cultivation4X.WorldMap
         private Button confirmButton;
         private int selectedInfoTab;
         private int lastSelectedCellIndex = int.MinValue;
+        private bool shouldShowMapControls;
 
         internal Canvas HudCanvas => hudCanvas;
         internal string HudCanvasName => hudCanvas != null ? hudCanvas.gameObject.name : "null";
@@ -39,6 +40,8 @@ namespace Cultivation4X.WorldMap
         {
             CreateHud();
             SetVisible(false);
+            if (UIManager.Instance != null)
+                UIManager.Instance.WindowStateChanged += HandleWindowStateChanged;
         }
 
         public void SetVisible(bool visible)
@@ -65,6 +68,7 @@ namespace Cultivation4X.WorldMap
 
             hudControls = RuntimeUIFactory.Panel(hudCanvas.transform, "MapControls",
                 new Vector2(0.70f, 0f), new Vector2(0.99f, 1f));
+            hudControls.GetComponent<Image>().color = new Color(0.022f, 0.047f, 0.038f, 0.90f);
             hudControls.offsetMin = new Vector2(0f, 12f);
             hudControls.offsetMax = new Vector2(0f, -64f);
             VerticalLayoutGroup controlsLayout = hudControls.GetComponent<VerticalLayoutGroup>();
@@ -72,10 +76,10 @@ namespace Cultivation4X.WorldMap
             controlsLayout.spacing = 4f;
 
             title = RuntimeUIFactory.Text(hudControls, "世界地图", 25, 38);
-            infoTabs = RuntimeUIFactory.TabBar(hudControls, "WorldInfoTabs", 44);
-            infoTabButtons.Add(RuntimeUIFactory.TabButton(infoTabs, "环境", true));
-            infoTabButtons.Add(RuntimeUIFactory.TabButton(infoTabs, "地点", false));
-            infoTabButtons.Add(RuntimeUIFactory.TabButton(infoTabs, "行动", false));
+            infoTabs = RuntimeUIFactory.CompactTabBar(hudControls, "WorldInfoTabs");
+            infoTabButtons.Add(RuntimeUIFactory.CompactTabButton(infoTabs, "环境", true));
+            infoTabButtons.Add(RuntimeUIFactory.CompactTabButton(infoTabs, "地点", false));
+            infoTabButtons.Add(RuntimeUIFactory.CompactTabButton(infoTabs, "行动", false));
             for (int index = 0; index < infoTabButtons.Count; index++)
             {
                 int captured = index;
@@ -151,7 +155,9 @@ namespace Cultivation4X.WorldMap
             if (hudCanvas != null) hudCanvas.sortingOrder = selecting ? 1000 : 100;
             if (title != null) title.text = "世界地图";
             if (selectionBlocker != null) selectionBlocker.SetActive(selecting);
-            if (hudControls != null) hudControls.gameObject.SetActive(selecting || hasSectBase);
+            shouldShowMapControls = selecting || hasSectBase;
+            if (hudControls != null) hudControls.gameObject.SetActive(
+                shouldShowMapControls && (UIManager.Instance == null || !UIManager.Instance.HasOpenScreens));
             if (infoTabs != null) infoTabs.gameObject.SetActive(!selecting && selectedCellIndex >= 0 && !hintedSelection);
             if (confirmButton != null)
             {
@@ -208,12 +214,13 @@ namespace Cultivation4X.WorldMap
 
         private void ShowHintedSite(WorldMap map, WorldMapProgressState progress, int selectedCellIndex)
         {
-            AddInfoRow("地点", "未知线索");
-            AddInfoRow("预计耗时", "2 天");
+            RectTransform card = AddInfoCard("未知线索");
+            AddInfoRow(card, "地点", "尚未发现");
+            AddInfoRow(card, "预计耗时", "2 天");
             CellInteractionOption option = WorldCellInteractionRules.Generate(map, progress, selectedCellIndex)
                 .FirstOrDefault(item => item != null && item.optionType == CellInteractionOptionType.Explore);
-            if (option != null) AddCellInteractionButton(option);
-            else AddInfoText("该线索当前无法探索。", 15);
+            if (option != null) AddCellInteractionButton(option, card);
+            else AddInfoText("该线索当前无法探索。", 15, card);
         }
 
         private void ShowEnvironmentTab(WorldMap map, WorldMapProgressState progress,
@@ -243,16 +250,18 @@ namespace Cultivation4X.WorldMap
                 ? "有"
                 : "无";
 
-            AddInfoRow("坐标",
+            RectTransform terrainCard = AddInfoCard("地形与气候");
+            AddInfoRow(terrainCard, "坐标",
                 $"{cell.coord.col},{cell.coord.row} | {WorldMapCellDetailsFormatter.LandformLabel(cell.landform)}/" +
                 $"{WorldMapCellDetailsFormatter.BiomeLabel(cell.biome)}");
-            AddInfoRow("区域", $"{regionName} | 类型：{regionType}");
-            AddInfoRow("位置", WorldMapRegionRules.PositionLabel(cell.internalPositionTag));
-            AddInfoRow("气候", ClimateLabel(cell));
-            AddInfoRow("灵气", $"{WorldMapCellDetailsFormatter.AuraBand(cell.totalAura)} | 灵脉：{veins}");
-            AddInfoRow("危险", $"{DangerLabel(WorldMapProgressRules.GetDanger(cell))} | 地点：{markers}");
-            AddInfoRow("认知", known ? "已知" : "未知");
-            AddInfoRow("控制关系", control);
+            AddInfoRow(terrainCard, "区域", $"{regionName} | 类型：{regionType}");
+            AddInfoRow(terrainCard, "位置", WorldMapRegionRules.PositionLabel(cell.internalPositionTag));
+            AddInfoRow(terrainCard, "气候", ClimateLabel(cell));
+            RectTransform strategyCard = AddInfoCard("战略信息");
+            AddInfoRow(strategyCard, "灵气", $"{WorldMapCellDetailsFormatter.AuraBand(cell.totalAura)} | 灵脉：{veins}");
+            AddInfoRow(strategyCard, "危险", $"{DangerLabel(WorldMapProgressRules.GetDanger(cell))} | 地点：{markers}");
+            AddInfoRow(strategyCard, "认知", known ? "已知" : "未知");
+            AddInfoRow(strategyCard, "控制关系", control);
         }
 
         private void ShowLocationTab(WorldMap map, WorldMapProgressState progress,
@@ -262,25 +271,40 @@ namespace Cultivation4X.WorldMap
             WorldLocation location = map.GetLocationAt(cell);
             if (location == null || !WorldLocationRules.IsLocationRevealed(location, progress))
             {
-                AddInfoRow("地点", "暂无地点");
-                AddInfoRow("未来支持", "建设 / 改造 / 发现地点");
+                RectTransform emptyCard = AddInfoCard("地点");
+                AddInfoRow(emptyCard, "状态", "暂无已发现地点");
                 return;
             }
 
-            AddInfoRow("名称", location.name);
-            AddInfoRow("类型", location.type == LocationType.Sect
+            RectTransform identityCard = AddInfoCard("地点概况");
+            AddInfoRow(identityCard, "名称", location.name);
+            AddInfoRow(identityCard, "类型", location.type == LocationType.Sect
                 ? "玩家宗门"
                 : LocationTypeLabel(location.type));
+            AddInfoRow(identityCard, "状态", LocationStateLabel(location.state));
+            MapSiteData sourceSite = progress?.mapSites?.FirstOrDefault(site => site != null &&
+                string.Equals(site.siteId, location.sourceMapSiteId, StringComparison.Ordinal));
+            if (sourceSite != null && sourceSite.revealState == MapContentRevealState.Discovered)
+            {
+                AddInfoRow(identityCard, "开发", MapSiteStateLabel(sourceSite.siteState));
+                if (sourceSite.discoveredDay >= 0)
+                    AddInfoRow(identityCard, "发现时间", $"第 {sourceSite.discoveredDay} 天");
+                if (!string.IsNullOrWhiteSpace(sourceSite.ownerSectId))
+                    AddInfoRow(identityCard, "归属", sourceSite.ownerSectId == WorldMapProgressRules.PlayerSectOwnerId
+                        ? "本宗门" : sourceSite.ownerSectId);
+            }
+
+            RectTransform detailCard = AddInfoCard("经营信息");
             if (location.type == LocationType.Village)
             {
                 VillageState village = sect?.founding?.village ?? new VillageState();
-                AddInfoRow("人口", village.population.ToString());
-                AddInfoRow("关系", VillageRelationLabel(village.relation));
-                AddInfoRow("劳动力",
+                AddInfoRow(detailCard, "人口", village.population.ToString());
+                AddInfoRow(detailCard, "关系", VillageRelationLabel(village.relation));
+                AddInfoRow(detailCard, "劳动力",
                     $"{village.totalLabor - village.reservedLabor}/{village.totalLabor}");
                 string threatText = ThreatSummary(sect?.founding?.externalThreat);
                 if (!string.IsNullOrEmpty(threatText))
-                    AddInfoRow("威胁", threatText);
+                    AddInfoRow(detailCard, "威胁", threatText);
             }
             else if (location.type == LocationType.Sect)
             {
@@ -290,19 +314,39 @@ namespace Cultivation4X.WorldMap
                 int materials = WarehouseManager.Instance == null
                     ? 0
                     : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId);
-                AddInfoRow("弟子", disciples.ToString());
-                AddInfoRow("灵气", $"{cell.totalAura:0.000}");
-                AddInfoRow("灵石", (WarehouseManager.Instance?.GetItemCount(FacilityRules.SpiritStoneId) ?? 0).ToString());
-                AddInfoRow("基础材料", materials.ToString());
-                AddInfoRow("影响范围", InfluenceSummary(map, progress, selectedCellIndex));
+                AddInfoRow(detailCard, "弟子", disciples.ToString());
+                AddInfoRow(detailCard, "灵气", $"{cell.totalAura:0.000}");
+                AddInfoRow(detailCard, "灵石", (WarehouseManager.Instance?.GetItemCount(FacilityRules.SpiritStoneId) ?? 0).ToString());
+                AddInfoRow(detailCard, "基础材料", materials.ToString());
+                AddInfoRow(detailCard, "影响范围", InfluenceSummary(map, progress, selectedCellIndex));
             }
-            AddInfoRow("状态", LocationStateLabel(location.state));
+            else if (sourceSite != null)
+            {
+                ResourceStatusRow resource = ResourceStatusService.BuildDiscoveredNodeRows(map, progress)
+                    .FirstOrDefault(row => row.siteId == sourceSite.siteId);
+                if (resource != null)
+                {
+                    AddInfoRow(detailCard, "资源", resource.resourceName);
+                    AddInfoRow(detailCard, "产出", $"基础 {resource.baseOutput} / 预计 {resource.expectedOutput}");
+                    AddInfoRow(detailCard, "库存", resource.warehouseCount.ToString());
+                    AddInfoRow(detailCard, "最近结算", resource.lastSettledMonth < 0
+                        ? "尚未结算"
+                        : $"第 {resource.lastSettledMonth} 月 / 损失 {resource.lastSettledLost}");
+                }
+                else
+                {
+                    AddInfoRow(detailCard, "可用行动", (sourceSite.availableActionIds?.Count ?? 0).ToString());
+                }
+            }
+            if (location.availableMissionIds != null)
+                AddInfoRow(detailCard, "地点任务", location.availableMissionIds.Count.ToString());
         }
 
         private void ShowActionTab(WorldMap map, WorldMapProgressState progress, int selectedCellIndex)
         {
             WorldCell cell = map.cells[selectedCellIndex];
             bool hasContent = false;
+            RectTransform actionCard = AddInfoCard("可执行行动");
 
             // 格子行动独立于地点；普通格始终由这一来源生成探索选项。
             foreach (CellInteractionOption option in
@@ -310,7 +354,7 @@ namespace Cultivation4X.WorldMap
             {
                 if (option == null) continue;
                 hasContent = true;
-                AddCellInteractionButton(option);
+                AddCellInteractionButton(option, actionCard);
             }
 
             // 地点行动：由 WorldLocation 提供。
@@ -323,62 +367,72 @@ namespace Cultivation4X.WorldMap
                     foreach (LocationAction action in location.availableActions)
                     {
                         if (action == null) continue;
-                        AddActionButton(location, action);
+                        AddActionButton(location, action, actionCard);
                     }
                 }
 
                 if (location.availableMissionIds != null && location.availableMissionIds.Count > 0)
                 {
                     hasContent = true;
-                    AddLocationMissionsButton(location, location.availableMissionIds.Count);
+                    AddLocationMissionsButton(location, location.availableMissionIds.Count, actionCard);
                 }
             }
 
             if (!hasContent)
-                AddInfoText("该格暂无可执行行动。", 15);
+                AddInfoText("该格暂无可执行行动。", 15, actionCard);
         }
 
-        private void AddCellInteractionButton(CellInteractionOption option)
+        private void AddCellInteractionButton(CellInteractionOption option, Transform parent = null)
         {
-            Button button = RuntimeUIFactory.Button(infoContent, option.displayName, 46);
+            Button button = RuntimeUIFactory.Button(parent ?? infoContent, option.displayName, 46);
             button.interactable = option.available;
             CellInteractionOption captured = option;
             button.onClick.AddListener(() => CellInteractionRequested?.Invoke(captured));
-            infoDynamicItems.Add(button.gameObject);
+            if (parent == null) infoDynamicItems.Add(button.gameObject);
         }
 
-        private void AddLocationMissionsButton(WorldLocation location, int missionCount)
+        private void AddLocationMissionsButton(WorldLocation location, int missionCount, Transform parent = null)
         {
-            Button button = RuntimeUIFactory.Button(infoContent,
+            Button button = RuntimeUIFactory.Button(parent ?? infoContent,
                 $"地点任务（{missionCount}）", 46);
             WorldLocation captured = location;
             button.onClick.AddListener(() => LocationMissionsRequested?.Invoke(captured));
-            infoDynamicItems.Add(button.gameObject);
+            if (parent == null) infoDynamicItems.Add(button.gameObject);
         }
 
-        private void AddActionButton(WorldLocation location, LocationAction action)
+        private void AddActionButton(WorldLocation location, LocationAction action, Transform parent = null)
         {
-            Button button = RuntimeUIFactory.Button(infoContent,
+            Button button = RuntimeUIFactory.Button(parent ?? infoContent,
                 $"{action.displayName}\n消耗：{action.cost}", 52);
             button.interactable = action.available;
             WorldLocation capturedLocation = location;
             LocationAction capturedAction = action;
             button.onClick.AddListener(() =>
                 LocationActionRequested?.Invoke(capturedLocation, capturedAction));
-            infoDynamicItems.Add(button.gameObject);
+            if (parent == null) infoDynamicItems.Add(button.gameObject);
         }
 
-        private void AddInfoRow(string titleValue, string contentValue)
+        private static void AddInfoRow(Transform parent, string titleValue, string contentValue)
         {
-            WorldMapInfoRow row = WorldMapInfoRow.Create(infoContent, titleValue, contentValue);
-            infoDynamicItems.Add(row.gameObject);
+            WorldMapInfoRow.Create(parent, titleValue, contentValue);
         }
 
-        private void AddInfoText(string textValue, int fontSize)
+        private RectTransform AddInfoCard(string heading)
         {
+            RectTransform card = RuntimeUIFactory.InfoCard(infoContent, heading + "Card");
+            TMP_Text headingText = RuntimeUIFactory.Text(card, heading, 16, 26);
+            headingText.fontStyle = FontStyles.Bold;
+            headingText.color = new Color(0.78f, 0.67f, 0.38f, 1f);
+            infoDynamicItems.Add(card.gameObject);
+            return card;
+        }
+
+        private void AddInfoText(string textValue, int fontSize, Transform parent = null)
+        {
+            Transform target = parent ?? infoContent;
             GameObject textObject = new GameObject("InfoText",
                 typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
-            textObject.transform.SetParent(infoContent, false);
+            textObject.transform.SetParent(target, false);
             TMP_Text text = textObject.GetComponent<TMP_Text>();
             text.text = textValue;
             text.fontSize = fontSize;
@@ -386,10 +440,10 @@ namespace Cultivation4X.WorldMap
             text.alignment = TextAlignmentOptions.TopLeft;
             text.enableWordWrapping = true;
             LayoutElement layout = textObject.GetComponent<LayoutElement>();
-            layout.minHeight = 40f;
-            layout.preferredHeight = 100f;
+            layout.minHeight = 28f;
+            layout.preferredHeight = 56f;
             layout.flexibleHeight = 0f;
-            infoDynamicItems.Add(textObject);
+            if (parent == null) infoDynamicItems.Add(textObject);
         }
 
         private void ClearInfoDynamicItems()
@@ -415,8 +469,8 @@ namespace Cultivation4X.WorldMap
         {
             for (int index = 0; index < infoTabButtons.Count; index++)
                 infoTabButtons[index].GetComponent<Image>().color = index == selectedInfoTab
-                    ? new Color(0.55f, 0.36f, 0.13f, 1f)
-                    : new Color(0.20f, 0.17f, 0.13f, 1f);
+                    ? UIComponentStyles.TabSelected
+                    : UIComponentStyles.TabNormal;
         }
 
         private void RefreshPresentationWithCurrentSelection()
@@ -494,6 +548,16 @@ namespace Cultivation4X.WorldMap
             }
         }
 
+        private static string MapSiteStateLabel(MapSiteState state)
+        {
+            switch (state)
+            {
+                case MapSiteState.Investigated: return "已调查";
+                case MapSiteState.Developed: return "已开发";
+                default: return "待处理";
+            }
+        }
+
         private static string InfluenceSummary(WorldMap map, WorldMapProgressState progress,
             int cellIndex)
         {
@@ -552,6 +616,8 @@ namespace Cultivation4X.WorldMap
 
         private void OnDestroy()
         {
+            if (UIManager.Instance != null)
+                UIManager.Instance.WindowStateChanged -= HandleWindowStateChanged;
             if (hudCanvas != null)
             {
                 if (Application.isPlaying) Destroy(hudCanvas.gameObject);
@@ -561,6 +627,12 @@ namespace Cultivation4X.WorldMap
             hudControls = null;
             selectionBlocker = null;
             ClearInfoDynamicItems();
+        }
+
+        private void HandleWindowStateChanged()
+        {
+            if (hudControls != null)
+                hudControls.gameObject.SetActive(shouldShowMapControls && !UIManager.Instance.HasOpenScreens);
         }
     }
 }

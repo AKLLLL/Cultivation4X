@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e8d1b91bc5d82449be697990f6216ff, type: 3}
+  m_Name: CultivationUITheme
+  m_EditorClassIdentifier:
+  font: {fileID: 11400000, guid: 765ed011bf745e84a84e77e1955bd202, type: 2}
+  background: {r: 0.022, g: 0.047, b: 0.038, a: 0.985}
+  panel: {r: 0.045, g: 0.09, b: 0.07, a: 0.98}
+  card: {r: 0.075, g: 0.125, b: 0.095, a: 0.97}
+  text: {r: 0.91, g: 0.92, b: 0.84, a: 1}
+  secondaryText: {r: 0.63, g: 0.7, b: 0.61, a: 1}
+  accent: {r: 0.48, g: 0.38, b: 0.17, a: 1}
+  danger: {r: 0.78, g: 0.24, b: 0.18, a: 1}
+  disabled: {r: 0.34, g: 0.32, b: 0.29, a: 1}
+  titleSize: 28
+  bodySize: 18
+  helperSize: 14
+  spacingSmall: 8
+  spacingMedium: 16
+  spacingLarge: 24

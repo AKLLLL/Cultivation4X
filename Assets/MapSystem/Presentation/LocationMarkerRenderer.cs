@@ -2,8 +2,27 @@ using UnityEngine;
 
 namespace Cultivation4X.WorldMap
 {
+    /// <summary>世界地点标记的纯表现状态：常态只显示符号，选中后显示小型名称。</summary>
+    public sealed class WorldLocationMarkerView : MonoBehaviour
+    {
+        [SerializeField] private TerrainLabel nameLabel;
+
+        public bool IsNameVisible => nameLabel != null && nameLabel.gameObject.activeSelf;
+
+        public void Configure(TerrainLabel label)
+        {
+            nameLabel = label;
+            SetSelected(false);
+        }
+
+        public void SetSelected(bool selected)
+        {
+            if (nameLabel != null) nameLabel.gameObject.SetActive(selected);
+        }
+    }
+
     /// <summary>
-    /// 世界地点标记渲染器：把 WorldLocation 显示为世界空间文字标记。
+    /// 世界地点标记渲染器：常态显示紧凑类型符号，选中时才显示地点名。
     /// 与 MapIconRenderer 分离，后续新增地点类型只需扩展 MarkerSymbol。
     /// </summary>
     public static class LocationMarkerRenderer
@@ -16,16 +35,17 @@ namespace Cultivation4X.WorldMap
 
             TerrainLabel marker = root.AddComponent<TerrainLabel>();
             marker.Set(MarkerSymbol(type), MarkerColor(type));
-            marker.SetCharacterSize(0.45f);
+            marker.SetCharacterSize(0.24f);
             marker.SetYAxisBillboard(true);
 
             GameObject nameObject = new GameObject("LocationMarkerName", typeof(TerrainLabel));
             nameObject.transform.SetParent(root.transform, false);
-            nameObject.transform.localPosition = new Vector3(0f, -0.42f, 0f);
+            nameObject.transform.localPosition = new Vector3(0f, -0.24f, 0f);
             TerrainLabel nameLabel = nameObject.GetComponent<TerrainLabel>();
-            nameLabel.Set(name ?? string.Empty, new Color(1f, 1f, 1f, 0.92f));
-            nameLabel.SetCharacterSize(0.13f);
+            nameLabel.Set(name ?? string.Empty, new Color(0.92f, 0.91f, 0.80f, 0.96f));
+            nameLabel.SetCharacterSize(0.08f);
             nameLabel.SetYAxisBillboard(true);
+            root.AddComponent<WorldLocationMarkerView>().Configure(nameLabel);
             return root;
         }
 

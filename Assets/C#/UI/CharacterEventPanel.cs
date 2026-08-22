@@ -43,6 +43,11 @@ public class CharacterEventPanel : MonoBehaviour
         canvas.gameObject.SetActive(visible);
     }
 
+    public void SetLegacyInboxShortcutVisible(bool visible)
+    {
+        if (inboxButton != null) inboxButton.gameObject.SetActive(visible);
+    }
+
     private void Start()
     {
         if (EventManager.Instance != null)
@@ -66,7 +71,7 @@ public class CharacterEventPanel : MonoBehaviour
     private void Show(ActiveCharacterEvent active)
     {
         CloseManaged(inboxPanel.gameObject);
-        OpenManaged(panel.gameObject);
+        OpenManaged(panel.gameObject, UIEscapePolicy.Blocked);
         titleText.text = EventManager.Format(active.Definition.title, active.Participants);
         bodyText.text = EventManager.Format(active.Definition.body, active.Participants);
         RefreshBodyLayout();
@@ -100,7 +105,10 @@ public class CharacterEventPanel : MonoBehaviour
         canvas = gameObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 1000;
-        gameObject.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        CanvasScaler scaler = gameObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
         gameObject.AddComponent<GraphicRaycaster>();
 
         inboxButton = RuntimeUIFactory.Button(transform, "事件收件箱");
@@ -161,9 +169,14 @@ public class CharacterEventPanel : MonoBehaviour
         RefreshInboxButton();
     }
 
-    private static void OpenManaged(GameObject target)
+    public void OpenInbox()
     {
-        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(target);
+        ShowInbox();
+    }
+
+    private static void OpenManaged(GameObject target, UIEscapePolicy escapePolicy = UIEscapePolicy.Allowed)
+    {
+        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(target, null, escapePolicy);
         else target.SetActive(true);
     }
 

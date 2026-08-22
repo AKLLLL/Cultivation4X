@@ -114,6 +114,63 @@ public class TerrainPresentationTests
     }
 
     [Test]
+    public void WorldLocationMarker_ShowsNameOnlyForSelectedDiscoveredCell()
+    {
+        WorldMap map = BuildMap(Cell(0, LandformType.Plain), Cell(1, LandformType.Hill));
+        MapSiteData discoveredSite = new MapSiteData
+        {
+            siteId = "known", cellIndex = 0, siteType = MapSiteType.Village,
+            revealState = MapContentRevealState.Discovered
+        };
+        MapSiteData hiddenSite = new MapSiteData
+        {
+            siteId = "hidden", cellIndex = 1, siteType = MapSiteType.Ruin,
+            revealState = MapContentRevealState.Hidden
+        };
+        WorldMapProgressState progress = new WorldMapProgressState();
+        progress.mapSites.Add(discoveredSite);
+        progress.mapSites.Add(hiddenSite);
+        map.locations.Add("world_location_known", new WorldLocation
+        {
+            id = "world_location_known", name = "灵石村", type = LocationType.Village,
+            position = new Vector2Int(0, 0), state = LocationState.Active,
+            sourceMapSiteId = discoveredSite.siteId
+        });
+        map.locations.Add("world_location_hidden", new WorldLocation
+        {
+            id = "world_location_hidden", name = "隐藏遗迹", type = LocationType.Ruins,
+            position = new Vector2Int(1, 0), state = LocationState.Active,
+            sourceMapSiteId = hiddenSite.siteId
+        });
+
+        GameObject root = new GameObject("WorldLocationMarkerSelectionTest");
+        MapIconRenderer renderer = root.AddComponent<MapIconRenderer>();
+        try
+        {
+            renderer.Render(map, progress);
+            WorldLocationMarkerView marker = root.GetComponentInChildren<WorldLocationMarkerView>(true);
+            Assert.NotNull(marker);
+            Assert.AreEqual(1, root.GetComponentsInChildren<WorldLocationMarkerView>(true).Length,
+                "Hidden 地点不能生成可泄露名称的标记");
+            Assert.IsFalse(marker.IsNameVisible);
+
+            renderer.SetSelectedCell(0);
+            Assert.IsTrue(marker.IsNameVisible);
+            Assert.IsTrue(marker.GetComponentsInChildren<TextMesh>(true)
+                .Any(text => text.text == "灵石村"));
+
+            renderer.SetSelectedCell(1);
+            Assert.IsFalse(marker.IsNameVisible,
+                "选择隐藏地点所在格也不能显示其他地点名称");
+        }
+        finally
+        {
+            renderer.Clear();
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
     public void TerrainLabel_SetWritesTextAndColor()
     {
         GameObject root = new GameObject("TerrainLabelTest");

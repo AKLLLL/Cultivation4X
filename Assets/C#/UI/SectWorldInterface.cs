@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Cultivation4X.WorldMap;
@@ -11,16 +10,11 @@ public sealed class SectWorldInterface : MonoBehaviour
 {
     public static SectWorldInterface Instance { get; private set; }
 
-    private TMP_Text resourceText;
-    private Button warehouseButton;
-    private Button resourceStatusButton;
     private RectTransform briefPanel;
     private RectTransform layoutPanel;
     private RectTransform taskPanel;
     private RectTransform summaryPanel;
     private Canvas canvas;
-    private string lastResourceText;
-    private float nextResourceRefreshTime;
     private RectTransform sectManagerContent;
     private RectTransform sectManagerLeftColumn;
     private RectTransform sectManagerRightColumn;
@@ -42,7 +36,6 @@ public sealed class SectWorldInterface : MonoBehaviour
         Instance = this;
         Canvas canvas = RuntimeUIFactory.Canvas(gameObject, 930);
         this.canvas = canvas;
-        CreateResourceBar(canvas.transform);
         briefPanel = CreatePanel(canvas.transform, "SectBrief",
             new Vector2(0.18f, 0.10f), new Vector2(0.82f, 0.90f));
         layoutPanel = CreatePanel(canvas.transform, "SectLayout",
@@ -51,13 +44,6 @@ public sealed class SectWorldInterface : MonoBehaviour
             new Vector2(0.18f, 0.10f), new Vector2(0.82f, 0.90f));
         summaryPanel = CreatePanel(canvas.transform, "SectSummary",
             new Vector2(0.18f, 0.10f), new Vector2(0.82f, 0.90f));
-    }
-
-    private IEnumerator Start()
-    {
-        while (SaveManager.Instance == null || !SaveManager.Instance.IsInitializationComplete)
-            yield return null;
-        RefreshResourceBar();
     }
 
     private void OnDestroy()
@@ -69,13 +55,6 @@ public sealed class SectWorldInterface : MonoBehaviour
     public void SetUiVisible(bool visible)
     {
         if (canvas != null) canvas.gameObject.SetActive(visible);
-    }
-
-    private void Update()
-    {
-        if (Time.unscaledTime < nextResourceRefreshTime) return;
-        nextResourceRefreshTime = Time.unscaledTime + 0.25f;
-        RefreshResourceBar();
     }
 
     public void OpenSectBrief()
@@ -449,72 +428,15 @@ public sealed class SectWorldInterface : MonoBehaviour
         OpenManaged(summaryPanel);
     }
 
-    private void CreateResourceBar(Transform canvas)
-    {
-        GameObject bar = new GameObject("ResourceBar", typeof(RectTransform), typeof(Image),
-            typeof(HorizontalLayoutGroup));
-        bar.transform.SetParent(canvas, false);
-        RectTransform rect = bar.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0.06f, 1f);
-        rect.anchorMax = new Vector2(0.72f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(0f, -10f);
-        rect.sizeDelta = new Vector2(0f, 50f);
-        bar.GetComponent<Image>().color = new Color(0.04f, 0.04f, 0.035f, 0.88f);
-        HorizontalLayoutGroup layout = bar.GetComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(12, 8, 4, 4);
-        layout.spacing = 8f;
-        layout.childAlignment = TextAnchor.MiddleCenter;
-        layout.childControlWidth = true;
-        layout.childForceExpandWidth = true;
-        resourceText = RuntimeUIFactory.Text(bar.transform, string.Empty, 13, 42);
-        resourceText.alignment = TextAlignmentOptions.MidlineLeft;
-        resourceText.enableWordWrapping = false;
-        resourceText.enableAutoSizing = true;
-        resourceText.fontSizeMin = 9f;
-        resourceText.fontSizeMax = 13f;
-        resourceText.overflowMode = TextOverflowModes.Ellipsis;
-        resourceStatusButton = RuntimeUIFactory.Button(bar.transform, "资源", 38);
-        resourceStatusButton.GetComponent<LayoutElement>().preferredWidth = 80f;
-        resourceStatusButton.GetComponent<LayoutElement>().flexibleWidth = 0f;
-        resourceStatusButton.onClick.AddListener(() => FindRuntime<ResourceStatusPanel>()?.OpenFromSectLayout());
-        warehouseButton = RuntimeUIFactory.Button(bar.transform, "库藏详情", 38);
-        warehouseButton.GetComponent<LayoutElement>().preferredWidth = 110f;
-        warehouseButton.GetComponent<LayoutElement>().flexibleWidth = 0f;
-        warehouseButton.onClick.AddListener(OpenWarehouse);
-        Button endDayButton = RuntimeUIFactory.Button(bar.transform, "结束今天", 38);
-        endDayButton.GetComponent<LayoutElement>().preferredWidth = 96f;
-        endDayButton.GetComponent<LayoutElement>().flexibleWidth = 0f;
-        endDayButton.onClick.AddListener(() => TimeManager.Instance?.EndDay());
-    }
-
-    private void RefreshResourceBar()
-    {
-        PlayerData sect = PlayerManager.Instance?.playerData;
-        int materials = WarehouseManager.Instance == null
-            ? 0
-            : WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId);
-        int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
-        FoundingState founding = sect?.founding;
-        bool established = FoundingRules.HasReachedCave(founding) &&
-                           WorldMapProgressRules.GetSectBase(WorldMapSession.Progress) != null;
-        WorldMapProgressState progress = WorldMapSession.Progress;
-        if (established) WorldMapInfluenceRules.EnsureCurrent(WorldMapSession.Current, progress);
-        int influence = established ? progress.cellInfluences.Count : 0;
-        string value = $"灵石 {WarehouseManager.Instance?.GetItemCount(FacilityRules.SpiritStoneId) ?? 0} 基础材料 {materials} 弟子 {LivingDiscipleCount()} " +
-                       $"声望 {sect?.reputation ?? 0} 影响 {influence}格 第 {day}天";
-        if (value != lastResourceText && resourceText != null)
-        {
-            resourceText.text = value;
-            lastResourceText = value;
-        }
-        if (warehouseButton != null) warehouseButton.interactable = established;
-        if (resourceStatusButton != null) resourceStatusButton.interactable = established;
-    }
-
     private void OpenNpcDetail(NPCRuntime npc)
     {
         if (npc == null) return;
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.OpenWindow(UIWindowId.DiscipleCenter,
+                new DiscipleCenterContext(npc.CharacterId));
+            return;
+        }
         SectPanel sectPanel = Resources.FindObjectsOfTypeAll<SectPanel>()
             .FirstOrDefault(item => item != null && item.gameObject.scene.IsValid());
         if (sectPanel != null && sectPanel.infoPanel != null)
@@ -609,7 +531,7 @@ public sealed class SectWorldInterface : MonoBehaviour
         // 容器面板已打开时不再提升层级，避免盖住其上层的子面板。
         if (panel != null && panel.gameObject.activeSelf)
             return;
-        if (UIManager.Instance != null) UIManager.Instance.OpenPanel(panel.gameObject);
+        if (UIManager.Instance != null) UIManager.Instance.OpenScreen(panel.gameObject);
         else panel.gameObject.SetActive(true);
     }
 

@@ -66,6 +66,31 @@ public class UIPaginationTests
     }
 
     [Test]
+    public void CompactTabBar_UsesFixedLeftAlignedButtonsWithoutChangingLegacyTabs()
+    {
+        GameObject owner = Track(new GameObject("CompactTabBarLayoutTest", typeof(RectTransform)));
+        RectTransform ownerRect = owner.GetComponent<RectTransform>();
+        ownerRect.sizeDelta = new Vector2(620f, 80f);
+        RectTransform tabs = RuntimeUIFactory.CompactTabBar(owner.transform, "CompactTabs");
+        Button first = RuntimeUIFactory.CompactTabButton(tabs, "环境", true);
+        Button second = RuntimeUIFactory.CompactTabButton(tabs, "地点", false);
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(ownerRect);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(tabs);
+
+        HorizontalLayoutGroup layout = tabs.GetComponent<HorizontalLayoutGroup>();
+        Assert.IsFalse(layout.childForceExpandWidth);
+        Assert.IsFalse(layout.childForceExpandHeight);
+        Assert.AreEqual(TextAnchor.MiddleLeft, layout.childAlignment);
+        Assert.That(first.GetComponent<RectTransform>().rect.width,
+            Is.EqualTo(UIComponentStyles.CompactTabButtonWidth).Within(0.1f));
+        Assert.That(second.GetComponent<RectTransform>().rect.width,
+            Is.EqualTo(UIComponentStyles.CompactTabButtonWidth).Within(0.1f));
+        Assert.That(tabs.GetComponent<LayoutElement>().preferredHeight,
+            Is.EqualTo(UIComponentStyles.CompactTabBarHeight));
+    }
+
+    [Test]
     public void WorldMapControls_StretchVerticallyBetweenHudSafeMargins()
     {
         GameObject owner = Track(new GameObject("WorldMapControlsLayoutTest",

@@ -161,3 +161,13 @@
 5. 玩家交互以 WorldLocation 为对象：点击 Hex 后先解析 WorldLocation，再展示地点信息/行动/任务；普通格不再承载具体玩法按钮。
 6. WorldMapHudController 的“行动”页只由 WorldLocation.availableActions 与 availableMissionIds 驱动；隐藏地点和普通格显示“暂无行动”，不要退回旧的地点调查按钮或默认动作数组。
 7. 地点任务统一从 WorldLocation 进入 MissionPanel；村庄劳动力、宗门管理、仓库/设施等仍调用既有面板，不在地图层重建。
+
+## UI 公共组件与地图标注规范
+
+1. 新主界面与地图 HUD 的页签必须复用 `UIComponentStyles` 和紧凑 Tab 组件：固定高度、固定按钮宽度、靠左排列，禁止同时开启横向或纵向强制扩展。旧 `RuntimeUIFactory.TabBar/TabButton` 仅用于兼容旧面板，不得全局改写其等分语义。
+2. 公共组件必须至少有两个实际使用方后才算公共规范；只生成但没有业务界面引用的 Prefab，不得作为“已统一”的依据。当前紧凑 Tab 由弟子中心与世界地图共同使用。
+3. 新主界面不得使用 `RuntimeUIFactory` 运行时拼装整页布局；该工厂只保留旧界面兼容与小型动态内容。新页面应使用 Prefab，动态信息行可复用轻量公共组件。
+4. 列表项、状态标签、数值进度行、信息卡和面板边框应复用已有公共样式；`DiscipleListItemView` 等包含领域数据绑定的组合组件保留为领域组件，不为追求通用而强行抽象。
+5. 地图地点常态只显示紧凑类型符号；地点名称仅在地点已发现且对应格被选中时显示，并在右侧地点信息卡中提供完整名称。Hidden/Hinted 地点不得通过标注、页签标题或详情内容泄露名称。
+6. 地图详情信息卡只能展示既有真源：地点用 `MapSiteData`/`WorldLocation`，行动用 `availableActions`/`availableMissionIds`，资源用 `ResourceStatusService`/`WarehouseManager`。禁止为填充空间虚构驻留 NPC、产出或概率。
+7. UI 自动测试必须检查最终 `RectTransform` 几何尺寸与可见状态，不能只检查 LayoutGroup 的序列化开关；紧凑 Tab 至少覆盖 1920×1080 与 1280×720 的布局验收。
