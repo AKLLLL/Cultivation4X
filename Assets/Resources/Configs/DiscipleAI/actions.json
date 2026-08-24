@@ -11,7 +11,7 @@
       { "source": "Goal", "key": "recover_state", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Trait", "key": "diligent", "weight": 1.5, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Trait", "key": "lazy", "weight": -1.5, "curve": [ [0, 0], [1, 1] ] },
-      { "source": "Ability", "key": "AptitudeRank", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "SpiritRootQuality", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Ability", "key": "CultivationRatio", "weight": 1.5, "curve": [ [0, 0.2], [1, 1] ] }
     ]
   },
@@ -38,7 +38,7 @@
       { "source": "Goal", "key": "obtain_resources", "weight": 5, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Trait", "key": "reckless", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Trait", "key": "cautious", "weight": -2, "curve": [ [0, 0], [1, 1] ] },
-      { "source": "Ability", "key": "AptitudeRank", "weight": 0.5, "curve": [ [0, 0], [1, 1] ] }
+      { "source": "Ability", "key": "SpiritRootQuality", "weight": 0.5, "curve": [ [0, 0], [1, 1] ] }
     ]
   },
   {

@@ -259,9 +259,9 @@ public static class DiscipleAIEvaluator
             case "CultivationRatio":
                 reasonLabel = "传承掌握";
                 return CultivationRatio(npc);
-            case "AptitudeRank":
+            case "SpiritRootQuality":
                 reasonLabel = "天资";
-                return Mathf.Clamp01(npc.AptitudeRank / 5f);
+                return Mathf.Clamp01((int)npc.SpiritRootQuality / 5f);
             case "RealmIndex":
                 reasonLabel = "境界";
                 return Mathf.Clamp01(((int)npc.Realm + 1) / 4f);

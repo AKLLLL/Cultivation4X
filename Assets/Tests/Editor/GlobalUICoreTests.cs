@@ -6,6 +6,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 
 public sealed class GlobalUICoreTests
@@ -17,6 +18,8 @@ public sealed class GlobalUICoreTests
     public void SetUp()
     {
         UIManager.Instance = null;
+        PlayerManager.Instance = null;
+        NPCManager.Instance = null;
         managerObject = new GameObject("UIManagerTest");
         manager = managerObject.AddComponent<UIManager>();
         manager.Configure(managerObject.transform, managerObject.transform, managerObject.transform,
@@ -31,6 +34,8 @@ public sealed class GlobalUICoreTests
                      .Where(item => item != null && item.name.StartsWith("UITest_", StringComparison.Ordinal)))
             UnityEngine.Object.DestroyImmediate(item);
         UIManager.Instance = null;
+        PlayerManager.Instance = null;
+        NPCManager.Instance = null;
     }
 
     [Test]
@@ -84,6 +89,27 @@ public sealed class GlobalUICoreTests
     }
 
     [Test]
+    public void GlobalHud_InitialCharacterSetup_DoesNotCloseMandatoryFoundingPanel()
+    {
+        GameObject modal = new GameObject("UITest_立宗面板", typeof(RectTransform));
+        manager.OpenPanel(modal);
+        GameObject viewObject = new GameObject("UITest_GlobalHud");
+        GlobalHudView view = viewObject.AddComponent<GlobalHudView>();
+        typeof(GlobalHudView).GetField("manager",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?.SetValue(view, manager);
+        System.Reflection.MethodInfo apply = typeof(GlobalHudView).GetMethod("ApplyFlowState",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        apply?.Invoke(view, new object[] { GameFlowState.CharacterSetup });
+        Assert.That(modal.activeSelf, Is.True, "首次角色创建路由不能关闭刚打开的强制立宗面板");
+
+        apply?.Invoke(view, new object[] { GameFlowState.WorldMap });
+        apply?.Invoke(view, new object[] { GameFlowState.CharacterSetup });
+        Assert.That(modal.activeSelf, Is.False, "从世界地图离开时仍应清理旧窗口");
+    }
+
+    [Test]
     public void Overlay_DoesNotBlockOrEnterEscapeStack()
     {
         GameObject overlayPrefab = new GameObject("UITest_OverlayPrefab", typeof(RectTransform));
@@ -124,9 +150,13 @@ public sealed class GlobalUICoreTests
         SerializedObject serialized = new SerializedObject(root.GetComponent<UIManager>());
         Assert.That(serialized.FindProperty("theme").objectReferenceValue, Is.Not.Null);
         SerializedProperty registrations = serialized.FindProperty("windowRegistrations");
-        Assert.That(registrations.arraySize, Is.EqualTo(1));
-        Assert.That(registrations.GetArrayElementAtIndex(0).FindPropertyRelative("prefab").objectReferenceValue,
-            Is.Not.Null);
+        Assert.That(registrations.arraySize, Is.EqualTo(2));
+        for (int index = 0; index < registrations.arraySize; index++)
+            Assert.That(registrations.GetArrayElementAtIndex(index).FindPropertyRelative("prefab").objectReferenceValue,
+                Is.Not.Null);
+        Assert.That(Enumerable.Range(0, registrations.arraySize)
+            .Select(index => registrations.GetArrayElementAtIndex(index).FindPropertyRelative("id").enumValueIndex)
+            .Distinct().Count(), Is.EqualTo(registrations.arraySize));
     }
 
     [Test]
@@ -217,10 +247,184 @@ public sealed class GlobalUICoreTests
             Assert.That(buttonSize.flexibleHeight, Is.EqualTo(0f));
         }
 
-        Transform currentPlan = FindChild(center.transform, "本月计划Card");
+        Transform currentPlan = FindChild(center.transform, "循环计划Card");
         TMP_Text planText = currentPlan.GetComponentsInChildren<TMP_Text>(true).Last();
         Assert.That(currentPlan.GetComponent<LayoutElement>().preferredHeight, Is.GreaterThanOrEqualTo(180f));
         Assert.That(planText.overflowMode, Is.EqualTo(TextOverflowModes.Ellipsis));
+    }
+
+    [Test]
+    public void MonthlyPlanPrefab_HasReferencesAndRendersThirtyDayCells()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/UI/Prefabs/MonthlyPlan/MonthlyPlan.prefab");
+        Assert.That(prefab, Is.Not.Null);
+        MonthlyPlanPanel prefabView = prefab.GetComponent<MonthlyPlanPanel>();
+        Assert.That(prefabView, Is.Not.Null);
+        SerializedObject prefabSerialized = new SerializedObject(prefabView);
+        Assert.That(prefabSerialized.FindProperty("templateList").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("calendarGrid").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("discipleList").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("disciplePickerRoot").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("disciplePickerList").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("trainingBrushButton").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("dutyBrushButton").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("freeBrushButton").objectReferenceValue, Is.Not.Null);
+        Assert.That(prefabSerialized.FindProperty("addDiscipleButton").objectReferenceValue, Is.Not.Null);
+        Assert.That(FindChild(prefab.transform, "BulkActions"), Is.Null);
+        Assert.That(FindChild(prefab.transform, "DisciplePicker").gameObject.activeSelf, Is.False);
+
+        RectTransform nameRow = FindChild(prefab.transform, "NameRow").GetComponent<RectTransform>();
+        TMP_InputField input = FindChild(nameRow, "TemplateNameInput").GetComponent<TMP_InputField>();
+        LayoutElement nameRowSize = nameRow.GetComponent<LayoutElement>();
+        LayoutElement inputSize = input.GetComponent<LayoutElement>();
+        Assert.That(nameRowSize.preferredHeight, Is.EqualTo(UIComponentStyles.CompactControlHeight));
+        Assert.That(nameRowSize.flexibleHeight, Is.EqualTo(0f));
+        Assert.That(inputSize.preferredWidth, Is.EqualTo(UIComponentStyles.CompactInputWidth));
+        Assert.That(inputSize.flexibleWidth, Is.EqualTo(0f));
+
+        GameObject playerObject = new GameObject("UITest_Player");
+        PlayerManager player = playerObject.AddComponent<PlayerManager>();
+        PlayerManager.Instance = player;
+        MonthlyPlanTemplate template = MonthlyPlanRules.CreateTemplate("标准循环");
+        Assert.That(template, Is.Not.Null);
+
+        GameObject instance = UnityEngine.Object.Instantiate(prefab);
+        instance.name = "UITest_MonthlyPlan";
+        MonthlyPlanPanel view = instance.GetComponent<MonthlyPlanPanel>();
+        view.OnOpened(null);
+        SerializedObject serialized = new SerializedObject(view);
+        RectTransform calendar = serialized.FindProperty("calendarGrid").objectReferenceValue as RectTransform;
+        Assert.That(calendar, Is.Not.Null);
+        Assert.That(calendar.childCount, Is.EqualTo(MonthlyPlanRules.DaysPerMonth));
+    }
+
+    [Test]
+    public void MonthlyPlanBrush_PaintsClickAndDragWithoutCycling()
+    {
+        GameObject playerObject = new GameObject("UITest_Player");
+        PlayerManager player = playerObject.AddComponent<PlayerManager>();
+        PlayerManager.Instance = player;
+        MonthlyPlanTemplate template = MonthlyPlanRules.CreateTemplate("画笔计划");
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/UI/Prefabs/MonthlyPlan/MonthlyPlan.prefab");
+        GameObject instance = UnityEngine.Object.Instantiate(prefab);
+        instance.name = "UITest_MonthlyPlanBrush";
+        MonthlyPlanPanel view = instance.GetComponent<MonthlyPlanPanel>();
+        InvokePrivateAwake(view);
+        view.OnOpened(null);
+        SerializedObject serialized = new SerializedObject(view);
+        Button dutyBrush = serialized.FindProperty("dutyBrushButton").objectReferenceValue as Button;
+        dutyBrush.onClick.Invoke();
+
+        MonthlyPlanDayCell day1 = FindChild(instance.transform, "Day01").GetComponent<MonthlyPlanDayCell>();
+        MonthlyPlanDayCell day2 = FindChild(instance.transform, "Day02").GetComponent<MonthlyPlanDayCell>();
+        GameObject eventObject = new GameObject("UITest_EventSystem", typeof(EventSystem));
+        PointerEventData pointer = new PointerEventData(eventObject.GetComponent<EventSystem>())
+            { button = PointerEventData.InputButton.Left };
+        day1.OnPointerDown(pointer);
+        day2.OnPointerEnter(pointer);
+        MonthlyPlanDayCell.CancelDrag();
+
+        Assert.That(template.days[0], Is.EqualTo(MonthlyActivityType.SectDuty));
+        Assert.That(template.days[1], Is.EqualTo(MonthlyActivityType.SectDuty));
+        Assert.That(template.days[2], Is.EqualTo(MonthlyActivityType.Free));
+    }
+
+    [Test]
+    public void MonthlyPlanBinding_ShowsCandidatesOnlyAfterAddAndMovesSelectionToBoundList()
+    {
+        GameObject playerObject = new GameObject("UITest_Player");
+        PlayerManager player = playerObject.AddComponent<PlayerManager>();
+        PlayerManager.Instance = player;
+        MonthlyPlanTemplate template = MonthlyPlanRules.CreateTemplate("绑定计划");
+        GameObject npcObject = new GameObject("UITest_NPCManager");
+        NPCManager npcs = npcObject.AddComponent<NPCManager>();
+        NPCManager.Instance = npcs;
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
+                                                     System.Reflection.BindingFlags.NonPublic;
+        var runtimes = (System.Collections.Generic.List<NPCRuntime>)typeof(NPCManager)
+            .GetField("runtimes", flags).GetValue(npcs);
+        NPCData firstData = ScriptableObject.CreateInstance<NPCData>();
+        firstData.npcID = "binding_1";
+        firstData.npcName = "楚星";
+        NPCData secondData = ScriptableObject.CreateInstance<NPCData>();
+        secondData.npcID = "binding_2";
+        secondData.npcName = "白宁";
+        runtimes.Add(new NPCRuntime(firstData, new CharacterState
+        {
+            characterId = "binding_1", templateId = "binding_1", displayName = "楚星", health = HealthState.Healthy
+        }));
+        runtimes.Add(new NPCRuntime(secondData, new CharacterState
+        {
+            characterId = "binding_2", templateId = "binding_2", displayName = "白宁", health = HealthState.Healthy
+        }));
+
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/UI/Prefabs/MonthlyPlan/MonthlyPlan.prefab");
+        GameObject instance = UnityEngine.Object.Instantiate(prefab);
+        instance.name = "UITest_MonthlyPlanBinding";
+        MonthlyPlanPanel view = instance.GetComponent<MonthlyPlanPanel>();
+        InvokePrivateAwake(view);
+        view.OnOpened(null);
+        SerializedObject serialized = new SerializedObject(view);
+        RectTransform boundList = serialized.FindProperty("discipleList").objectReferenceValue as RectTransform;
+        GameObject picker = serialized.FindProperty("disciplePickerRoot").objectReferenceValue as GameObject;
+        RectTransform candidates = serialized.FindProperty("disciplePickerList").objectReferenceValue as RectTransform;
+        Button add = serialized.FindProperty("addDiscipleButton").objectReferenceValue as Button;
+        Assert.That(boundList.childCount, Is.EqualTo(0));
+        Assert.That(picker.activeSelf, Is.False);
+
+        add.onClick.Invoke();
+        Assert.That(picker.activeSelf, Is.True);
+        Assert.That(candidates.childCount, Is.EqualTo(2));
+        candidates.GetChild(0).GetComponent<Button>().onClick.Invoke();
+        Assert.That(picker.activeSelf, Is.False);
+        Assert.That(boundList.childCount, Is.EqualTo(1));
+        Assert.That(template.discipleIds.Count, Is.EqualTo(1));
+
+        UnityEngine.Object.DestroyImmediate(firstData);
+        UnityEngine.Object.DestroyImmediate(secondData);
+    }
+
+    [TestCase(1920f, 1080f)]
+    [TestCase(1280f, 720f)]
+    public void MonthlyPlanCalendar_FitsThirtyCellsAtReferenceSizes(float width, float height)
+    {
+        GameObject playerObject = new GameObject("UITest_Player");
+        PlayerManager player = playerObject.AddComponent<PlayerManager>();
+        PlayerManager.Instance = player;
+        Assert.That(MonthlyPlanRules.CreateTemplate("布局计划"), Is.Not.Null);
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/UI/Prefabs/MonthlyPlan/MonthlyPlan.prefab");
+        GameObject instance = UnityEngine.Object.Instantiate(prefab);
+        instance.name = $"UITest_MonthlyPlan_{width}x{height}";
+        RectTransform root = instance.GetComponent<RectTransform>();
+        root.anchorMin = root.anchorMax = new Vector2(0.5f, 0.5f);
+        root.sizeDelta = new Vector2(width, height);
+        instance.GetComponent<MonthlyPlanPanel>().OnOpened(null);
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(root);
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(root);
+        RectTransform calendar = FindChild(root, "CalendarGrid").GetComponent<RectTransform>();
+        RectTransform lastCell = FindChild(calendar, "Day30").GetComponent<RectTransform>();
+        Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(calendar, lastCell);
+        Assert.That(bounds.max.x, Is.LessThanOrEqualTo(calendar.rect.xMax + 0.5f));
+        Assert.That(bounds.min.y, Is.GreaterThanOrEqualTo(calendar.rect.yMin - 0.5f));
+        RectTransform nameRow = FindChild(root, "NameRow").GetComponent<RectTransform>();
+        RectTransform input = FindChild(nameRow, "TemplateNameInput").GetComponent<RectTransform>();
+        Assert.That(nameRow.rect.height, Is.InRange(39.5f, 40.5f));
+        Assert.That(input.rect.width, Is.InRange(UIComponentStyles.CompactInputWidth - 0.5f,
+            UIComponentStyles.CompactInputWidth + 0.5f));
+        RectTransform brushes = FindChild(root, "Brushes").GetComponent<RectTransform>();
+        Assert.That(brushes.rect.height, Is.InRange(39.5f, 40.5f));
+        foreach (Button brush in brushes.GetComponentsInChildren<Button>(true))
+            Assert.That(brush.GetComponent<RectTransform>().rect.width,
+                Is.InRange(UIComponentStyles.CompactTabButtonWidth - 0.5f,
+                    UIComponentStyles.CompactTabButtonWidth + 0.5f));
+        RectTransform advanced = FindChild(root, "AdvancedCultivationPlaceholder").GetComponent<RectTransform>();
+        Assert.That(advanced.rect.height, Is.InRange(55.5f, 56.5f));
     }
 
     [TestCase(1920f, 1080f)]
@@ -349,5 +553,12 @@ public sealed class GlobalUICoreTests
             if (nested != null) return nested;
         }
         return null;
+    }
+
+    private static void InvokePrivateAwake(MonthlyPlanPanel view)
+    {
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
+                                                     System.Reflection.BindingFlags.NonPublic;
+        typeof(MonthlyPlanPanel).GetMethod("Awake", flags).Invoke(view, null);
     }
 }

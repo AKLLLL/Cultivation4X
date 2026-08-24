@@ -246,8 +246,9 @@ public class EventManager : MonoBehaviour
         switch (effect.type)
         {
             case EventEffectType.AddReputation: PlayerManager.Instance?.AddReputation(effect.amount); break;
-            case EventEffectType.AddCultivation: actor?.AddCultivation(effect.amount); break;
-            case EventEffectType.AddExperience: if (actor != null) NPCGrow.AddExp(actor, effect.amount); break;
+            case EventEffectType.AddAura: actor?.AddAura(effect.amount); break;
+            case EventEffectType.AddAuraControl: actor?.AddAuraControl(effect.amount); break;
+            case EventEffectType.AddTechniqueMastery: actor?.AddTechniqueMastery(effect.amount); break;
             case EventEffectType.AddTrait: actor?.Character.AddTrait(effect.value); break;
             case EventEffectType.RemoveTrait: actor?.Character.traitIds.Remove(effect.value); break;
             case EventEffectType.AddRelationship:
@@ -278,14 +279,6 @@ public class EventManager : MonoBehaviour
                 break;
             case EventEffectType.AddVillageRelation:
                 PlayerManager.Instance?.AddVillageRelation(effect.amount, actor);
-                break;
-            case EventEffectType.SetQiDisorderResponse:
-                if (actor?.Character != null)
-                {
-                    if (!Enum.TryParse(effect.value, out QiDisorderResponse response)) response = QiDisorderResponse.None;
-                    actor.Character.qiDisorderResponse = response;
-                    if (response == QiDisorderResponse.None) actor.Character.qiDisorderRemainingDays = 0;
-                }
                 break;
         }
     }
@@ -573,11 +566,14 @@ public class EventManager : MonoBehaviour
                 case EventEffectType.AddReputation:
                     parts.Add($"声望 {Signed(effect.amount)}");
                     break;
-                case EventEffectType.AddCultivation:
-                    parts.Add($"{name}当日灵气 {Signed(effect.amount)}");
+                case EventEffectType.AddAura:
+                    parts.Add($"{name}当前灵气 {Signed(effect.amount)}");
                     break;
-                case EventEffectType.AddExperience:
-                    parts.Add($"{name}经验 {Signed(effect.amount)}");
+                case EventEffectType.AddAuraControl:
+                    parts.Add($"{name}灵气控制 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.AddTechniqueMastery:
+                    parts.Add($"{name}功法掌握 {Signed(effect.amount)}");
                     break;
                 case EventEffectType.AddTrait:
                     parts.Add($"{name}获得特质：{TraitName(effect.value)}");
@@ -611,9 +607,6 @@ public class EventManager : MonoBehaviour
                     break;
                 case EventEffectType.AddVillageRelation:
                     parts.Add($"青石村关系 {Signed(effect.amount)}");
-                    break;
-                case EventEffectType.SetQiDisorderResponse:
-                    parts.Add($"{name}选择了紊乱应对方式");
                     break;
             }
         }

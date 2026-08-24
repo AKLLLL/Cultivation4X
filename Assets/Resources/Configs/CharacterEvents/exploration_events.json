@@ -14,7 +14,7 @@
     "isCritical": false,
     "participants": [{ "slot": "actor" }],
     "options": [
-      { "id": "investigate", "text": "调查灵气流向", "outcomes": [{ "text": "{actor.name}从灵气变化中有所领悟。", "effects": [{ "type": "AddCultivation", "participant": "actor", "amount": 20 }] }] },
+      { "id": "investigate", "text": "调查灵气流向", "outcomes": [{ "text": "{actor.name}从灵气变化中磨炼了控制。", "effects": [{ "type": "AddAuraControl", "participant": "actor", "amount": 3 }] }] },
       { "id": "collect", "text": "采集成熟灵草", "outcomes": [{ "text": "{actor.name}谨慎采回一株云麓草。", "effects": [{ "type": "AddItem", "value": "herb_001", "amount": 1 }] }] },
       { "id": "protect", "text": "保护这片生机", "outcomes": [{ "text": "宗门保护灵地的举动获得附近散修认可。", "effects": [{ "type": "AddReputation", "amount": 2 }] }] }
     ]
@@ -34,7 +34,7 @@
     "isCritical": false,
     "participants": [{ "slot": "actor" }],
     "options": [
-      { "id": "investigate", "text": "沿兽迹调查", "outcomes": [{ "text": "{actor.name}观察兽迹后对灵气运转有了新体会。", "effects": [{ "type": "AddCultivation", "participant": "actor", "amount": 20 }] }] },
+      { "id": "investigate", "text": "沿兽迹调查", "outcomes": [{ "text": "{actor.name}观察兽迹后对灵气运转有了新体会。", "effects": [{ "type": "AddAuraControl", "participant": "actor", "amount": 3 }] }] },
       { "id": "collect", "text": "采集沿途材料", "outcomes": [{ "text": "{actor.name}带回一批可用的基础材料。", "effects": [{ "type": "AddItem", "value": "material_001", "amount": 1 }] }] },
       { "id": "protect", "text": "暂不惊扰巢穴", "outcomes": [{ "text": "宗门克制的做法避免了山民遭受兽群惊扰。", "effects": [{ "type": "AddReputation", "amount": 2 }] }] }
     ]
@@ -54,7 +54,7 @@
     "isCritical": false,
     "participants": [{ "slot": "actor" }],
     "options": [
-      { "id": "investigate", "text": "调查矿脉走向", "outcomes": [{ "text": "{actor.name}借矿脉灵气磨炼了自身修为。", "effects": [{ "type": "AddCultivation", "participant": "actor", "amount": 20 }] }] },
+      { "id": "investigate", "text": "调查矿脉走向", "outcomes": [{ "text": "{actor.name}借矿脉灵气磨炼了自身控制。", "effects": [{ "type": "AddAuraControl", "participant": "actor", "amount": 3 }] }] },
       { "id": "collect", "text": "采集凝结灵石", "outcomes": [{ "text": "{actor.name}从裂隙中取出一枚下品灵石。", "effects": [{ "type": "AddItem", "value": "LingShi_001", "amount": 1 }] }] },
       { "id": "protect", "text": "封存脆弱矿脉", "outcomes": [{ "text": "宗门主动保护尚未成形的矿脉，声望有所提升。", "effects": [{ "type": "AddReputation", "amount": 2 }] }] }
     ]

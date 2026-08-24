@@ -10,19 +10,14 @@ namespace Cultivation4X.WorldMap
     /// </summary>
     public static class WorldMapContentEffects
     {
-        public const int SpiritSpringDailyCultivation = 1;
         public const int VillageRelationReward = 15;
         public const int VillageReputationReward = 10;
         public const int RuinTechniqueUnderstandingReward = 5;
 
-        private static int lastDailyAppliedDay = int.MinValue;
-        private static WorldMap lastDailyAppliedMap;
         private static readonly HashSet<string> appliedCompletionKeys = new HashSet<string>(StringComparer.Ordinal);
 
         public static void ResetForTests()
         {
-            lastDailyAppliedDay = int.MinValue;
-            lastDailyAppliedMap = null;
             appliedCompletionKeys.Clear();
         }
 
@@ -37,30 +32,11 @@ namespace Cultivation4X.WorldMap
         }
 
         /// <summary>
-        /// 每日效果只在时间推进入口调用一次；同一天重复调用不会重复产出。
+        /// 保留时间推进入口。灵泉现在由修炼日吸收环境读取，不再在此直接发放修为。
         /// </summary>
         public static void ApplyDaily(int currentDay)
         {
-            bool springActive = HasDevelopedSite(MapSiteType.SpiritSpring);
-            if (!springActive) return;
-            // 依赖对象尚未初始化时不推进日标记；稍后同一天补齐对象仍应获得效果。
-            if (NPCManager.Instance == null) return;
-            if (!ReferenceEquals(lastDailyAppliedMap, WorldMapSession.Current))
-            {
-                lastDailyAppliedMap = WorldMapSession.Current;
-                lastDailyAppliedDay = int.MinValue;
-            }
-            if (lastDailyAppliedDay == currentDay) return;
-            lastDailyAppliedDay = currentDay;
-
-            if (springActive)
-            {
-                foreach (NPCRuntime npc in NPCManager.Instance?.GetAllNPC() ?? new List<NPCRuntime>())
-                {
-                    if (npc != null && npc.Character != null && npc.Character.IsAlive && npc.State == NPCState.Idle)
-                        npc.AddCultivation(SpiritSpringDailyCultivation);
-                }
-            }
+            _ = currentDay;
         }
 
         /// <summary>
@@ -96,7 +72,7 @@ namespace Cultivation4X.WorldMap
         {
             switch (type)
             {
-                case MapSiteType.SpiritSpring: return "开发后：每日为每名空闲存活弟子提供修为+1";
+                case MapSiteType.SpiritSpring: return "开发后：修炼日的环境灵气吸收效率+10%";
                 case MapSiteType.SpiritMine:
                 case MapSiteType.ResourceNode: return "开发后：每30天结算一次资源产出";
                 case MapSiteType.Village: return "完成后：村落关系+15，宗门声望+10";

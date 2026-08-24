@@ -222,12 +222,12 @@ public sealed class SectWorldInterface : MonoBehaviour
     {
         AddSectInfoText("弟子安排", 16);
         int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
-        AddSectInfoText($"当前第 {MonthlyPlanRules.MonthIndex(day)} 月；可编排第 {MonthlyPlanRules.EditableMonth(day)} 月。", 13);
+        AddSectInfoText("月计划采用30日循环模板，可由多名弟子共享。未绑定弟子默认自由活动。", 13);
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
         if (founding != null && founding.sectCreated)
         {
             Button monthlyPlan = AddSectButton("弟子月度计划", 46);
-            monthlyPlan.onClick.AddListener(() => FindRuntime<MonthlyPlanPanel>()?.OpenFromSectLayout());
+            monthlyPlan.onClick.AddListener(() => UIManager.Instance?.OpenWindow(UIWindowId.MonthlyPlan));
         }
         else AddSectInfoText("正式立宗后开放月度计划。", 13);
         Button steward = AddSectButton( "打开任务堂／执事堂", 46);
@@ -348,7 +348,7 @@ public sealed class SectWorldInterface : MonoBehaviour
         switch (npc.Realm)
         {
             case CultivationRealm.Mortal: return "凡人";
-            case CultivationRealm.QiRefining: return $"练气{npc.Level}层";
+            case CultivationRealm.QiRefining: return $"练气{npc.RealmLayer}层";
             case CultivationRealm.Foundation: return "筑基";
             case CultivationRealm.GoldenCore: return "金丹";
             default: return npc.Realm.ToString();

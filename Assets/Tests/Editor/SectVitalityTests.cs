@@ -181,7 +181,6 @@ public class SectVitalityTests
                 resultTier = MissionResultTier.Excellent,
                 reward = new Reward
                 {
-                    Exp = 5,
                     Items = new List<ItemReward>
                     {
                         new ItemReward { itemId = "item", count = 2 },
@@ -194,7 +193,6 @@ public class SectVitalityTests
 
         Assert.AreEqual(4, mission.Reward.Items.Single(item =>
             item.itemId == FacilityRules.SpiritStoneId).count);
-        Assert.AreEqual(7, mission.Reward.Exp);
         Assert.AreEqual(2, mission.Reward.Items[0].count);
     }
 

@@ -281,28 +281,27 @@ public class DiscipleAITests
     }
 
     // ---------------------------------------------------------------
-    // 突破（成长系统自闭环）
+    // 炼气层级（成长系统自闭环）
     // ---------------------------------------------------------------
 
     [Test]
-    public void TryBreakthrough_QiRefiningV1DoesNotAutoBreakthrough()
+    public void QiRefining_AdvancesByNaqiLayerInsteadOfLegacyBreakthrough()
     {
         NPCRuntime npc = CreateRuntime("t_break_fail", "测试弟子",
-            new CharacterState { characterId = "t_break_fail", displayName = "测试弟子", cultivation = 100, realm = CultivationRealm.QiRefining });
+            new CharacterState { characterId = "t_break_fail", displayName = "测试弟子", naqiProgress = 99, realmLayer = 1, realm = CultivationRealm.QiRefining });
 
-        Assert.IsFalse(npc.TryBreakthrough(-1f));
-        Assert.AreEqual(100, npc.Cultivation);
-        Assert.IsFalse(npc.Character.lifeRecords.Any(record => record.category == "Breakthrough"));
+        RealmProgressionRules.AddNaqi(npc, 2f, 1);
+        Assert.AreEqual(2, npc.RealmLayer);
+        Assert.AreEqual(1f, npc.Character.naqiProgress);
     }
 
     [Test]
-    public void TryBreakthrough_MortalV1DoesNotAutoBreakthrough()
+    public void AuraGrowth_DoesNotChangeMortalRealm()
     {
         NPCRuntime npc = CreateRuntime("t_break_ok", "测试弟子",
-            new CharacterState { characterId = "t_break_ok", displayName = "测试弟子", cultivation = 100, realm = CultivationRealm.QiRefining });
+            new CharacterState { characterId = "t_break_ok", displayName = "测试弟子", realmLayer = 1, realm = CultivationRealm.Mortal });
 
-        npc.Character.realm = CultivationRealm.Mortal;
-        Assert.IsFalse(npc.TryBreakthrough(1f));
+        RealmProgressionRules.AddNaqi(npc, 1f, 1);
         Assert.AreEqual(CultivationRealm.Mortal, npc.Realm);
     }
 

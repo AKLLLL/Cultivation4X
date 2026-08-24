@@ -136,11 +136,12 @@ public class DaySettlementPanel : MonoBehaviour
         foreach (CharacterDayChange item in summary.characterChanges)
         {
             StringBuilder text = new StringBuilder();
-            text.Append($"{item.displayName}：今日灵气 {item.dailyAura}/100");
+            text.Append($"{item.displayName}：当前灵气 {item.currentAura:0.0}");
             if (item.naqiProgressChange != 0f) text.Append($"，纳气 +{item.naqiProgressChange:0.00}%");
             if (item.techniqueMasteryChange != 0f) text.Append($"，掌握 +{item.techniqueMasteryChange:0.00}%");
-            if (item.completedMajorCycle) text.Append("，完成大周天");
-            if (item.qiDisorderResponse != QiDisorderResponse.None) text.Append($"，灵气紊乱：{item.qiDisorderResponse}");
+            if (item.auraControlChange != 0f) text.Append($"，控制 +{item.auraControlChange:0.00}");
+            if (item.realmLayerAfter != item.realmLayerBefore) text.Append($"，进入练气{item.realmLayerAfter}层");
+            if (item.cultivationResult != null) text.Append($"，{item.cultivationResult.selectedActionName}（{item.cultivationResult.outcome}）");
             text.Append($"，{HealthName(item.healthBefore)} → {HealthName(item.healthAfter)}");
             if (item.realmBefore != item.realmAfter)
                 text.Append($"，境界 {RealmName(item.realmBefore)} → {RealmName(item.realmAfter)}");

@@ -268,34 +268,33 @@ namespace Cultivation4X.WorldMap
                 int danger = (int)WorldMapProgressRules.GetDanger(cell);
                 int aura = cell.totalAura >= 1.2f ? 2 : cell.totalAura >= 0.6f ? 1 : 0;
                 AddSpiritStones(reward, 10 + danger * 5 + aura * 4);
-                reward.Exp = 6 + danger * 3 + aura * 2;
                 reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 1 + danger });
             }
             else if (context.actionType == MapActionType.InvestigateSpiritSpring)
-            { AddSpiritStones(reward, 20); reward.Exp = 15; }
+            { AddSpiritStones(reward, 20); }
             else if (context.actionType == MapActionType.DevelopSpiritSpring)
             {
-                AddSpiritStones(reward, 35); reward.Exp = 20;
+                AddSpiritStones(reward, 35);
                 reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 3 });
             }
             else
             {
                 switch (context.actionType)
                 {
-                    case MapActionType.EstablishVillageRelation: AddSpiritStones(reward, 28); reward.Exp = 18; break;
+                    case MapActionType.EstablishVillageRelation: AddSpiritStones(reward, 28); break;
                     case MapActionType.DevelopSpiritMine:
-                        AddSpiritStones(reward, 32); reward.Exp = 22;
+                        AddSpiritStones(reward, 32);
                         reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 2 }); break;
                     case MapActionType.DevelopResourceNode:
-                        AddSpiritStones(reward, 32); reward.Exp = 22;
+                        AddSpiritStones(reward, 32);
                         reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 2 }); break;
                     case MapActionType.BuildCaveResidenceOutpost:
-                        AddSpiritStones(reward, 30); reward.Exp = 24;
+                        AddSpiritStones(reward, 30);
                         reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 2 }); break;
                     case MapActionType.ClearBeastLair:
-                        AddSpiritStones(reward, 24); reward.Exp = 20;
+                        AddSpiritStones(reward, 24);
                         reward.Items.Add(new ItemReward { itemId = FacilityRules.BasicMaterialId, count = 1 }); break;
-                    case MapActionType.InvestigateRuin: AddSpiritStones(reward, 26); reward.Exp = 25; break;
+                    case MapActionType.InvestigateRuin: AddSpiritStones(reward, 26); break;
                 }
             }
             return reward;

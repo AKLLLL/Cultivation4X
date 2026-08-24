@@ -6,12 +6,15 @@ public class CharacterDayChange
 {
     public string characterId;
     public string displayName;
-    public int cultivationChange;
-    public int dailyAura;
+    public float currentAuraChange;
+    public float currentAura;
     public float naqiProgressChange;
     public float techniqueMasteryChange;
-    public bool completedMajorCycle;
-    public QiDisorderResponse qiDisorderResponse;
+    public float auraControlChange;
+    public float fatigueChange;
+    public int realmLayerBefore;
+    public int realmLayerAfter;
+    public DailyCultivationResult cultivationResult;
     public CultivationRealm realmBefore;
     public CultivationRealm realmAfter;
     public HealthState healthBefore;

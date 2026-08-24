@@ -11,11 +11,6 @@
     "needDays":5,
 
 
-
-
-    "expReward":100,
-
-
     "itemRewards":
     [{"itemId":"LingShi_001","count":500}
     ],

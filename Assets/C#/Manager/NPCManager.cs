@@ -90,17 +90,17 @@ public class NPCManager : MonoBehaviour
                 templateId = string.Empty,
                 displayName = candidate.displayName,
                 age = candidate.age,
-                level = 1,
+                realmLayer = 1,
                 realm = CultivationRealm.QiRefining,
                 hasGeneratedProfile = true,
                 baseAttack = candidate.attack,
                 baseIntelligence = candidate.intelligence,
                 baseAgility = candidate.agility,
                 baseComprehension = candidate.comprehension,
-                techniqueMastery = candidate.comprehension,
+                techniqueMastery = 50f,
                 baseCombatComprehension = candidate.combatComprehension,
                 basePhysique = candidate.physique,
-                aptitudeRank = Mathf.Clamp(candidate.aptitudeRank, 1, 5),
+                spiritRoot = candidate.spiritRoot,
                 initialFeatureId = candidate.initialFeatureId,
                 traitIds = string.IsNullOrWhiteSpace(candidate.personalityTraitId)
                     ? new List<string>()
@@ -326,9 +326,16 @@ public class NPCManager : MonoBehaviour
             templateId = templateId,
             displayName = template.npcName,
             age = template.age,
-            level = template.level,
-            exp = template.exp,
-            techniqueMastery = template.comprehension,
+            realm = CultivationRealm.QiRefining,
+            realmLayer = 1,
+            techniqueMastery = 50f,
+            spiritRoot = FoundingRules.GenerateSpiritRoot(new System.Random(templateId.GetHashCode())),
+            baseAttack = template.attack,
+            baseIntelligence = template.intelligence,
+            baseAgility = template.agility,
+            baseComprehension = template.comprehension,
+            baseCombatComprehension = template.combatComprehension,
+            basePhysique = template.physique,
             traitIds = new List<string>(template.initialTraits)
         };
         NPCRuntime runtime = new NPCRuntime(template, state);
@@ -348,7 +355,7 @@ public class NPCManager : MonoBehaviour
     {
         foreach (var npc in runtimes)
         {
-            NaqiGrowthRules.StartDay(npc);
+            DailyCultivationSimulator.StartDay(npc);
             DiscipleMentalStateRules.RestoreDaily(npc);
             bool wasInjured = npc.State == NPCState.Injured;
             npc.OnDayPassed();
@@ -358,24 +365,23 @@ public class NPCManager : MonoBehaviour
             Mission activeMission = npc.CurrentMission;
             if (activeMission != null && (activeMission.State == MissionState.Active || activeMission.State == MissionState.WaitingNode))
             {
-                MonthlyActivityType consumed = MissionManager.IsAutonomousMission(activeMission.Data)
-                    ? MonthlyActivityType.Free
-                    : MonthlyPlanRules.PeekScheduledActivity(npc, day);
-                MonthlyPlanRules.Consume(npc, day, consumed);
-                NaqiGrowthRules.EndDay(npc);
                 continue;
             }
-            MonthlyActivityType activity = MonthlyPlanRules.PeekScheduledActivity(npc, day);
-            MonthlyPlanRules.Consume(npc, day, activity);
+            MonthlyActivityType activity = MonthlyPlanRules.ActivityFor(npc, day);
             if (npc.State == NPCState.Idle)
             {
                 if (activity == MonthlyActivityType.Training)
-                    NaqiGrowthRules.ProcessTrainingDay(npc, day);
+                    DailyCultivationSimulator.SimulateTrainingDay(npc, day);
                 else if (activity == MonthlyActivityType.SectDuty)
                     ProcessSectDutyDay();
             }
-            NaqiGrowthRules.EndDay(npc);
         }
+    }
+
+    public void ApplyNightlyCultivationSettlement()
+    {
+        foreach (NPCRuntime npc in runtimes)
+            if (npc?.Character?.IsAlive == true) DailyCultivationSimulator.ApplyNightLeak(npc);
     }
 
     private static void ProcessSectDutyDay()
@@ -437,8 +443,8 @@ public class NPCManager : MonoBehaviour
         data.npcID = state.characterId;
         data.npcName = state.displayName;
         data.age = state.age;
-        data.level = state.level;
-        data.exp = state.exp;
+        data.level = state.realmLayer;
+        data.exp = 0;
         data.attack = state.baseAttack;
         data.intelligence = state.baseIntelligence;
         data.agility = state.baseAgility;
@@ -467,10 +473,14 @@ public class NPCManager : MonoBehaviour
                 !string.IsNullOrWhiteSpace(item.targetCharacterId))
             .ToList();
         state.lifeRecords = state.lifeRecords ?? new List<LifeRecord>();
-        state.cultivation = Mathf.Clamp(state.cultivation, 0, 100);
+        state.realmLayer = Mathf.Clamp(state.realmLayer, 1, 3);
         state.naqiProgress = Mathf.Clamp(state.naqiProgress, 0f, 100f);
+        state.currentAura = Mathf.Max(0f, state.currentAura);
+        state.auraControl = Mathf.Clamp(state.auraControl, 0f, 100f);
+        state.fatigue = Mathf.Clamp(state.fatigue, 0f, 100f);
+        state.spiritRoot = state.spiritRoot ?? new SpiritRootData();
+        SpiritRootRules.Normalize(state.spiritRoot);
         state.techniqueMastery = Mathf.Clamp(state.techniqueMastery, 0f, 100f);
-        state.qiDisorderRemainingDays = Mathf.Max(0, state.qiDisorderRemainingDays);
     }
 
 }

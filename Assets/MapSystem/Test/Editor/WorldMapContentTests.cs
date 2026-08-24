@@ -196,7 +196,6 @@ public class WorldMapContentTests
                 $"{type}: {reason}");
             Reward reward = WorldMapContentRules.CreateReward(map, context);
             Assert.Greater(reward.Items.Single(item => item.itemId == FacilityRules.SpiritStoneId).count, 0);
-            Assert.Greater(reward.Exp, 0);
             Assert.IsTrue(WorldMapContentRules.CompleteSuccessfulAction(map, progress, context,
                 MissionResultTier.Qualified, 2, out reason), reason);
             Assert.AreEqual(type == MapSiteType.BeastLair || type == MapSiteType.Ruin
@@ -341,9 +340,9 @@ public class WorldMapContentTests
     }
 
     [Test]
-    public void VersionEighteen_RoundTripsAndRejectsIllegalContentState()
+    public void VersionNineteen_RoundTripsAndRejectsIllegalContentState()
     {
-        Assert.AreEqual(18, SaveDataVersion.Current);
+        Assert.AreEqual(20, SaveDataVersion.Current);
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5105 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);

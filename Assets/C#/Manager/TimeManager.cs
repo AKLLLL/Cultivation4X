@@ -68,6 +68,7 @@ public class TimeManager : MonoBehaviour
             OnDayPassed?.Invoke(CurrentDay);
             ExternalThreatRules.ProcessDay(CurrentDay);
             EventManager.Instance?.ProcessDay(CurrentDay);
+            NPCManager.Instance?.ApplyNightlyCultivationSettlement();
             System.Collections.Generic.List<ResourceProductionRecord> monthlyProduction =
                 CurrentDay > 0 && CurrentDay % ResourceManager.DaysPerMonth == 0
                     ? ResourceManager.MonthUpdate(CurrentDay, CurrentDay / ResourceManager.DaysPerMonth)
@@ -129,8 +130,9 @@ public class TimeManager : MonoBehaviour
             {
                 if (string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
                 result.characters[npc.CharacterId] = new CharacterSnapshot
-                { cultivation = npc.Cultivation, naqiProgress = npc.Character.naqiProgress,
-                    techniqueMastery = npc.Character.techniqueMastery, realm = npc.Realm, health = npc.Health };
+                { currentAura = npc.CurrentAura, naqiProgress = npc.Character.naqiProgress,
+                    techniqueMastery = npc.Character.techniqueMastery, auraControl = npc.Character.auraControl,
+                    fatigue = npc.Character.fatigue, realmLayer = npc.RealmLayer, realm = npc.Realm, health = npc.Health };
             }
         return result;
     }
@@ -167,16 +169,19 @@ public class TimeManager : MonoBehaviour
                 if (string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
                 before.characters.TryGetValue(npc.CharacterId, out CharacterSnapshot old);
                 old = old ?? new CharacterSnapshot { realm = npc.Realm, health = npc.Health };
-                int cultivationChange = npc.Cultivation - old.cultivation;
+                float auraChange = npc.CurrentAura - old.currentAura;
                 float naqiChange = npc.Character.naqiProgress - old.naqiProgress;
                 float masteryChange = npc.Character.techniqueMastery - old.techniqueMastery;
-                if (cultivationChange != 0 || naqiChange != 0f || masteryChange != 0f ||
-                    npc.Character.completedMajorCycleToday || old.realm != npc.Realm || old.health != npc.Health)
+                float controlChange = npc.Character.auraControl - old.auraControl;
+                float fatigueChange = npc.Character.fatigue - old.fatigue;
+                if (auraChange != 0f || naqiChange != 0f || masteryChange != 0f || controlChange != 0f || fatigueChange != 0f ||
+                    old.realmLayer != npc.RealmLayer || old.realm != npc.Realm || old.health != npc.Health)
                     result.characterChanges.Add(new CharacterDayChange { characterId = npc.CharacterId, displayName = npc.Character.displayName,
-                        cultivationChange = cultivationChange, dailyAura = npc.Cultivation,
+                        currentAuraChange = auraChange, currentAura = npc.CurrentAura,
                         naqiProgressChange = naqiChange, techniqueMasteryChange = masteryChange,
-                        completedMajorCycle = npc.Character.completedMajorCycleToday,
-                        qiDisorderResponse = npc.Character.qiDisorderResponse,
+                        auraControlChange = controlChange, fatigueChange = fatigueChange,
+                        realmLayerBefore = old.realmLayer, realmLayerAfter = npc.RealmLayer,
+                        cultivationResult = npc.Character.latestCultivationResult?.date == CurrentDay ? npc.Character.latestCultivationResult : null,
                         realmBefore = old.realm, realmAfter = npc.Realm,
                         healthBefore = old.health, healthAfter = npc.Health });
             }
@@ -206,9 +211,12 @@ public class TimeManager : MonoBehaviour
 
     private class CharacterSnapshot
     {
-        public int cultivation;
+        public float currentAura;
         public float naqiProgress;
         public float techniqueMastery;
+        public float auraControl;
+        public float fatigue;
+        public int realmLayer;
         public CultivationRealm realm;
         public HealthState health;
     }

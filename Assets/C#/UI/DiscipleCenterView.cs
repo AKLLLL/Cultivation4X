@@ -120,13 +120,13 @@ public sealed class DiscipleCenterView : UIWindowView
         Set(mentalText, hasSelection
             ? $"心境：{snapshot.mentalState} / {DiscipleMentalStateRules.MaxMentalState}"
             : string.Empty);
-        Set(dailyAuraText, hasSelection ? $"今日灵气：{snapshot.dailyAura} / 100" : string.Empty);
+        Set(dailyAuraText, hasSelection ? $"当前灵气：{snapshot.currentAura:0.0} / {snapshot.auraCapacity:0.0}　控制 {snapshot.auraControl:0.0}　疲劳 {snapshot.fatigue:0.0}" : string.Empty);
         Set(abilitiesText, snapshot.abilities);
         Set(relationshipsText, snapshot.relationships);
         RenderHistory(snapshot.historyItems);
         Set(currentActionText, hasSelection ? snapshot.currentAction : "暂无当前行动");
         Set(currentPlanText, hasSelection ? snapshot.currentPlan : "暂无本月计划");
-        Set(nextPlanText, hasSelection ? snapshot.nextPlan : "暂无下月计划");
+        Set(nextPlanText, hasSelection ? snapshot.nextPlan : "暂无明日安排");
     }
 
     private void SelectTab(int index)

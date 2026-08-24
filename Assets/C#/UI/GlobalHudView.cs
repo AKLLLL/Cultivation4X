@@ -16,6 +16,7 @@ public sealed class GlobalHudView : MonoBehaviour
     [SerializeField] private Button mapButton;
     [SerializeField] private Button sectButton;
     [SerializeField] private Button discipleButton;
+    [SerializeField] private Button monthlyPlanButton;
     [SerializeField] private Button missionButton;
     [SerializeField] private Button resourceButton;
     [SerializeField] private Button eventButton;
@@ -25,9 +26,11 @@ public sealed class GlobalHudView : MonoBehaviour
     private UIManager manager;
     private UITheme theme;
     private bool listenersBound;
+    private bool hasAppliedFlowState;
+    private GameFlowState lastAppliedFlowState;
 
     public void Configure(GameObject root, TMP_Text sectName, TMP_Text contextTitle, TMP_Text resources,
-        TMP_Text events, TMP_Text day, Button map, Button sect, Button disciple, Button mission,
+        TMP_Text events, TMP_Text day, Button map, Button sect, Button disciple, Button monthlyPlan, Button mission,
         Button resource, Button eventInbox, Button endDay, Button returnToMap)
     {
         shellRoot = root;
@@ -39,6 +42,7 @@ public sealed class GlobalHudView : MonoBehaviour
         mapButton = map;
         sectButton = sect;
         discipleButton = disciple;
+        monthlyPlanButton = monthlyPlan;
         missionButton = mission;
         resourceButton = resource;
         eventButton = eventInbox;
@@ -71,6 +75,7 @@ public sealed class GlobalHudView : MonoBehaviour
         mapButton?.onClick.RemoveAllListeners();
         sectButton?.onClick.RemoveAllListeners();
         discipleButton?.onClick.RemoveAllListeners();
+        monthlyPlanButton?.onClick.RemoveAllListeners();
         missionButton?.onClick.RemoveAllListeners();
         resourceButton?.onClick.RemoveAllListeners();
         eventButton?.onClick.RemoveAllListeners();
@@ -80,6 +85,7 @@ public sealed class GlobalHudView : MonoBehaviour
         returnToMapButton?.onClick.AddListener(() => manager?.ReturnToWorldMap());
         sectButton?.onClick.AddListener(() => SectWorldInterface.Instance?.OpenSectLayout());
         discipleButton?.onClick.AddListener(() => manager?.OpenWindow(UIWindowId.DiscipleCenter));
+        monthlyPlanButton?.onClick.AddListener(() => manager?.OpenWindow(UIWindowId.MonthlyPlan));
         missionButton?.onClick.AddListener(OpenMissionPanel);
         resourceButton?.onClick.AddListener(OpenResourcePanel);
         eventButton?.onClick.AddListener(OpenEventInbox);
@@ -123,11 +129,18 @@ public sealed class GlobalHudView : MonoBehaviour
 
     private void ApplyFlowState(GameFlowState state)
     {
+        bool leavingWorldMap = hasAppliedFlowState &&
+                               lastAppliedFlowState == GameFlowState.WorldMap &&
+                               state != GameFlowState.WorldMap;
+        lastAppliedFlowState = state;
+        hasAppliedFlowState = true;
         bool shellVisible = state == GameFlowState.WorldMap;
         if (shellRoot != null) shellRoot.SetActive(shellVisible);
         CharacterEventPanel eventPanel = Object.FindObjectOfType<CharacterEventPanel>(true);
         eventPanel?.SetLegacyInboxShortcutVisible(!shellVisible);
-        if (state != GameFlowState.WorldMap) manager?.CloseAllPanels();
+        // 首次进入 MainMenu/CharacterSetup 时，强制立宗面板可能刚由自己的 Start 打开。
+        // 只有确实从世界地图离开时才清理世界地图窗口，避免启动顺序把立宗 UI 关闭。
+        if (leavingWorldMap) manager?.CloseAllPanels();
         RefreshAll();
     }
 
@@ -138,10 +151,12 @@ public sealed class GlobalHudView : MonoBehaviour
         SetSelected(mapButton, manager == null || !manager.HasOpenScreens);
         SetSelected(sectButton, manager != null && manager.HasOpenScreens && manager.CurrentScreenTitle.Contains("宗门"));
         SetSelected(discipleButton, manager?.CurrentScreenId == UIWindowId.DiscipleCenter);
+        SetSelected(monthlyPlanButton, manager?.CurrentScreenId == UIWindowId.MonthlyPlan);
         bool navigationAllowed = manager == null || !manager.HasOpenModals;
         if (mapButton != null) mapButton.interactable = navigationAllowed;
         if (sectButton != null) sectButton.interactable = navigationAllowed;
         if (discipleButton != null) discipleButton.interactable = navigationAllowed;
+        if (monthlyPlanButton != null) monthlyPlanButton.interactable = navigationAllowed;
         if (missionButton != null) missionButton.interactable = navigationAllowed;
         if (resourceButton != null) resourceButton.interactable = navigationAllowed;
         if (returnToMapButton != null) returnToMapButton.interactable = navigationAllowed;

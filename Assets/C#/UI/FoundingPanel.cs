@@ -173,7 +173,7 @@ public class FoundingPanel : MonoBehaviour
             FoundingFeatureDefinition feature = FoundingRules.GetFeature(candidate.initialFeatureId);
             string marker = selectedCandidateIds.Contains(candidate.candidateId) ? "【已选】" : string.Empty;
             Button button = RuntimeUIFactory.Button(content,
-                $"{marker}{candidate.displayName}　{candidate.age}岁　资质：{FoundingRules.AptitudeName(candidate.aptitudeRank)}\n" +
+                $"{marker}{candidate.displayName}　{candidate.age}岁　灵根：{FoundingRules.SpiritRootName(candidate.spiritRoot?.quality ?? SpiritRootQuality.Medium)}\n" +
                 $"战力 {CharacterCapabilityRules.CalculateCandidateCombatPower(candidate)}　力量{candidate.attack} 智{candidate.intelligence} 敏{candidate.agility} 体{candidate.physique}\n" +
                 $"悟{candidate.comprehension}　战斗悟性{candidate.combatComprehension}　性格：{personality}　特点：{feature?.name ?? candidate.initialFeatureId}",
                 68);

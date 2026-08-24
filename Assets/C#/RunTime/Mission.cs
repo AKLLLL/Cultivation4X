@@ -61,9 +61,6 @@ public class Mission
     {
         Reward reward = new Reward();
 
-        // 经验奖励
-        reward.Exp = data.expReward;
-
         // 物品奖励
         if (data.itemRewards != null)
         {
@@ -362,15 +359,6 @@ public class Mission
             switch (effect.type)
             {
 
-                //增加经验
-                case "AddExp":
-
-                    Reward.Exp += effect.value;
-
-                    Debug.Log($"获得旧经验奖励（V1冻结）:{effect.value}");
-
-                    break;
-
                 //获得物品
                 case "AddItem":
 
@@ -617,7 +605,6 @@ public class Mission
         if (ResultTier != MissionResultTier.Excellent) return;
         ItemReward spiritStones = reward.Items.Find(item => item != null && item.itemId == FacilityRules.SpiritStoneId);
         if (spiritStones != null) spiritStones.count += Mathf.FloorToInt(spiritStones.count * 0.5f);
-        reward.Exp += Mathf.FloorToInt(reward.Exp * 0.5f);
     }
 
     public bool CancelAutonomousByPlayer()

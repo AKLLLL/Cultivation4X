@@ -14,11 +14,6 @@ using System.Collections.Generic;
 public class Reward
 {
     /// <summary>
-    /// NPC经验奖励
-    /// </summary>
-    public int Exp;
-
-    /// <summary>
     /// 物品奖励列表
     /// 一个任务可以获得多个物品。
     /// </summary>

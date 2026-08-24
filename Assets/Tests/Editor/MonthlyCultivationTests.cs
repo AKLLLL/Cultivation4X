@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -16,123 +17,133 @@ public class MonthlyCultivationTests
         WarehouseManager.Instance = null;
     }
 
-    [TestCase(0, 1, 0, 1)]
-    [TestCase(1, 1, 1, 2)]
-    [TestCase(30, 1, 30, 2)]
-    [TestCase(31, 2, 1, 3)]
-    public void MonthBoundaries_AreStable(int day, int month, int dayOfMonth, int editable)
+    [TestCase(0, 1, 0)]
+    [TestCase(1, 1, 1)]
+    [TestCase(30, 1, 30)]
+    [TestCase(31, 2, 1)]
+    public void MonthBoundaries_AreStable(int day, int month, int dayOfMonth)
     {
         Assert.AreEqual(month, MonthlyPlanRules.MonthIndex(day));
         Assert.AreEqual(dayOfMonth, MonthlyPlanRules.DayOfMonth(day));
-        Assert.AreEqual(editable, MonthlyPlanRules.EditableMonth(day));
     }
 
     [Test]
-    public void PlanValidation_RequiresTenPercentStepsAndExactSum()
+    public void Template_CreatesThirtyExplicitDaysWithExpectedCounts()
     {
-        MonthlyDisciplePlan plan = new MonthlyDisciplePlan { characterId = "a" };
-        Assert.IsTrue(MonthlyPlanRules.TrySetPlan(plan, 50, 20, 30, out _));
-        Assert.IsFalse(MonthlyPlanRules.TrySetPlan(plan, 45, 25, 30, out _));
-        Assert.IsFalse(MonthlyPlanRules.TrySetPlan(plan, 50, 20, 20, out _));
+        MonthlyPlanTemplate plan = new MonthlyPlanTemplate { id = "template", name = "标准计划" };
+        MonthlyPlanRules.ApplyTemplate(plan);
+        Assert.AreEqual(30, plan.days.Count);
+        Assert.AreEqual(15, plan.days.Count(item => item == MonthlyActivityType.Training));
+        Assert.AreEqual(6, plan.days.Count(item => item == MonthlyActivityType.SectDuty));
+        Assert.AreEqual(9, plan.days.Count(item => item == MonthlyActivityType.Free));
     }
 
     [Test]
-    public void AuraCurve_IsIncrementalAndMajorCycleOnlyOnce()
+    public void MissingPlanAndMissingDays_DefaultToFree()
     {
-        NPCRuntime npc = Runtime("curve");
-        Assert.AreEqual(0.5f, NaqiGrowthRules.AddDailyAura(npc, 50), 0.0001f);
-        Assert.AreEqual(3.5f, NaqiGrowthRules.AddDailyAura(npc, 50), 0.0001f);
-        Assert.AreEqual(4f, npc.Character.naqiProgress, 0.0001f);
-        Assert.AreEqual(1f, npc.Character.techniqueMastery, 0.0001f);
-        Assert.AreEqual(0f, NaqiGrowthRules.AddDailyAura(npc, 50), 0.0001f);
+        Assert.AreEqual(MonthlyActivityType.Free, MonthlyPlanRules.ActivityFor("missing", 1));
+        MonthlyPlanTemplate plan = new MonthlyPlanTemplate { id = "template", name = "空计划", days = new List<MonthlyActivityType>() };
+        MonthlyPlanRules.Normalize(plan);
+        Assert.AreEqual(30, plan.days.Count);
+        Assert.IsTrue(plan.days.All(item => item == MonthlyActivityType.Free));
     }
 
     [Test]
-    public void StartDay_ResetsAuraButKeepsNaqiProgress()
+    public void BoundTemplate_RepeatsEveryThirtyDaysAndDeleteUnbindsImplicitly()
     {
-        NPCRuntime npc = Runtime("reset");
-        NaqiGrowthRules.AddDailyAura(npc, 50);
-        NaqiGrowthRules.StartDay(npc);
-        Assert.AreEqual(0, npc.Cultivation);
-        Assert.AreEqual(0.5f, npc.Character.naqiProgress, 0.0001f);
+        Add<PlayerManager>("Player");
+        MonthlyPlanTemplate template = MonthlyPlanRules.CreateTemplate("真传弟子计划");
+        Assert.NotNull(template);
+        Assert.IsTrue(MonthlyPlanRules.TrySetDay(template, 1, MonthlyActivityType.Training, out _));
+        Assert.IsTrue(MonthlyPlanRules.BindDisciple(template.id, "disciple"));
+        Assert.AreEqual(MonthlyActivityType.Training, MonthlyPlanRules.ActivityFor("disciple", 1));
+        Assert.AreEqual(MonthlyActivityType.Training, MonthlyPlanRules.ActivityFor("disciple", 31));
+        Assert.IsTrue(MonthlyPlanRules.DeleteTemplate(template.id));
+        Assert.AreEqual(MonthlyActivityType.Free, MonthlyPlanRules.ActivityFor("disciple", 31));
     }
 
     [Test]
-    public void AutonomousMission_DayTwentyNineCannotStartTwoDayMission()
+    public void BindingToAnotherTemplate_RemovesPreviousBinding()
+    {
+        Add<PlayerManager>("Player");
+        MonthlyPlanTemplate first = MonthlyPlanRules.CreateTemplate("一");
+        MonthlyPlanTemplate second = MonthlyPlanRules.CreateTemplate("二");
+        MonthlyPlanRules.BindDisciple(first.id, "disciple");
+        MonthlyPlanRules.BindDisciple(second.id, "disciple");
+        Assert.IsFalse(first.discipleIds.Contains("disciple"));
+        Assert.IsTrue(second.discipleIds.Contains("disciple"));
+    }
+
+    [Test]
+    public void AutonomousMission_RequiresConsecutiveFutureFreeDaysAndCannotCrossMonth()
     {
         Assert.IsFalse(MonthlyPlanRules.CanStartAutonomousMission(Runtime("late"), 2, 29, out string reason));
         Assert.AreEqual("任务会跨越月末", reason);
     }
 
     [Test]
-    public void DeficitScheduler_ProducesExactFiftyTwentyThirtyMonth()
+    public void SpiritRootTables_MatchApprovedValues()
     {
-        PlayerManager player = Add<PlayerManager>("Player");
-        NPCRuntime npc = Runtime("schedule");
-        player.playerData.monthlyPlans.Add(new MonthlyDisciplePlan
+        Assert.AreEqual(0.2f, SpiritRootRules.AbsorptionMultiplier(SpiritRootQuality.Mixed));
+        Assert.AreEqual(6f, SpiritRootRules.AbsorptionMultiplier(SpiritRootQuality.Heavenly));
+        Assert.AreEqual(0.95f, SpiritRootRules.LeakageRate(SpiritRootQuality.Mixed));
+        Assert.AreEqual(0f, SpiritRootRules.LeakageRate(SpiritRootQuality.Heavenly));
+        Assert.AreEqual(0.9f, SpiritRootRules.RefiningMultiplier(SpiritRootQuality.Mixed));
+        Assert.AreEqual(1.15f, SpiritRootRules.RefiningMultiplier(SpiritRootQuality.Heavenly));
+    }
+
+    [TestCase(6, 35f)]
+    [TestCase(10, 50f)]
+    [TestCase(15, 65f)]
+    [TestCase(18, 80f)]
+    [TestCase(20, 100f)]
+    public void Physique_DeterminesDerivedLayerOneCapacity(int physique, float expected)
+    {
+        Assert.AreEqual(expected, DailyCultivationSimulator.AuraCapacity(Runtime("capacity", physique)), 0.001f);
+    }
+
+    [Test]
+    public void NightLeak_RetainsRemainderAcrossDays()
+    {
+        NPCRuntime npc = Runtime("leak");
+        npc.Character.spiritRoot.quality = SpiritRootQuality.High;
+        npc.Character.currentAura = 40f;
+        Assert.AreEqual(20f, DailyCultivationSimulator.ApplyNightLeak(npc), 0.001f);
+        Assert.AreEqual(20f, npc.Character.currentAura, 0.001f);
+        DailyCultivationSimulator.StartDay(npc);
+        Assert.AreEqual(20f, npc.Character.currentAura, 0.001f);
+    }
+
+    [Test]
+    public void NaqiOverflow_AdvancesLayersAndStopsAtThirdLayerCompletion()
+    {
+        NPCRuntime npc = Runtime("overflow");
+        npc.Character.naqiProgress = 95f;
+        Assert.AreEqual(205f, RealmProgressionRules.AddNaqi(npc, 210f, 1), 0.001f);
+        Assert.AreEqual(3, npc.Character.realmLayer);
+        Assert.AreEqual(100f, npc.Character.naqiProgress, 0.001f);
+        Assert.AreEqual(0f, RealmProgressionRules.AddNaqi(npc, 10f, 2));
+    }
+
+    [Test]
+    public void StandardTemplate_CompletesInApprovedCalendarWindow()
+    {
+        NPCRuntime npc = Runtime("standard");
+        npc.Character.spiritRoot.quality = SpiritRootQuality.Medium;
+        npc.Character.techniqueMastery = 50f;
+        int completedDay = 0;
+        for (int day = 1; day <= 120; day++)
         {
-            characterId = npc.CharacterId, monthIndex = 1,
-            trainingPercent = 50, sectDutyPercent = 20, freePercent = 30
-        });
-        for (int day = 1; day <= 30; day++)
-        {
-            MonthlyActivityType activity = MonthlyPlanRules.PeekScheduledActivity(npc, day);
-            MonthlyPlanRules.Consume(npc, day, activity);
+            DailyCultivationSimulator.StartDay(npc);
+            if (day % 2 == 1) DailyCultivationSimulator.SimulateTrainingDay(npc, day);
+            DailyCultivationSimulator.ApplyNightLeak(npc);
+            if (npc.Character.realmLayer == 3 && npc.Character.naqiProgress >= 100f)
+            {
+                completedDay = day;
+                break;
+            }
         }
-        MonthlyDisciplePlan plan = player.playerData.monthlyPlans[0];
-        Assert.AreEqual(15, plan.usedTrainingDays);
-        Assert.AreEqual(6, plan.usedSectDutyDays);
-        Assert.AreEqual(9, plan.usedFreeDays);
-    }
-
-    [Test]
-    public void NaqiCompletion_TransfersOnlyRemainingTrainingDays()
-    {
-        PlayerManager player = Add<PlayerManager>("Player");
-        NPCRuntime npc = Runtime("transfer");
-        MonthlyDisciplePlan plan = new MonthlyDisciplePlan
-        {
-            characterId = npc.CharacterId, monthIndex = 1,
-            trainingPercent = 50, sectDutyPercent = 20, freePercent = 30,
-            usedTrainingDays = 5
-        };
-        player.playerData.monthlyPlans.Add(plan);
-        MonthlyPlanRules.TransferRemainingTrainingToFree(npc, 1);
-        Assert.AreEqual(10, plan.transferredTrainingDays);
-        Assert.AreEqual(19, MonthlyPlanRules.RemainingFreeDays(npc, 1));
-        Assert.AreEqual(50, plan.trainingPercent, "预算转移不得破坏10%步进的计划比例");
-    }
-
-    [Test]
-    public void DisorderCountdown_PausesForTenCompleteDays()
-    {
-        NPCRuntime npc = Runtime("disorder");
-        npc.Character.qiDisorderResponse = QiDisorderResponse.Paused;
-        npc.Character.qiDisorderRemainingDays = 10;
-        for (int i = 0; i < 9; i++) NaqiGrowthRules.EndDay(npc);
-        Assert.AreEqual(QiDisorderResponse.Paused, npc.Character.qiDisorderResponse);
-        Assert.AreEqual(1, npc.Character.qiDisorderRemainingDays);
-        NaqiGrowthRules.EndDay(npc);
-        Assert.AreEqual(QiDisorderResponse.None, npc.Character.qiDisorderResponse);
-        Assert.AreEqual(0, npc.Character.qiDisorderRemainingDays);
-    }
-
-    [Test]
-    public void TrainingStoneToggle_ConsumesExactlyOneStone()
-    {
-        PlayerManager player = Add<PlayerManager>("Player");
-        WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
-        warehouse.AddItem(NaqiGrowthRules.SpiritStoneId, 2);
-        int before = warehouse.GetItemCount(NaqiGrowthRules.SpiritStoneId);
-        NPCRuntime npc = Runtime("stone");
-        player.playerData.monthlyPlans.Add(new MonthlyDisciplePlan
-        {
-            characterId = npc.CharacterId, monthIndex = 1,
-            trainingPercent = 100, sectDutyPercent = 0, freePercent = 0, useSpiritStone = true
-        });
-        NaqiGrowthRules.ProcessTrainingDay(npc, 1);
-        Assert.AreEqual(before - 1, warehouse.GetItemCount(NaqiGrowthRules.SpiritStoneId));
-        Assert.Greater(npc.Cultivation, 0);
+        Assert.That(completedDay, Is.InRange(85, 100));
     }
 
     [Test]
@@ -156,18 +167,19 @@ public class MonthlyCultivationTests
         Assert.IsEmpty(missions.GetActiveMissions());
     }
 
-    private NPCRuntime Runtime(string id)
+    private NPCRuntime Runtime(string id, int physique = 10)
     {
         NPCData data = ScriptableObject.CreateInstance<NPCData>();
         objects.Add(data);
         data.npcID = id;
         data.npcName = id;
         data.comprehension = 10;
-        data.physique = 10;
+        data.physique = physique;
         return new NPCRuntime(data, new CharacterState
         {
             characterId = id, templateId = id, displayName = id,
-            realm = CultivationRealm.QiRefining, health = HealthState.Healthy
+            realm = CultivationRealm.QiRefining, realmLayer = 1,
+            techniqueMastery = 50f, health = HealthState.Healthy
         });
     }
 

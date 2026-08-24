@@ -326,12 +326,21 @@ public class SaveManager : MonoBehaviour
             character.traitIds = character.traitIds ?? new System.Collections.Generic.List<string>();
             character.relationships = character.relationships ?? new System.Collections.Generic.List<RelationshipRecord>();
             character.lifeRecords = character.lifeRecords ?? new System.Collections.Generic.List<LifeRecord>();
+            character.spiritRoot = character.spiritRoot ?? new SpiritRootData();
+            SpiritRootRules.Normalize(character.spiritRoot);
+            character.realmLayer = Mathf.Clamp(character.realmLayer, 1, 3);
+            character.currentAura = Mathf.Max(0f, character.currentAura);
+            character.auraControl = Mathf.Clamp(character.auraControl, 0f, 100f);
+            character.fatigue = Mathf.Clamp(character.fatigue, 0f, 100f);
             character.combatExperience = Mathf.Max(0, character.combatExperience);
             if (character.hasGeneratedProfile && character.baseCombatComprehension <= 0)
                 character.baseCombatComprehension = Mathf.Max(0, character.baseComprehension);
         }
         if (state.sect != null)
-            state.sect.monthlyPlans = state.sect.monthlyPlans ?? new System.Collections.Generic.List<MonthlyDisciplePlan>();
+        {
+            state.sect.monthlyPlanTemplates = state.sect.monthlyPlanTemplates ?? new System.Collections.Generic.List<MonthlyPlanTemplate>();
+            foreach (MonthlyPlanTemplate plan in state.sect.monthlyPlanTemplates.Where(item => item != null)) MonthlyPlanRules.Normalize(plan);
+        }
         state.version = SaveDataVersion.Current;
     }
 
@@ -339,7 +348,11 @@ public class SaveManager : MonoBehaviour
     {
         if (state == null) return;
         if (state.sect != null)
-            state.sect.monthlyPlans = state.sect.monthlyPlans ?? new System.Collections.Generic.List<MonthlyDisciplePlan>();
+        {
+            state.sect.monthlyPlanTemplates = state.sect.monthlyPlanTemplates ?? new System.Collections.Generic.List<MonthlyPlanTemplate>();
+            foreach (MonthlyPlanTemplate plan in state.sect.monthlyPlanTemplates.Where(item => item != null))
+                MonthlyPlanRules.Normalize(plan);
+        }
         if (state.worldMap != null)
         {
             state.worldMap.regions = state.worldMap.regions ?? new System.Collections.Generic.List<MapRegionData>();
@@ -394,26 +407,29 @@ public class SaveManager : MonoBehaviour
         if (state.characters == null || state.characters.Any(character => character == null ||
             character.mentalState < DiscipleMentalStateRules.MinMentalState ||
             character.mentalState > DiscipleMentalStateRules.MaxMentalState ||
-            character.cultivation < 0 || character.cultivation > 100 ||
+            character.realmLayer < 1 || character.realmLayer > 3 ||
+            character.currentAura < 0f || character.auraControl < 0f || character.auraControl > 100f ||
+            character.fatigue < 0f || character.fatigue > 100f || character.spiritRoot == null ||
+            !Enum.IsDefined(typeof(SpiritRootQuality), character.spiritRoot.quality) ||
+            Mathf.Abs(character.spiritRoot.gold + character.spiritRoot.wood + character.spiritRoot.water +
+                character.spiritRoot.fire + character.spiritRoot.earth - 1f) > 0.001f ||
             character.naqiProgress < 0f || character.naqiProgress > 100f ||
-            character.techniqueMastery < 0f || character.techniqueMastery > 100f ||
-            character.qiDisorderRemainingDays < 0 ||
-            !Enum.IsDefined(typeof(QiDisorderResponse), character.qiDisorderResponse)))
-            throw new InvalidDataException("弟子纳气、心境或紊乱数据无效");
+            character.techniqueMastery < 0f || character.techniqueMastery > 100f))
+            throw new InvalidDataException("弟子练气、灵根或心境数据无效");
         if (state.sect == null || state.sect.sectDutyWorkCredit < 0 || state.sect.sectDutyWorkCredit >= 5 ||
-            state.sect.monthlyPlans == null || state.sect.monthlyPlans.Any(plan => plan == null ||
-                string.IsNullOrWhiteSpace(plan.characterId) || plan.monthIndex < 1 ||
-                plan.trainingPercent < 0 || plan.trainingPercent > 100 || plan.trainingPercent % 10 != 0 ||
-                plan.sectDutyPercent < 0 || plan.sectDutyPercent > 100 || plan.sectDutyPercent % 10 != 0 ||
-                plan.freePercent < 0 || plan.freePercent > 100 || plan.freePercent % 10 != 0 ||
-                plan.trainingPercent + plan.sectDutyPercent + plan.freePercent != 100 ||
-                plan.usedTrainingDays < 0 || plan.usedSectDutyDays < 0 || plan.usedFreeDays < 0 ||
-                plan.transferredTrainingDays < 0 || plan.transferredTrainingDays > 30 ||
-                plan.usedTrainingDays + plan.transferredTrainingDays > plan.trainingPercent * MonthlyPlanRules.DaysPerMonth / 100 ||
-                plan.usedSectDutyDays > plan.sectDutyPercent * MonthlyPlanRules.DaysPerMonth / 100 ||
-                plan.usedFreeDays > plan.freePercent * MonthlyPlanRules.DaysPerMonth / 100 + plan.transferredTrainingDays ||
-                plan.usedTrainingDays + plan.usedSectDutyDays + plan.usedFreeDays > MonthlyPlanRules.DaysPerMonth))
-            throw new InvalidDataException("月度弟子计划数据无效");
+            state.sect.monthlyPlanTemplates == null ||
+            state.sect.monthlyPlanTemplates.Any(plan => plan == null || string.IsNullOrWhiteSpace(plan.id) ||
+                string.IsNullOrWhiteSpace(plan.name) || plan.days == null ||
+                plan.days.Count != MonthlyPlanRules.DaysPerMonth || plan.discipleIds == null ||
+                plan.discipleIds.Any(string.IsNullOrWhiteSpace) ||
+                plan.discipleIds.Distinct().Count() != plan.discipleIds.Count ||
+                plan.days.Any(activity => !Enum.IsDefined(typeof(MonthlyActivityType), activity))) ||
+            state.sect.monthlyPlanTemplates.GroupBy(plan => plan.id).Any(group => group.Count() > 1) ||
+            state.sect.monthlyPlanTemplates.SelectMany(plan => plan.discipleIds)
+                .GroupBy(id => id).Any(group => group.Count() > 1) ||
+            state.sect.monthlyPlanTemplates.Any(plan => plan.discipleIds.Any(id =>
+                state.characters.All(character => character.characterId != id))))
+            throw new InvalidDataException("循环月计划模板数据无效");
         if (state.activeMissions == null || state.activeMissions.Any(mission => mission == null ||
             mission.state == MissionState.Cancelled || mission.remainingDays < 0 || mission.elapsedDays < 0))
             throw new InvalidDataException("活动任务状态无效");
@@ -907,7 +923,6 @@ public class SaveManager : MonoBehaviour
                     item != null && item.itemId == FacilityRules.SpiritStoneId);
                 if (spiritStones != null)
                     spiritStones.count += Mathf.FloorToInt(spiritStones.count * 0.5f);
-                expectedReward.Exp += Mathf.FloorToInt(expectedReward.Exp * 0.5f);
             }
             if (!RewardsEqual(expectedReward, mission.reward))
                 throw new InvalidDataException("地图任务奖励快照无效");
@@ -920,7 +935,7 @@ public class SaveManager : MonoBehaviour
 
     private static bool RewardsEqual(Reward left, Reward right)
     {
-        if (left == null || right == null || left.Exp != right.Exp ||
+        if (left == null || right == null ||
             left.Items == null || right.Items == null || left.Items.Count != right.Items.Count) return false;
         for (int index = 0; index < left.Items.Count; index++)
         {

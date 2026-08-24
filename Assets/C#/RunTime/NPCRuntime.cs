@@ -9,10 +9,6 @@ public class NPCRuntime
     //成长数据
     //-----------------
 
-    public int Level;
-
-    public int Exp;
-
     // 当前状态
     public NPCState State;
 
@@ -30,14 +26,12 @@ public class NPCRuntime
             templateId = data.npcID,
             displayName = data.npcName,
             age = data.age,
-            level = data.level,
-            exp = data.exp,
+            realmLayer = 1,
+            techniqueMastery = 50f,
+            spiritRoot = FoundingRules.GenerateSpiritRoot(new System.Random(StableSeed(data.npcID))),
             traitIds = new System.Collections.Generic.List<string>(data.initialTraits)
         };
         //读取初始值
-        Level = data.level;
-        Exp = data.exp;
-
         State = NPCState.Idle;
 
         StateRemainDays = 0;
@@ -47,8 +41,6 @@ public class NPCRuntime
     {
         Data = data;
         Character = state;
-        Level = state.level;
-        Exp = state.exp;
         State = state.activityState;
         StateRemainDays = state.stateRemainDays;
     }
@@ -56,7 +48,8 @@ public class NPCRuntime
     public string CharacterId => Character.characterId;
     public HealthState Health => Character.health;
     public CultivationRealm Realm => Character.realm;
-    public int Cultivation => Character.cultivation;
+    public float CurrentAura => Character.currentAura;
+    public int RealmLayer => Character.realmLayer;
     public int MentalState => Character.mentalState;
     public int Attack
     {
@@ -87,7 +80,7 @@ public class NPCRuntime
     public int Physique => Data.physique;
     public int CombatExperience => Character.combatExperience;
     public int CombatPower => CharacterCapabilityRules.CalculateCombatPower(this);
-    public int AptitudeRank => Character.aptitudeRank;
+    public SpiritRootQuality SpiritRootQuality => Character.spiritRoot?.quality ?? SpiritRootQuality.Medium;
     /// <summary>
     /// 设置状态
     /// </summary>
@@ -121,8 +114,6 @@ public class NPCRuntime
         }
         Character.activityState = State;
         Character.stateRemainDays = StateRemainDays;
-        Character.level = Level;
-        Character.exp = Exp;
     }
 
 
@@ -131,12 +122,9 @@ public class NPCRuntime
         return Character.IsAlive && State == NPCState.Idle;
     }
 
-    public void AddCultivation(int amount)
-    {
-        NaqiGrowthRules.AddDailyAura(this, amount);
-    }
-
-    public void AddTechniqueMastery(float amount) => NaqiGrowthRules.AddTechniqueMastery(this, amount);
+    public float AddAura(float amount) => DailyCultivationSimulator.AddAura(this, amount);
+    public float AddAuraControl(float amount) => DailyCultivationSimulator.AddAuraControl(this, amount);
+    public void AddTechniqueMastery(float amount) => DailyCultivationSimulator.AddTechniqueMastery(this, amount);
 
     public void ChangeMentalState(int amount)
     {
@@ -151,28 +139,13 @@ public class NPCRuntime
         Character.combatExperience = Mathf.Max(0, Character.combatExperience + amount);
     }
 
-    public bool TryBreakthrough(float bonusChance = 0f)
+    private static int StableSeed(string value)
     {
-        // 炼气 V1 只结算纳气进度，不沿用旧的自动突破。
-        if (Character.realm == CultivationRealm.Mortal || Character.realm == CultivationRealm.QiRefining)
-            return false;
-        int need = Character.realm == CultivationRealm.Mortal || Character.realm == CultivationRealm.QiRefining ? 100 : 300;
-        if (!Character.IsAlive || Character.realm == CultivationRealm.GoldenCore || Character.cultivation < need)
-            return false;
-
-        float healthPenalty = Character.health == HealthState.PermanentTrauma ? 0.2f : 0f;
-        float chance = Mathf.Clamp01(0.65f + bonusChance - healthPenalty);
-        Character.cultivation -= need;
-        if (UnityEngine.Random.value > chance)
+        unchecked
         {
-            Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-                "Breakthrough", $"突破失败，修为损耗 {need}");
-            return false;
+            int hash = 17;
+            foreach (char c in value ?? string.Empty) hash = hash * 31 + c;
+            return hash;
         }
-
-        Character.realm = (CultivationRealm)((int)Character.realm + 1);
-        Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-            "Breakthrough", $"突破至 {Character.realm}");
-        return true;
     }
 }

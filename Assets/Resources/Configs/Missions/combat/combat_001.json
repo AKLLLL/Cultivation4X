@@ -6,9 +6,6 @@
     "missionType":"Combat",
     "needDays": 4,
 
-
-    "expReward": 80,
-
     "itemRewards":
     [{"itemId":"LingShi_001","count":120},
     {

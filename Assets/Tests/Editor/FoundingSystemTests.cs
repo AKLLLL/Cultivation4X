@@ -33,14 +33,16 @@ public class FoundingSystemTests
     }
 
     [Test]
-    public void CandidateGeneration_IsStableUniqueAndContainsHighAptitude()
+    public void CandidateGeneration_IsStableUniqueAndContainsHighSpiritRoot()
     {
         List<FounderCandidateData> first = FoundingRules.GenerateCandidates(12345);
         List<FounderCandidateData> second = FoundingRules.GenerateCandidates(12345);
         Assert.AreEqual(10, first.Count);
         Assert.AreEqual(10, first.Select(item => item.displayName).Distinct().Count());
         Assert.AreEqual(JsonConvert.SerializeObject(first), JsonConvert.SerializeObject(second));
-        Assert.IsTrue(first.Any(item => item.aptitudeRank >= 4));
+        Assert.IsTrue(first.Any(item => item.spiritRoot.quality >= SpiritRootQuality.High));
+        Assert.IsTrue(first.All(item => Mathf.Abs(item.spiritRoot.gold + item.spiritRoot.wood +
+            item.spiritRoot.water + item.spiritRoot.fire + item.spiritRoot.earth - 1f) < 0.001f));
         Assert.IsTrue(first.All(item => item.age >= 15 && item.age <= 18));
         Assert.IsTrue(first.All(item => item.attack >= 5 && item.attack <= 20));
         Assert.IsTrue(first.All(item => item.combatComprehension >= 5 && item.combatComprehension <= 20));
@@ -89,11 +91,11 @@ public class FoundingSystemTests
         Assert.AreEqual(selected[0].attack, restored.GetRuntime(selected[0].candidateId).Attack);
         Assert.AreEqual(selected[0].comprehension, restored.GetRuntime(selected[0].candidateId).Comprehension);
         Assert.AreEqual(selected[0].combatComprehension, restored.GetRuntime(selected[0].candidateId).CombatComprehension);
-        Assert.AreEqual(selected[0].aptitudeRank, restored.GetRuntime(selected[0].candidateId).AptitudeRank);
+        Assert.AreEqual(selected[0].spiritRoot.quality, restored.GetRuntime(selected[0].candidateId).SpiritRootQuality);
     }
 
     [Test]
-    public void MortalRealm_PreservesOldNumericValuesButV1DoesNotAutoBreakThrough()
+    public void MortalRealm_PreservesRealmEnumWhileNaqiUsesLayerState()
     {
         Assert.AreEqual(-1, (int)CultivationRealm.Mortal);
         Assert.AreEqual(0, (int)CultivationRealm.QiRefining);
@@ -107,11 +109,12 @@ public class FoundingSystemTests
             templateId = "mortal",
             displayName = "凡人",
             realm = CultivationRealm.Mortal,
-            cultivation = 100
+            realmLayer = 1,
+            naqiProgress = 100
         };
         NPCRuntime runtime = new NPCRuntime(data, state);
-        Assert.IsFalse(runtime.TryBreakthrough(1f));
         Assert.AreEqual(CultivationRealm.Mortal, runtime.Realm);
+        Assert.AreEqual(1, runtime.RealmLayer);
     }
 
     [Test]

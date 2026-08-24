@@ -14,6 +14,7 @@ public static class GlobalUIAssetBuilder
     private const string ThemePath = "Assets/UI/Theme/CultivationUITheme.asset";
     private const string CommonPath = "Assets/UI/Prefabs/Common";
     private const string DisciplePath = "Assets/UI/Prefabs/Disciple";
+    private const string MonthlyPlanPath = "Assets/UI/Prefabs/MonthlyPlan";
     private const string RootPath = "Assets/Resources/Prefab/UI/UIRoot.prefab";
     private const string ScenePath = "Assets/Scenes/SampleScene.unity";
 
@@ -28,7 +29,8 @@ public static class GlobalUIAssetBuilder
         DiscipleListItemView listItem = BuildDiscipleListItem(font);
         DiscipleHistoryItemView historyItem = BuildDiscipleHistoryItem(font);
         GameObject discipleCenter = BuildDiscipleCenter(font, listItem, historyItem);
-        BuildUiRoot(font, theme, discipleCenter);
+        GameObject monthlyPlan = BuildMonthlyPlan(font);
+        BuildUiRoot(font, theme, discipleCenter, monthlyPlan);
         MigrateSampleScene();
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -42,6 +44,7 @@ public static class GlobalUIAssetBuilder
         EnsureFolder("Assets/UI", "Prefabs");
         EnsureFolder("Assets/UI/Prefabs", "Common");
         EnsureFolder("Assets/UI/Prefabs", "Disciple");
+        EnsureFolder("Assets/UI/Prefabs", "MonthlyPlan");
         EnsureFolder("Assets/Resources/Prefab", "UI");
     }
 
@@ -269,7 +272,7 @@ public static class GlobalUIAssetBuilder
         CreateProgressRow(overviewContent, "传承", font, new Color(0.53f, 0.43f, 0.22f, 1f),
             out Image masteryFill, out TMP_Text masteryValue);
         TMP_Text mentalText = CreateText(overviewContent, "心境：100 / 100", 16, font, 30f);
-        TMP_Text dailyAuraText = CreateText(overviewContent, "今日灵气：0 / 100", 16, font, 30f);
+        TMP_Text dailyAuraText = CreateText(overviewContent, "当前灵气：0 / 50　控制 0　疲劳 0", 16, font, 30f);
         tabPages[0] = overviewRoot;
 
         TMP_Text[] pageTexts = new TMP_Text[2];
@@ -299,9 +302,9 @@ public static class GlobalUIAssetBuilder
         observationTitle.fontStyle = FontStyles.Bold;
         TMP_Text currentAction = CreateObservationCard(right.transform, "当前行动", "暂无当前行动", font,
             new Color(0.09f, 0.16f, 0.12f, 1f), 106f);
-        TMP_Text currentPlan = CreateObservationCard(right.transform, "本月计划", "暂无本月计划", font,
+        TMP_Text currentPlan = CreateObservationCard(right.transform, "循环计划", "未绑定计划（全部自由）", font,
             new Color(0.075f, 0.13f, 0.10f, 1f), 180f);
-        TMP_Text nextPlan = CreateObservationCard(right.transform, "下月计划", "暂无下月计划", font,
+        TMP_Text nextPlan = CreateObservationCard(right.transform, "明日安排", "自由活动", font,
             new Color(0.075f, 0.13f, 0.10f, 1f), 132f);
         GameObject spacer = new GameObject("FlexibleSpace", typeof(RectTransform), typeof(LayoutElement));
         spacer.transform.SetParent(right.transform, false);
@@ -317,7 +320,160 @@ public static class GlobalUIAssetBuilder
         return AssetDatabase.LoadAssetAtPath<GameObject>(path);
     }
 
-    private static void BuildUiRoot(TMP_FontAsset font, UITheme theme, GameObject discipleCenter)
+    private static GameObject BuildMonthlyPlan(TMP_FontAsset font)
+    {
+        GameObject root = Panel(null, "MonthlyPlan", new Color(0.022f, 0.047f, 0.038f, 0.99f));
+        MonthlyPlanPanel view = root.AddComponent<MonthlyPlanPanel>();
+        VerticalLayoutGroup page = root.AddComponent<VerticalLayoutGroup>();
+        page.padding = new RectOffset(14, 14, 14, 14);
+        page.spacing = 10f;
+        page.childControlWidth = true;
+        page.childControlHeight = true;
+        page.childForceExpandWidth = true;
+        page.childForceExpandHeight = false;
+
+        GameObject main = new GameObject("MainWorkspace", typeof(RectTransform),
+            typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+        main.transform.SetParent(root.transform, false);
+        main.GetComponent<LayoutElement>().flexibleHeight = 1f;
+        HorizontalLayoutGroup columns = main.GetComponent<HorizontalLayoutGroup>();
+        columns.spacing = 10f;
+        columns.childControlWidth = true;
+        columns.childControlHeight = true;
+        columns.childForceExpandWidth = false;
+        columns.childForceExpandHeight = true;
+
+        GameObject left = Column(main.transform, "TemplateLibrary", 260f, 0f);
+        AddPanelOutline(left);
+        TMP_Text leftTitle = CreateText(left.transform, "计划模板列表", 21f, font, 34f);
+        leftTitle.fontStyle = FontStyles.Bold;
+        Button create = CreateButton(left.transform, "＋ 新建计划模板", font);
+        RectTransform templateList = CreateScrollContent(left.transform, "TemplateScroll", out _);
+        TMP_Text emptyTemplates = CreateText(templateList, "暂无计划模板", 15f, font, 38f);
+
+        GameObject center = Column(main.transform, "TemplateEditor", 0f, 1f);
+        AddPanelOutline(center);
+        TMP_Text editorTitle = CreateText(center.transform, "编辑计划模板", 21f, font, 34f);
+        editorTitle.fontStyle = FontStyles.Bold;
+        GameObject nameRow = new GameObject("NameRow", typeof(RectTransform),
+            typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+        nameRow.transform.SetParent(center.transform, false);
+        LayoutElement nameRowSize = nameRow.GetComponent<LayoutElement>();
+        nameRowSize.minHeight = UIComponentStyles.CompactControlHeight;
+        nameRowSize.preferredHeight = UIComponentStyles.CompactControlHeight;
+        nameRowSize.flexibleHeight = 0f;
+        HorizontalLayoutGroup nameLayout = nameRow.GetComponent<HorizontalLayoutGroup>();
+        nameLayout.spacing = 7f;
+        nameLayout.childControlWidth = true;
+        nameLayout.childControlHeight = true;
+        nameLayout.childForceExpandWidth = false;
+        nameLayout.childForceExpandHeight = false;
+        TMP_Text nameLabel = CreateText(nameRow.transform, "计划名称", 15f, font, 42f);
+        nameLabel.GetComponent<LayoutElement>().preferredWidth = 72f;
+        TMP_InputField nameInput = CreateInputField(nameRow.transform, "计划模板名称", font);
+        LayoutElement inputSize = nameInput.GetComponent<LayoutElement>();
+        inputSize.minWidth = 240f;
+        inputSize.preferredWidth = UIComponentStyles.CompactInputWidth;
+        inputSize.flexibleWidth = 0f;
+        Button rename = CreateButton(nameRow.transform, "重命名", font);
+        Button copy = CreateButton(nameRow.transform, "复制", font);
+        Button delete = CreateButton(nameRow.transform, "删除", font);
+        ConfigureCompactActionButton(rename, 86f);
+        ConfigureCompactActionButton(copy, UIComponentStyles.CompactActionButtonWidth);
+        ConfigureCompactActionButton(delete, UIComponentStyles.CompactActionButtonWidth);
+        GameObject nameSpacer = new GameObject("FlexibleSpace", typeof(RectTransform), typeof(LayoutElement));
+        nameSpacer.transform.SetParent(nameRow.transform, false);
+        nameSpacer.GetComponent<LayoutElement>().flexibleWidth = 1f;
+
+        TMP_Text cycleTitle = CreateText(center.transform, "一、月度日程安排（30日循环）", 18f, font, 30f);
+        cycleTitle.fontStyle = FontStyles.Bold;
+        GameObject brushes = new GameObject("Brushes", typeof(RectTransform),
+            typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+        brushes.transform.SetParent(center.transform, false);
+        LayoutElement brushRowSize = brushes.GetComponent<LayoutElement>();
+        brushRowSize.minHeight = UIComponentStyles.CompactControlHeight;
+        brushRowSize.preferredHeight = UIComponentStyles.CompactControlHeight;
+        brushRowSize.flexibleHeight = 0f;
+        HorizontalLayoutGroup brushLayout = brushes.GetComponent<HorizontalLayoutGroup>();
+        brushLayout.spacing = UIComponentStyles.CompactTabSpacing;
+        brushLayout.childControlWidth = true;
+        brushLayout.childControlHeight = true;
+        brushLayout.childForceExpandWidth = false;
+        brushLayout.childForceExpandHeight = false;
+        brushLayout.childAlignment = TextAnchor.MiddleLeft;
+        TMP_Text brushLabel = CreateText(brushes.transform, "画笔", 15f, font,
+            UIComponentStyles.CompactControlHeight);
+        LayoutElement brushLabelSize = brushLabel.GetComponent<LayoutElement>();
+        brushLabelSize.minWidth = 48f;
+        brushLabelSize.preferredWidth = 48f;
+        brushLabelSize.flexibleWidth = 0f;
+        Button trainingBrush = CreateTabButton(brushes.transform, "修炼", font);
+        Button dutyBrush = CreateTabButton(brushes.transform, "宗务", font);
+        Button freeBrush = CreateTabButton(brushes.transform, "自由", font);
+        TMP_Text planSummary = CreateText(center.transform, "新建计划模板后，可编辑30日循环日程。", 14f, font, 28f);
+        planSummary.color = new Color(0.68f, 0.71f, 0.63f, 1f);
+
+        GameObject calendar = Panel(center.transform, "CalendarGrid", new Color(0.025f, 0.055f, 0.043f, 0.85f));
+        LayoutElement calendarSize = calendar.AddComponent<LayoutElement>();
+        calendarSize.minHeight = 216f;
+        calendarSize.preferredHeight = 216f;
+        GridLayoutGroup grid = calendar.AddComponent<GridLayoutGroup>();
+        grid.padding = new RectOffset(8, 8, 6, 6);
+        grid.spacing = new Vector2(5f, 5f);
+        grid.cellSize = new Vector2(58f, 64f);
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 10;
+        grid.childAlignment = TextAnchor.UpperCenter;
+
+        TMP_Text help = CreateText(center.transform,
+            "先选择画笔；单击日期应用当前画笔，按住并经过多个日期可连续绘制。任务执行优先，但不会改写模板。",
+            13f, font, 34f);
+        help.color = new Color(0.62f, 0.68f, 0.59f, 1f);
+
+        GameObject right = Column(main.transform, "DiscipleBindings", 280f, 0f);
+        AddPanelOutline(right);
+        TMP_Text bindingTitle = CreateText(right.transform, "二、绑定弟子", 21f, font, 34f);
+        bindingTitle.fontStyle = FontStyles.Bold;
+        TMP_Text bindingSummary = CreateText(right.transform, "已绑定：0 / 无限制", 15f, font, 30f);
+        Button addDisciple = CreateButton(right.transform, "＋ 添加弟子", font);
+        ConfigureCompactActionButton(addDisciple, 128f);
+        RectTransform discipleList = CreateScrollContent(right.transform, "DiscipleScroll", out _);
+        GameObject picker = Column(right.transform, "DisciplePicker", 0f, 0f);
+        LayoutElement pickerSize = picker.GetComponent<LayoutElement>();
+        pickerSize.minHeight = 190f;
+        pickerSize.preferredHeight = 190f;
+        pickerSize.flexibleHeight = 0f;
+        TMP_Text pickerTitle = CreateText(picker.transform, "选择要绑定的弟子", 15f, font, 28f);
+        pickerTitle.fontStyle = FontStyles.Bold;
+        RectTransform pickerList = CreateScrollContent(picker.transform, "CandidateScroll", out _);
+        picker.SetActive(false);
+        TMP_Text bindingHelp = CreateText(right.transform,
+            "已绑定弟子显示在上方。每名弟子只能绑定一个模板；从其他模板选择弟子时会转绑。",
+            13f, font, 76f);
+        bindingHelp.color = new Color(0.62f, 0.68f, 0.59f, 1f);
+
+        GameObject advanced = Panel(root.transform, "AdvancedCultivationPlaceholder",
+            new Color(0.045f, 0.082f, 0.063f, 0.96f));
+        AddPanelOutline(advanced);
+        advanced.AddComponent<LayoutElement>().preferredHeight = 56f;
+        TMP_Text advancedText = CreateText(advanced.transform,
+            "三、高级修行策略（后续阶段）　　条件节点与策略分支暂未开放", 16f, font, 56f);
+        advancedText.fontStyle = FontStyles.Bold;
+        Stretch(advancedText.rectTransform);
+        advancedText.rectTransform.offsetMin = new Vector2(16f, 0f);
+        advancedText.rectTransform.offsetMax = new Vector2(-16f, 0f);
+
+        view.Configure(templateList, emptyTemplates, nameInput, calendar.GetComponent<RectTransform>(),
+            planSummary, discipleList, bindingSummary, picker, pickerList, create, copy, rename, delete,
+            trainingBrush, dutyBrush, freeBrush, addDisciple, font);
+        string path = $"{MonthlyPlanPath}/MonthlyPlan.prefab";
+        PrefabUtility.SaveAsPrefabAsset(root, path);
+        Object.DestroyImmediate(root);
+        return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+    }
+
+    private static void BuildUiRoot(TMP_FontAsset font, UITheme theme, GameObject discipleCenter,
+        GameObject monthlyPlan)
     {
         GameObject root = new GameObject("UIRoot", typeof(UIManager));
 
@@ -374,6 +530,7 @@ public static class GlobalUIAssetBuilder
         Button map = NavigationButton(rail.transform, "图\n地图", font);
         Button sect = NavigationButton(rail.transform, "宗\n宗门", font);
         Button disciple = NavigationButton(rail.transform, "人\n弟子", font);
+        Button plan = NavigationButton(rail.transform, "月\n计划", font);
         Button mission = NavigationButton(rail.transform, "任\n任务", font);
         Button resource = NavigationButton(rail.transform, "库\n资源", font);
 
@@ -407,7 +564,7 @@ public static class GlobalUIAssetBuilder
         Stretch(overlayLayer.GetComponent<RectTransform>());
 
         hud.Configure(shell, sectName, context, resources, eventButton.GetComponentInChildren<TMP_Text>(),
-            day, map, sect, disciple, mission, resource, eventButton, endDay, returnButton);
+            day, map, sect, disciple, plan, mission, resource, eventButton, endDay, returnButton);
         root.GetComponent<UIManager>().Configure(screenLayer.transform, modalLayer.transform,
             overlayLayer.transform, hud, theme, new[]
             {
@@ -420,6 +577,16 @@ public static class GlobalUIAssetBuilder
                     blocksWorldInput = true,
                     cacheInstance = true,
                     prefab = discipleCenter
+                },
+                new UIWindowRegistration
+                {
+                    id = UIWindowId.MonthlyPlan,
+                    title = "月计划",
+                    layer = UIWindowLayer.Screen,
+                    escapePolicy = UIEscapePolicy.Allowed,
+                    blocksWorldInput = true,
+                    cacheInstance = true,
+                    prefab = monthlyPlan
                 }
             });
         PrefabUtility.SaveAsPrefabAsset(root, RootPath);
@@ -704,6 +871,46 @@ public static class GlobalUIAssetBuilder
         size.minHeight = UIComponentStyles.CompactTabBarHeight;
         size.preferredHeight = UIComponentStyles.CompactTabBarHeight;
         size.flexibleHeight = 0f;
+    }
+
+    private static void ConfigureCompactActionButton(Button button, float width)
+    {
+        LayoutElement size = button.GetComponent<LayoutElement>();
+        size.minWidth = width;
+        size.preferredWidth = width;
+        size.flexibleWidth = 0f;
+        size.minHeight = UIComponentStyles.CompactControlHeight;
+        size.preferredHeight = UIComponentStyles.CompactControlHeight;
+        size.flexibleHeight = 0f;
+    }
+
+    private static TMP_InputField CreateInputField(Transform parent, string placeholderValue, TMP_FontAsset font)
+    {
+        GameObject root = new GameObject("TemplateNameInput", typeof(RectTransform), typeof(Image),
+            typeof(TMP_InputField), typeof(LayoutElement));
+        root.transform.SetParent(parent, false);
+        root.GetComponent<Image>().color = new Color(0.025f, 0.055f, 0.043f, 1f);
+        LayoutElement rootSize = root.GetComponent<LayoutElement>();
+        rootSize.minHeight = UIComponentStyles.CompactControlHeight;
+        rootSize.preferredHeight = UIComponentStyles.CompactControlHeight;
+        rootSize.flexibleHeight = 0f;
+        TMP_Text text = CreateText(root.transform, string.Empty, 15f, font, 42f);
+        Stretch(text.rectTransform);
+        text.rectTransform.offsetMin = new Vector2(10f, 3f);
+        text.rectTransform.offsetMax = new Vector2(-10f, -3f);
+        text.enableWordWrapping = false;
+        text.overflowMode = TextOverflowModes.Ellipsis;
+        TMP_Text placeholder = CreateText(root.transform, placeholderValue, 15f, font, 42f);
+        Stretch(placeholder.rectTransform);
+        placeholder.rectTransform.offsetMin = new Vector2(10f, 3f);
+        placeholder.rectTransform.offsetMax = new Vector2(-10f, -3f);
+        placeholder.color = new Color(0.46f, 0.52f, 0.45f, 1f);
+        placeholder.fontStyle = FontStyles.Italic;
+        TMP_InputField input = root.GetComponent<TMP_InputField>();
+        input.textViewport = root.GetComponent<RectTransform>();
+        input.textComponent = text;
+        input.placeholder = placeholder;
+        return input;
     }
 
     private static Button CreateButton(Transform parent, string label, TMP_FontAsset font)

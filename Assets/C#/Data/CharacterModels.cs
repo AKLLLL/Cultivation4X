@@ -19,12 +19,51 @@ public enum CultivationRealm
     GoldenCore
 }
 
-public enum QiDisorderResponse
+public enum SpiritRootQuality
 {
-    None,
-    Pending,
-    Paused,
-    Continuing
+    Mixed,
+    Low,
+    Medium,
+    High,
+    Supreme,
+    Heavenly
+}
+
+[Serializable]
+public class SpiritRootData
+{
+    public SpiritRootQuality quality = SpiritRootQuality.Medium;
+    public float gold = 0.2f;
+    public float wood = 0.2f;
+    public float water = 0.2f;
+    public float fire = 0.2f;
+    public float earth = 0.2f;
+}
+
+public enum CultivationActionOutcome
+{
+    Failed,
+    Qualified,
+    Excellent
+}
+
+[Serializable]
+public class DailyCultivationResult
+{
+    public string npcId;
+    public int date;
+    public float absorbedAura;
+    public float consumedAura;
+    public float leakedAura;
+    public string selectedActionId;
+    public string selectedActionName;
+    public CultivationActionOutcome outcome;
+    public float naqiGain;
+    public float auraControlGain;
+    public float fatigueChange;
+    public int layerBefore;
+    public int layerAfter;
+    public string eventDescription;
 }
 
 public enum RelationshipTag
@@ -72,14 +111,14 @@ public class CharacterState
     public string templateId;
     public string displayName;
     public int age = 16;
-    public int level = 1;
-    public int exp;
-    public int cultivation;
+    public int realmLayer = 1;
     public float naqiProgress;
+    public float currentAura;
+    public float auraControl = 10f;
+    public float fatigue;
+    public SpiritRootData spiritRoot = new SpiritRootData();
+    public DailyCultivationResult latestCultivationResult;
     public float techniqueMastery;
-    public QiDisorderResponse qiDisorderResponse;
-    public int qiDisorderRemainingDays;
-    public bool completedMajorCycleToday;
     public int mentalState = DiscipleMentalStateRules.MaxMentalState;
     public CultivationRealm realm;
     public HealthState health = HealthState.Healthy;
@@ -93,7 +132,6 @@ public class CharacterState
     public int baseCombatComprehension;
     public int basePhysique;
     public int combatExperience;
-    public int aptitudeRank;
     public string initialFeatureId;
     public List<string> traitIds = new List<string>();
     public List<RelationshipRecord> relationships = new List<RelationshipRecord>();

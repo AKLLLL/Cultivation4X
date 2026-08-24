@@ -10,8 +10,6 @@
 
   "itemCosts": [],
   "needDays": 5,
-
-  "expReward": 30,
   "itemRewards": [
     { "itemId": "material_001", "count": 3 }
   ],

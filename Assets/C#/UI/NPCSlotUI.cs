@@ -61,7 +61,7 @@ public class NPCSlotUI : MonoBehaviour
 
 
         levelText.text =
-            "等级：" + npc.Level;
+            "境界：练气" + npc.RealmLayer + "层";
 
 
 

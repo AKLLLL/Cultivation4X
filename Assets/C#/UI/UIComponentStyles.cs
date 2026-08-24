@@ -10,6 +10,9 @@ public static class UIComponentStyles
     public const float CompactTabButtonWidth = 92f;
     public const float CompactTabSpacing = 4f;
     public const float InfoCardSpacing = 6f;
+    public const float CompactControlHeight = 40f;
+    public const float CompactActionButtonWidth = 76f;
+    public const float CompactInputWidth = 280f;
 
     public static readonly Color TabSelected = new Color(0.48f, 0.38f, 0.17f, 1f);
     public static readonly Color TabNormal = new Color(0.075f, 0.125f, 0.095f, 0.98f);

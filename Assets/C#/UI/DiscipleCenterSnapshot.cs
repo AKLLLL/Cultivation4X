@@ -38,7 +38,10 @@ public sealed class DiscipleCenterSnapshot
     public string health;
     public int age;
     public int mentalState;
-    public int dailyAura;
+    public float currentAura;
+    public float auraCapacity;
+    public float auraControl;
+    public float fatigue;
     public float naqiProgress;
     public float techniqueMastery;
     public string overview;
@@ -96,7 +99,10 @@ public static class DiscipleCenterSnapshotBuilder
         snapshot.health = Health(selected.Health);
         snapshot.age = character.age;
         snapshot.mentalState = character.mentalState;
-        snapshot.dailyAura = character.cultivation;
+        snapshot.currentAura = character.currentAura;
+        snapshot.auraCapacity = DailyCultivationSimulator.AuraCapacity(selected);
+        snapshot.auraControl = character.auraControl;
+        snapshot.fatigue = character.fatigue;
         snapshot.naqiProgress = character.naqiProgress;
         snapshot.techniqueMastery = character.techniqueMastery;
         snapshot.overview = BuildOverview(selected);
@@ -116,13 +122,13 @@ public static class DiscipleCenterSnapshotBuilder
         CharacterState state = npc.Character;
         FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(
             PlayerManager.Instance?.playerData?.founding?.selectedTechniqueId);
-        string disorder = state.qiDisorderRemainingDays > 0
-            ? $"\n灵气紊乱：{state.qiDisorderResponse}（{state.qiDisorderRemainingDays}日）"
-            : string.Empty;
         return $"身份：宗门弟子\n年龄：{state.age}\n健康：{Health(state.health)}\n" +
                $"心境：{state.mentalState} / {DiscipleMentalStateRules.MaxMentalState}\n" +
-               $"今日灵气：{state.cultivation} / 100\n纳气进度：{state.naqiProgress:0.0}%\n" +
-               $"宗门传承：{technique?.name ?? "未选择"}\n传承掌握：{state.techniqueMastery:0.0}%{disorder}";
+               $"当前灵气：{state.currentAura:0.0} / {DailyCultivationSimulator.AuraCapacity(npc):0.0}\n" +
+               $"纳气进度：{state.naqiProgress:0.0}%\n灵气控制：{state.auraControl:0.0}\n疲劳：{state.fatigue:0.0}\n" +
+               $"灵根：{FoundingRules.SpiritRootName(state.spiritRoot?.quality ?? SpiritRootQuality.Medium)}\n" +
+               $"五行：金{state.spiritRoot.gold:P0} 木{state.spiritRoot.wood:P0} 水{state.spiritRoot.water:P0} 火{state.spiritRoot.fire:P0} 土{state.spiritRoot.earth:P0}\n" +
+               $"宗门传承：{technique?.name ?? "未选择"}\n传承掌握：{state.techniqueMastery:0.0}%";
     }
 
     private static string BuildAbilities(NPCRuntime npc)
@@ -132,7 +138,7 @@ public static class DiscipleCenterSnapshotBuilder
         string featureText = feature == null ? "无" : $"{feature.name}：{feature.description}";
         return $"力量：{npc.Attack}\n敏捷：{npc.Agility}\n根骨：{npc.Physique}\n悟性：{npc.Comprehension}\n" +
                $"战斗悟性：{npc.CombatComprehension}\n战斗经验：{npc.CombatExperience}\n战力：{npc.CombatPower}\n" +
-               $"资质：{FoundingRules.AptitudeName(npc.AptitudeRank)}\n\n性格：{personality}\n初始特点：{featureText}\n经历特质：{experiences}";
+               $"灵根：{FoundingRules.SpiritRootName(npc.SpiritRootQuality)}\n\n性格：{personality}\n初始特点：{featureText}\n经历特质：{experiences}";
     }
 
     private static string BuildRelationships(IEnumerable<RelationshipRecord> relationships)
@@ -172,21 +178,28 @@ public static class DiscipleCenterSnapshotBuilder
         currentAction = mission?.Data == null
             ? $"{State(npc.State)}（剩余 {Math.Max(0, npc.StateRemainDays)} 天）"
             : $"{mission.Data.name}（剩余 {mission.RemainingDays} 天）";
-        int currentMonth = MonthlyPlanRules.MonthIndex(day);
-        MonthlyDisciplePlan current = MonthlyPlanRules.GetPlan(npc.CharacterId, currentMonth);
-        MonthlyDisciplePlan next = MonthlyPlanRules.GetPlan(npc.CharacterId, MonthlyPlanRules.EditableMonth(day));
-        currentPlan = $"第 {currentMonth} 月\n{Plan(current, true)}";
-        nextPlan = $"第 {MonthlyPlanRules.EditableMonth(day)} 月\n{Plan(next, false)}";
+        MonthlyPlanTemplate template = MonthlyPlanRules.GetTemplateFor(npc.CharacterId);
+        currentPlan = template == null ? "未绑定计划（全部自由）" : $"{template.name}\n{Plan(template)}";
+        nextPlan = $"明日安排\n{ActivityName(MonthlyPlanRules.ActivityFor(npc, day + 1))}";
     }
 
-    private static string Plan(MonthlyDisciplePlan plan, bool includeUsage)
+    private static string Plan(MonthlyPlanTemplate plan)
     {
         if (plan == null) return "尚未制定（全部自由）";
-        string result = $"修炼 {plan.trainingPercent}% / 宗务 {plan.sectDutyPercent}% / 自由 {plan.freePercent}%";
-        if (includeUsage)
-            result += $"\n已用：修炼 {plan.usedTrainingDays}日 / 宗务 {plan.usedSectDutyDays}日 / 自由 {plan.usedFreeDays}日" +
-                      $"\n训练转自由：{plan.transferredTrainingDays}日";
-        return result;
+        MonthlyPlanRules.Normalize(plan);
+        return $"修炼 {plan.days.Count(item => item == MonthlyActivityType.Training)}日 / " +
+               $"宗务 {plan.days.Count(item => item == MonthlyActivityType.SectDuty)}日 / " +
+               $"自由 {plan.days.Count(item => item == MonthlyActivityType.Free)}日";
+    }
+
+    private static string ActivityName(MonthlyActivityType activity)
+    {
+        switch (activity)
+        {
+            case MonthlyActivityType.Training: return "修炼";
+            case MonthlyActivityType.SectDuty: return "宗门事务";
+            default: return "自由活动";
+        }
     }
 
     private static void SplitTraits(IEnumerable<string> traitIds, out string personality, out string experiences)
@@ -213,7 +226,7 @@ public static class DiscipleCenterSnapshotBuilder
         switch (npc.Realm)
         {
             case CultivationRealm.Mortal: return "凡人";
-            case CultivationRealm.QiRefining: return $"炼气{npc.Level}层";
+            case CultivationRealm.QiRefining: return $"炼气{npc.RealmLayer}层";
             case CultivationRealm.Foundation: return "筑基";
             case CultivationRealm.GoldenCore: return "金丹";
             default: return npc.Realm.ToString();

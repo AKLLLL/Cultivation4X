@@ -49,7 +49,7 @@ public class FounderCandidateData
     public int comprehension;
     public int combatComprehension;
     public int physique;
-    public int aptitudeRank;
+    public SpiritRootData spiritRoot = new SpiritRootData();
     public string personalityTraitId;
     public string initialFeatureId;
 }
@@ -181,7 +181,7 @@ public static class FoundingRules
         List<FounderCandidateData> result = new List<FounderCandidateData>();
         for (int i = 0; i < 10; i++)
         {
-            int aptitude = i == 0 ? 4 : random.Next(1, 6);
+            SpiritRootData spiritRoot = GenerateSpiritRoot(random, i == 0 ? SpiritRootQuality.High : (SpiritRootQuality?)null);
             result.Add(new FounderCandidateData
             {
                 candidateId = $"founder_{seed:x8}_{i:00}",
@@ -193,12 +193,40 @@ public static class FoundingRules
                 comprehension = random.Next(5, 21),
                 combatComprehension = random.Next(5, 21),
                 physique = random.Next(5, 21),
-                aptitudeRank = aptitude,
+                spiritRoot = spiritRoot,
                 personalityTraitId = personalities[random.Next(personalities.Length)],
                 initialFeatureId = Catalog.features.Count == 0 ? null : Catalog.features[random.Next(Catalog.features.Count)].id
             });
         }
         return result;
+    }
+
+    public static SpiritRootData GenerateSpiritRoot(System.Random random, SpiritRootQuality? forcedQuality = null)
+    {
+        random = random ?? new System.Random(0);
+        int roll = random.Next(100);
+        SpiritRootQuality quality = forcedQuality ??
+            (roll < 10 ? SpiritRootQuality.Mixed :
+             roll < 35 ? SpiritRootQuality.Low :
+             roll < 70 ? SpiritRootQuality.Medium :
+             roll < 90 ? SpiritRootQuality.High :
+             roll < 99 ? SpiritRootQuality.Supreme : SpiritRootQuality.Heavenly);
+        float[] values = new float[5];
+        float total = 0f;
+        for (int index = 0; index < values.Length; index++)
+        {
+            values[index] = 0.1f + (float)random.NextDouble();
+            total += values[index];
+        }
+        return new SpiritRootData
+        {
+            quality = quality,
+            gold = values[0] / total,
+            wood = values[1] / total,
+            water = values[2] / total,
+            fire = values[3] / total,
+            earth = values[4] / total
+        };
     }
 
     public static int UnderstandingGain(FounderCandidateData candidate, bool hasInheritanceChamber) =>
@@ -263,15 +291,16 @@ public static class FoundingRules
         return $"{name}+{effect.amount}";
     }
 
-    public static string AptitudeName(int rank)
+    public static string SpiritRootName(SpiritRootQuality quality)
     {
-        switch (rank)
+        switch (quality)
         {
-            case 1: return "凡品";
-            case 2: return "下品";
-            case 3: return "中品";
-            case 4: return "上品";
-            case 5: return "天品";
+            case SpiritRootQuality.Mixed: return "驳杂灵根";
+            case SpiritRootQuality.Low: return "下品灵根";
+            case SpiritRootQuality.Medium: return "中品灵根";
+            case SpiritRootQuality.High: return "上品灵根";
+            case SpiritRootQuality.Supreme: return "极品灵根";
+            case SpiritRootQuality.Heavenly: return "天灵根";
             default: return "未评定";
         }
     }

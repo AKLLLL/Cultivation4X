@@ -16,8 +16,9 @@ public enum EventConditionType
 public enum EventEffectType
 {
     AddReputation,
-    AddCultivation,
-    AddExperience,
+    AddAura,
+    AddAuraControl,
+    AddTechniqueMastery,
     AddTrait,
     RemoveTrait,
     AddRelationship,
@@ -29,8 +30,7 @@ public enum EventEffectType
     ScheduleEvent,
     Recruit,
     AddTechniqueUnderstanding,
-    AddVillageRelation,
-    SetQiDisorderResponse
+    AddVillageRelation
 }
 
 public enum EventSource

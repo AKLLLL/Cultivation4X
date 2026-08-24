@@ -37,7 +37,6 @@ public class RewardManager : MonoBehaviour
             Debug.LogWarning("RewardManager：Reward为空。");
             return;
         }
-        // V1 冻结旧 expReward：它既不再伪装成纳气，也暂不迁移到角色等级经验。
         // 发放物品
         foreach (ItemReward item in reward.Items)
         {
@@ -48,7 +47,7 @@ public class RewardManager : MonoBehaviour
             );
         }
 
-        Debug.Log($"奖励发放完成：{npc.Data.npcName}（旧经验奖励 {reward.Exp} 已冻结）");
+        Debug.Log($"奖励发放完成：{npc.Data.npcName}");
     }
 
     public bool CanGiveReward(Reward reward)

@@ -78,7 +78,7 @@ public class AlchemyPanel : MonoBehaviour
             return;
         }
 
-        List<MissionData> recipes = new[] { AlchemyMissionId, "production_regulating_pill_001" }
+        List<MissionData> recipes = new[] { AlchemyMissionId }
             .Distinct().Select(MissionManager.Instance.GetMissionData).Where(item => item != null).ToList();
         if (recipes.Count == 0)
         {

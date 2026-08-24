@@ -24,6 +24,6 @@ public class PlayerData
     public int forgeRoomLevel = 1;
     public int formationPlatformLevel = 1;
     public int sectDutyWorkCredit;
-    public List<MonthlyDisciplePlan> monthlyPlans = new List<MonthlyDisciplePlan>();
+    public List<MonthlyPlanTemplate> monthlyPlanTemplates = new List<MonthlyPlanTemplate>();
     public FoundingState founding = new FoundingState { initialized = true, sectCreated = true, completed = true, stage = FoundingStage.Completed };
 }

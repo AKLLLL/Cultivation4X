@@ -32,7 +32,7 @@ public class WorldMapContentEffectsTests
     }
 
     [Test]
-    public void DailySpiritSpringAndMineEffects_AreIdleOnlyAndIdempotent()
+    public void DailySpiritSpring_DoesNotDirectlyGrantCharacterGrowth()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
@@ -41,8 +41,6 @@ public class WorldMapContentEffectsTests
         NPCManager.Instance = npcs;
         npcs.ClearCharacters();
         NPCRuntime idle = Register(npcs, "idle");
-        NPCRuntime busy = Register(npcs, "busy");
-        busy.SetState(NPCState.Busy, 1);
         WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
         WarehouseManager.Instance = warehouse;
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 16, height = 16, seed = 9201 });
@@ -54,16 +52,16 @@ public class WorldMapContentEffectsTests
             }
         };
         WorldMapSession.Set(map, progress);
-        int beforeCultivation = idle.Cultivation;
+        float beforeAura = idle.CurrentAura;
         int beforeMaterials = warehouse.GetItemCount(FacilityRules.BasicMaterialId);
 
         WorldMapContentEffects.ApplyDaily(1);
         WorldMapContentEffects.ApplyDaily(1);
-        Assert.AreEqual(beforeCultivation + 1, idle.Cultivation);
-        Assert.AreEqual(beforeCultivation, busy.Cultivation);
+        Assert.AreEqual(beforeAura, idle.CurrentAura);
         Assert.AreEqual(beforeMaterials, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
         WorldMapContentEffects.ApplyDaily(2);
-        Assert.AreEqual(beforeCultivation + 2, idle.Cultivation);
+        Assert.AreEqual(beforeAura, idle.CurrentAura);
+        StringAssert.Contains("环境灵气吸收效率+10%", WorldMapContentEffects.EffectSummary(MapSiteType.SpiritSpring));
     }
 
     [Test]
