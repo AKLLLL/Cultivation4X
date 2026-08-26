@@ -223,6 +223,8 @@ public class CultivationActionDefinition
     public float fatigueGain;
     public float auraControlGain;
     public bool controlCheck;
+    public float techniqueDifficulty;
+    public List<string> tags = new List<string>();
 }
 
 public static class DailyCultivationSimulator
@@ -231,9 +233,9 @@ public static class DailyCultivationSimulator
     private const float DailyFatigueRecovery = 8f;
     private static readonly CultivationActionDefinition[] Actions =
     {
-        new CultivationActionDefinition { id = "meditate_refine", displayName = "打坐炼化", auraCost = 20f, cultivationEfficiency = 0.3435f, fatigueGain = 18f },
-        new CultivationActionDefinition { id = "basic_practice", displayName = "基础练功", auraCost = 20f, cultivationEfficiency = 0.3335f, fatigueGain = 10f, auraControlGain = 1f },
-        new CultivationActionDefinition { id = "aura_circulation", displayName = "灵气运转尝试", auraCost = 20f, cultivationEfficiency = 0.3235f, fatigueGain = 8f, auraControlGain = 2f, controlCheck = true }
+        new CultivationActionDefinition { id = "meditate_refine", displayName = "打坐炼化", auraCost = 20f, cultivationEfficiency = 0.3435f, fatigueGain = 18f, techniqueDifficulty = 0.6f, tags = new List<string> { "cultivation", "refining" } },
+        new CultivationActionDefinition { id = "basic_practice", displayName = "基础练功", auraCost = 20f, cultivationEfficiency = 0.3335f, fatigueGain = 10f, auraControlGain = 1f, techniqueDifficulty = 0.5f, tags = new List<string> { "cultivation", "body" } },
+        new CultivationActionDefinition { id = "aura_circulation", displayName = "灵气运转尝试", auraCost = 20f, cultivationEfficiency = 0.3235f, fatigueGain = 8f, auraControlGain = 2f, controlCheck = true, techniqueDifficulty = 0.7f, tags = new List<string> { "cultivation", "control" } }
     };
     public static IReadOnlyList<CultivationActionDefinition> Definitions => Actions;
 
@@ -265,7 +267,8 @@ public static class DailyCultivationSimulator
         state.currentAura -= consumed;
         CultivationActionOutcome outcome = ResolveOutcome(npc, action, day);
         float resultMultiplier = outcome == CultivationActionOutcome.Failed ? 0.25f : outcome == CultivationActionOutcome.Excellent ? 1.2f : 1f;
-        float refining = SpiritRootRules.RefiningMultiplier(state.spiritRoot.quality) * Mathf.Lerp(0.9f, 1.1f, Mathf.Clamp01(state.techniqueMastery / 100f));
+        TechniqueDefinition technique = TechniqueRules.MainTechnique(state);
+        float refining = SpiritRootRules.RefiningMultiplier(state.spiritRoot.quality) * (technique?.refiningMultiplier ?? 1f);
         float fatigueEfficiency = 1f - 0.3f * Mathf.Clamp01(fatigueBefore / 100f);
         float gain = consumed * action.cultivationEfficiency * refining * resultMultiplier * fatigueEfficiency;
         if (state.realmLayer >= 3 && state.naqiProgress >= 100f) gain = 0f;
@@ -273,6 +276,7 @@ public static class DailyCultivationSimulator
         float controlGain = action.auraControlGain * (outcome == CultivationActionOutcome.Failed ? 0.25f : outcome == CultivationActionOutcome.Excellent ? 1.5f : 1f);
         state.auraControl = Mathf.Clamp(state.auraControl + controlGain, 0f, 100f);
         state.fatigue = Mathf.Clamp(state.fatigue + action.fatigueGain, 0f, 100f);
+        ApplyTechniqueLearning(npc, action, outcome);
         DailyCultivationResult result = new DailyCultivationResult
         {
             npcId = npc.CharacterId, date = day, absorbedAura = absorbed, consumedAura = consumed,
@@ -314,19 +318,21 @@ public static class DailyCultivationSimulator
         return npc.Character.auraControl - before;
     }
 
-    public static void AddTechniqueMastery(NPCRuntime npc, float amount)
-    {
-        if (npc?.Character == null || amount <= 0f) return;
-        npc.Character.techniqueMastery = Mathf.Clamp(npc.Character.techniqueMastery + amount, 0f, 100f);
-    }
-
     private static float Absorb(NPCRuntime npc)
     {
         CharacterState state = npc.Character;
         float capacity = AuraCapacity(npc);
         float occupancy = capacity <= 0f ? 1f : state.currentAura / capacity;
         float marginal = occupancy < 0.70f ? 1f : occupancy < 0.90f ? 0.70f : 0.30f;
-        float amount = BaseAbsorption * SpiritRootRules.AbsorptionMultiplier(state.spiritRoot.quality) * EnvironmentMultiplier() * marginal;
+        TechniqueDefinition technique = TechniqueRules.MainTechnique(state);
+        float techniqueMultiplier = technique?.absorptionMultiplier ?? 1f;
+        if (technique != null)
+        {
+            float rootAffinity = TechniqueRules.RootAffinity(state.spiritRoot, technique.elements);
+            techniqueMultiplier *= TechniqueRules.SoftCompatibility(rootAffinity, EnvironmentAffinity(technique.elements));
+        }
+        float amount = BaseAbsorption * SpiritRootRules.AbsorptionMultiplier(state.spiritRoot.quality) *
+            EnvironmentMultiplier() * techniqueMultiplier * marginal;
         return AddAura(npc, amount);
     }
 
@@ -340,6 +346,19 @@ public static class DailyCultivationSimulator
         return multiplier;
     }
 
+    private static float EnvironmentAffinity(TechniqueElementProfile profile)
+    {
+        MapSiteData site = WorldMapProgressRules.GetSectBase(WorldMapSession.Progress);
+        WorldMap map = WorldMapSession.Current;
+        WorldCell cell = site != null && map?.cells != null && site.cellIndex >= 0 && site.cellIndex < map.cells.Length
+            ? map.cells[site.cellIndex] : null;
+        if (cell?.elementalAura == null || cell.elementalAura.Total <= 0.0001f || profile == null) return 0.2f;
+        float total = cell.elementalAura.Total;
+        return Mathf.Clamp01((cell.elementalAura.metal * profile.metal + cell.elementalAura.wood * profile.wood +
+            cell.elementalAura.water * profile.water + cell.elementalAura.fire * profile.fire +
+            cell.elementalAura.earth * profile.earth) / total);
+    }
+
     private static CultivationActionDefinition SelectAction(NPCRuntime npc, int day)
     {
         float[] weights = { 1f, 1f, 1f };
@@ -349,6 +368,8 @@ public static class DailyCultivationSimulator
         if (state.HasTrait("reckless")) weights[2] += 1f;
         if (state.HasTrait("ambitious")) weights[2] += 0.75f;
         if (state.HasTrait("cautious")) weights[2] *= 0.5f;
+        for (int index = 0; index < Actions.Length; index++)
+            weights[index] = Mathf.Max(0.05f, weights[index] + TechniqueRules.ApplicationScore(state, Actions[index].tags));
         weights[2] *= Mathf.Lerp(0.25f, 1f, Mathf.Clamp01(state.auraControl / 100f));
         weights[0] *= Mathf.Lerp(1f, 0.25f, Mathf.Clamp01(state.fatigue / 100f));
         float roll = Stable01(day, npc.CharacterId, "action") * weights.Sum();
@@ -361,11 +382,29 @@ public static class DailyCultivationSimulator
         float roll = Stable01(day, npc.CharacterId, action.id);
         if (action.controlCheck)
         {
-            float success = Mathf.Clamp(0.35f + npc.Character.auraControl * 0.005f - npc.Character.fatigue * 0.003f, 0.20f, 0.90f);
+            float stability = TechniqueRules.MainTechnique(npc.Character)?.stabilityModifier ?? 0f;
+            float success = Mathf.Clamp(0.35f + npc.Character.auraControl * 0.005f - npc.Character.fatigue * 0.003f + stability, 0.20f, 0.90f);
             if (roll > success) return CultivationActionOutcome.Failed;
         }
         float excellent = Mathf.Clamp(0.05f + npc.Character.auraControl * 0.001f, 0.05f, 0.15f);
         return roll < excellent ? CultivationActionOutcome.Excellent : CultivationActionOutcome.Qualified;
+    }
+
+    private static void ApplyTechniqueLearning(NPCRuntime npc, CultivationActionDefinition action,
+        CultivationActionOutcome outcome)
+    {
+        if (npc?.Character == null || action == null || string.IsNullOrWhiteSpace(npc.Character.mainTechniqueId)) return;
+        float quality = outcome == CultivationActionOutcome.Failed ? 0.25f :
+            outcome == CultivationActionOutcome.Excellent ? 1.5f : 1f;
+        float currentUnderstanding = TechniqueRules.MainUnderstanding(npc.Character);
+        SectTechniqueState sectState = TechniqueRules.SectState(PlayerManager.Instance?.playerData, npc.Character.mainTechniqueId);
+        float comprehension = Mathf.Clamp(0.75f + npc.Comprehension / 40f, 0.75f, 1.25f);
+        float personalGain = 0.5f * quality * comprehension *
+            TechniqueRules.LearningAnnotationMultiplier(npc.Character, sectState);
+        float contribution = action.techniqueDifficulty * quality *
+            TechniqueRules.StageContributionMultiplier(currentUnderstanding);
+        PlayerManager.Instance?.AddSectTechniqueMastery(npc.Character.mainTechniqueId, contribution, npc);
+        PlayerManager.Instance?.AddTechniqueUnderstanding(personalGain, npc);
     }
 
     private static float Stable01(int day, string characterId, string salt)

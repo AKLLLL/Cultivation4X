@@ -83,6 +83,7 @@ public class ActionDefinition
     public string displayName;
     public string missionId;
     public List<string> identityIds = new List<string>();
+    public List<string> tags = new List<string>();
     public float baseline;
     /// <summary>
     /// 该自主行动的最小间隔天数。
@@ -118,6 +119,7 @@ public class ActionScoreResult
     public float Score;
     public string ReasonLabel;
     public string FilterReason;
+    public float TechniqueContribution;
     public List<TermScore> Terms = new List<TermScore>();
     public bool Eligible => string.IsNullOrEmpty(FilterReason);
 }

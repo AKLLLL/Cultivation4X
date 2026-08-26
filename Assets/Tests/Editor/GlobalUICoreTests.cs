@@ -180,6 +180,9 @@ public sealed class GlobalUICoreTests
         SerializedObject serialized = new SerializedObject(view);
         RectTransform content = serialized.FindProperty("listContent").objectReferenceValue as RectTransform;
         DiscipleCenterSnapshot snapshot = new DiscipleCenterSnapshot { selectedCharacterId = "disciple_2" };
+        snapshot.mainTechniqueName = "青木长生诀";
+        snapshot.techniqueStage = "初学";
+        snapshot.techniqueUnderstanding = 14f;
         for (int index = 1; index <= 3; index++)
         {
             snapshot.disciples.Add(new DiscipleListItemSnapshot
@@ -196,6 +199,12 @@ public sealed class GlobalUICoreTests
 
         Assert.That(content, Is.Not.Null);
         Assert.That(content.childCount, Is.EqualTo(3));
+        TMP_Text masteryText = serialized.FindProperty("masteryText").objectReferenceValue as TMP_Text;
+        Assert.That(masteryText.text, Is.EqualTo("初学 · 14.0%"));
+        Assert.That(masteryText.GetComponent<LayoutElement>().preferredWidth, Is.EqualTo(100f));
+        TMP_Text mentalText = serialized.FindProperty("mentalText").objectReferenceValue as TMP_Text;
+        Assert.That(mentalText.text, Does.Contain("主修功法：青木长生诀"));
+        Assert.That(mentalText.GetComponent<LayoutElement>().preferredHeight, Is.EqualTo(54f));
     }
 
     [Test]
@@ -519,7 +528,8 @@ public sealed class GlobalUICoreTests
         data.physique = 11;
         NPCRuntime npc = new NPCRuntime(data);
         npc.Character.naqiProgress = 32.5f;
-        npc.Character.techniqueMastery = 14f;
+        npc.Character.mainTechniqueId = "qingmu";
+        npc.Character.techniqueProgresses.Add(new PersonalTechniqueProgress { techniqueId = "qingmu", understanding = 14f });
         npc.Character.AddLifeRecord(2, "Recruit", "加入宗门");
         string before = JsonUtility.ToJson(npc.Character);
 
@@ -528,6 +538,9 @@ public sealed class GlobalUICoreTests
 
         Assert.That(snapshot.selectedCharacterId, Is.EqualTo(npc.CharacterId));
         Assert.That(snapshot.overview, Does.Contain("32.5%"));
+        Assert.That(snapshot.mainTechniqueName, Is.EqualTo("青木长生诀"));
+        Assert.That(snapshot.techniqueStage, Is.EqualTo("初学"));
+        Assert.That(snapshot.techniqueUnderstanding, Is.EqualTo(14f));
         Assert.That(snapshot.realm, Is.Not.Empty);
         Assert.That(snapshot.age, Is.EqualTo(npc.Character.age));
         Assert.That(JsonUtility.ToJson(npc.Character), Is.EqualTo(before));
@@ -542,6 +555,23 @@ public sealed class GlobalUICoreTests
 
         Assert.That(snapshot.disciples, Is.Empty);
         Assert.That(snapshot.HasSelection, Is.False);
+    }
+
+    [Test]
+    public void SnapshotBuilder_DiscipleWithoutTechniqueHasExplicitEmptyState()
+    {
+        NPCData data = ScriptableObject.CreateInstance<NPCData>();
+        data.npcID = "snapshot_no_technique";
+        data.npcName = "无功法弟子";
+        NPCRuntime npc = new NPCRuntime(data);
+
+        DiscipleCenterSnapshot snapshot = DiscipleCenterSnapshotBuilder.Build(
+            new[] { npc }, npc.CharacterId, 1);
+
+        Assert.That(snapshot.mainTechniqueName, Is.EqualTo("未修习"));
+        Assert.That(snapshot.techniqueStage, Is.EqualTo("未修习"));
+        Assert.That(snapshot.techniqueUnderstanding, Is.Zero);
+        UnityEngine.Object.DestroyImmediate(data);
     }
 
     private static Transform FindChild(Transform parent, string name)

@@ -402,7 +402,7 @@ public class MissionPanel : MonoBehaviour
     private static string FormatMissionOutputs(MissionData data)
     {
         List<string> outputs = new List<string>();
-        if (data.techniqueMasteryReward > 0f) outputs.Add($"传承掌握 +{data.techniqueMasteryReward:0.#}%");
+        if (data.techniqueUnderstandingReward > 0f) outputs.Add($"当前主修理解 +{data.techniqueUnderstandingReward:0.#}%");
         foreach (IGrouping<string, ItemReward> group in (data.itemRewards ?? new List<ItemReward>())
                      .Where(item => item != null && item.count > 0 && !string.IsNullOrWhiteSpace(item.itemId))
                      .GroupBy(item => item.itemId))
@@ -425,7 +425,7 @@ public class MissionPanel : MonoBehaviour
         if (data.requiredFacilityLevel > PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) return "设施等级不足";
         if (data.foundingAction == FoundingActionKind.BuildRouteFacility)
         {
-            if (PlayerManager.Instance.playerData.founding.techniqueUnderstanding < FoundingRules.MaxUnderstanding) return "功法理解未达到100%";
+            if (PlayerManager.Instance.playerData.founding.inheritancePreparationProgress < FoundingRules.MaxUnderstanding) return "传承整理未达到100%";
             VillageState village = PlayerManager.Instance.playerData.founding.village;
             if (village == null || village.totalLabor - village.reservedLabor < data.laborCost) return "可用劳动力不足";
         }

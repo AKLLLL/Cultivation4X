@@ -27,7 +27,6 @@ public class NPCRuntime
             displayName = data.npcName,
             age = data.age,
             realmLayer = 1,
-            techniqueMastery = 50f,
             spiritRoot = FoundingRules.GenerateSpiritRoot(new System.Random(StableSeed(data.npcID))),
             traitIds = new System.Collections.Generic.List<string>(data.initialTraits)
         };
@@ -124,7 +123,7 @@ public class NPCRuntime
 
     public float AddAura(float amount) => DailyCultivationSimulator.AddAura(this, amount);
     public float AddAuraControl(float amount) => DailyCultivationSimulator.AddAuraControl(this, amount);
-    public void AddTechniqueMastery(float amount) => DailyCultivationSimulator.AddTechniqueMastery(this, amount);
+    public float AddTechniqueUnderstanding(float amount) => PlayerManager.Instance == null ? 0f : PlayerManager.Instance.AddTechniqueUnderstanding(amount, this);
 
     public void ChangeMentalState(int amount)
     {

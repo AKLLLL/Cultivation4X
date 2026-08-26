@@ -318,6 +318,9 @@ namespace Cultivation4X.WorldMap
         {
             LogGameFlowUiStep("ShowPlacementUiState", "enter");
             if (renderPipeline == null) return;
+            // CharacterSetup 会关闭全部地图表现；同一 Play 会话进入选址时必须先恢复，
+            // 再应用 SectPlacement 的覆盖层隐藏规则。顺序反过来会重新打开被隐藏层。
+            renderPipeline.SetPresentationsActive(true);
             if (renderPipeline.CurrentMap != map)
             {
                 renderPipeline.SetSectPlacementMode(true);

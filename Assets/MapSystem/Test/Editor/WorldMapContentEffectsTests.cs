@@ -72,7 +72,7 @@ public class WorldMapContentEffectsTests
         player.playerData.founding = new FoundingState
         {
             initialized = true, completed = false, stage = FoundingStage.Cave,
-            village = new VillageState(), techniqueUnderstanding = 0
+            village = new VillageState(), inheritancePreparationProgress = 0
         };
         WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
         WarehouseManager.Instance = warehouse;
@@ -89,7 +89,7 @@ public class WorldMapContentEffectsTests
 
         WorldMapContentEffects.ApplySiteCompletion(ruin, MapActionType.InvestigateRuin, 1);
         WorldMapContentEffects.ApplySiteCompletion(ruin, MapActionType.InvestigateRuin, 1);
-        Assert.AreEqual(5, player.playerData.founding.techniqueUnderstanding);
+        Assert.AreEqual(5, player.playerData.founding.inheritancePreparationProgress);
     }
 
     [Test]

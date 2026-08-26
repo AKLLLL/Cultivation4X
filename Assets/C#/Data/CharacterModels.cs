@@ -118,7 +118,9 @@ public class CharacterState
     public float fatigue;
     public SpiritRootData spiritRoot = new SpiritRootData();
     public DailyCultivationResult latestCultivationResult;
-    public float techniqueMastery;
+    public string mainTechniqueId;
+    public List<string> activeAuxiliaryTechniqueIds = new List<string>();
+    public List<PersonalTechniqueProgress> techniqueProgresses = new List<PersonalTechniqueProgress>();
     public int mentalState = DiscipleMentalStateRules.MaxMentalState;
     public CultivationRealm realm;
     public HealthState health = HealthState.Healthy;

@@ -25,5 +25,6 @@ public class PlayerData
     public int formationPlatformLevel = 1;
     public int sectDutyWorkCredit;
     public List<MonthlyPlanTemplate> monthlyPlanTemplates = new List<MonthlyPlanTemplate>();
+    public List<SectTechniqueState> techniqueLibrary = new List<SectTechniqueState>();
     public FoundingState founding = new FoundingState { initialized = true, sectCreated = true, completed = true, stage = FoundingStage.Completed };
 }

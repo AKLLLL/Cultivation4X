@@ -97,7 +97,6 @@ public class NPCManager : MonoBehaviour
                 baseIntelligence = candidate.intelligence,
                 baseAgility = candidate.agility,
                 baseComprehension = candidate.comprehension,
-                techniqueMastery = 50f,
                 baseCombatComprehension = candidate.combatComprehension,
                 basePhysique = candidate.physique,
                 spiritRoot = candidate.spiritRoot,
@@ -328,7 +327,6 @@ public class NPCManager : MonoBehaviour
             age = template.age,
             realm = CultivationRealm.QiRefining,
             realmLayer = 1,
-            techniqueMastery = 50f,
             spiritRoot = FoundingRules.GenerateSpiritRoot(new System.Random(templateId.GetHashCode())),
             baseAttack = template.attack,
             baseIntelligence = template.intelligence,
@@ -480,7 +478,10 @@ public class NPCManager : MonoBehaviour
         state.fatigue = Mathf.Clamp(state.fatigue, 0f, 100f);
         state.spiritRoot = state.spiritRoot ?? new SpiritRootData();
         SpiritRootRules.Normalize(state.spiritRoot);
-        state.techniqueMastery = Mathf.Clamp(state.techniqueMastery, 0f, 100f);
+        state.activeAuxiliaryTechniqueIds = state.activeAuxiliaryTechniqueIds ?? new List<string>();
+        state.techniqueProgresses = state.techniqueProgresses ?? new List<PersonalTechniqueProgress>();
+        foreach (PersonalTechniqueProgress progress in state.techniqueProgresses.Where(item => item != null))
+            progress.understanding = Mathf.Clamp(progress.understanding, 0f, 100f);
     }
 
 }

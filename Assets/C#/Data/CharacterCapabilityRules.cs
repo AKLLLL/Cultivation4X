@@ -32,7 +32,7 @@ public static class CharacterCapabilityRules
             combatComprehension = npc.CombatComprehension,
             combatExperience = npc.CombatExperience,
             realm = npc.Realm,
-            techniqueBonus = FoundingRules.GetActiveEffectTotal(TechniqueEffectType.CombatPowerFlat),
+            techniqueBonus = 0,
             artifactBonus = equipmentBonus
         });
     }
@@ -64,13 +64,10 @@ public static class CharacterCapabilityRules
         requirementsPass &= AddRatio(ratios, npc.CombatPower, data.requiredCombatPower);
         result.score = ratios.Count == 0 ? 100 : Mathf.FloorToInt(ratios.Average());
 
-        FoundingState founding = PlayerManager.Instance?.playerData?.founding;
-        result.techniqueMatched = FoundingRules.HasAnyTag(founding?.selectedTechniqueId, data.preferredTechniqueTags);
+        result.techniqueMatched = TechniqueRules.HasAnyTag(npc.Character, data.preferredTechniqueTags);
         result.traitMatched = (data.preferredTraitIds ?? new List<string>()).Any(npc.Character.HasTrait);
         if (result.techniqueMatched) result.score += 10;
         if (result.traitMatched) result.score += 10;
-        if (result.techniqueMatched)
-            result.score += FoundingRules.GetActiveEffectTotal(TechniqueEffectType.MatchedMissionScoreFlat);
 
         if (!requirementsPass)
         {

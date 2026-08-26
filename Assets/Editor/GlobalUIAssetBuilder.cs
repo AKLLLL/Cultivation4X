@@ -269,9 +269,10 @@ public static class GlobalUIAssetBuilder
         divider.AddComponent<LayoutElement>().preferredHeight = 1f;
         CreateProgressRow(overviewContent, "纳气", font, new Color(0.29f, 0.55f, 0.39f, 1f),
             out Image naqiFill, out TMP_Text naqiValue);
-        CreateProgressRow(overviewContent, "传承", font, new Color(0.53f, 0.43f, 0.22f, 1f),
-            out Image masteryFill, out TMP_Text masteryValue);
-        TMP_Text mentalText = CreateText(overviewContent, "心境：100 / 100", 16, font, 30f);
+        CreateProgressRow(overviewContent, "功法理解", font, new Color(0.53f, 0.43f, 0.22f, 1f),
+            out Image masteryFill, out TMP_Text masteryValue, 68f, 100f);
+        TMP_Text mentalText = CreateText(overviewContent, "主修功法：未修习\n心境：100 / 100", 16, font, 54f);
+        mentalText.enableWordWrapping = false;
         TMP_Text dailyAuraText = CreateText(overviewContent, "当前灵气：0 / 50　控制 0　疲劳 0", 16, font, 30f);
         tabPages[0] = overviewRoot;
 
@@ -717,7 +718,7 @@ public static class GlobalUIAssetBuilder
     }
 
     private static void CreateProgressRow(Transform parent, string label, TMP_FontAsset font, Color color,
-        out Image fill, out TMP_Text value)
+        out Image fill, out TMP_Text value, float labelWidth = 38f, float valueWidth = 50f)
     {
         GameObject row = new GameObject(label + "Progress", typeof(RectTransform),
             typeof(HorizontalLayoutGroup), typeof(LayoutElement));
@@ -732,8 +733,8 @@ public static class GlobalUIAssetBuilder
         labelText.color = new Color(0.66f, 0.70f, 0.62f, 1f);
         labelText.enableWordWrapping = false;
         LayoutElement labelSize = labelText.GetComponent<LayoutElement>();
-        labelSize.minWidth = 38f;
-        labelSize.preferredWidth = 38f;
+        labelSize.minWidth = labelWidth;
+        labelSize.preferredWidth = labelWidth;
         labelSize.flexibleWidth = 0f;
         GameObject bar = Panel(row.transform, label + "Bar", new Color(0.025f, 0.050f, 0.040f, 1f));
         LayoutElement barSize = bar.AddComponent<LayoutElement>();
@@ -746,8 +747,8 @@ public static class GlobalUIAssetBuilder
         value.enableWordWrapping = false;
         value.overflowMode = TextOverflowModes.Ellipsis;
         LayoutElement valueSize = value.GetComponent<LayoutElement>();
-        valueSize.minWidth = 50f;
-        valueSize.preferredWidth = 50f;
+        valueSize.minWidth = valueWidth;
+        valueSize.preferredWidth = valueWidth;
         valueSize.flexibleWidth = 0f;
     }
 

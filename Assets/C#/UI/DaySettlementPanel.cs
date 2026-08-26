@@ -138,7 +138,7 @@ public class DaySettlementPanel : MonoBehaviour
             StringBuilder text = new StringBuilder();
             text.Append($"{item.displayName}：当前灵气 {item.currentAura:0.0}");
             if (item.naqiProgressChange != 0f) text.Append($"，纳气 +{item.naqiProgressChange:0.00}%");
-            if (item.techniqueMasteryChange != 0f) text.Append($"，掌握 +{item.techniqueMasteryChange:0.00}%");
+            if (item.techniqueUnderstandingChange != 0f) text.Append($"，功法理解 +{item.techniqueUnderstandingChange:0.00}%");
             if (item.auraControlChange != 0f) text.Append($"，控制 +{item.auraControlChange:0.00}");
             if (item.realmLayerAfter != item.realmLayerBefore) text.Append($"，进入练气{item.realmLayerAfter}层");
             if (item.cultivationResult != null) text.Append($"，{item.cultivationResult.selectedActionName}（{item.cultivationResult.outcome}）");

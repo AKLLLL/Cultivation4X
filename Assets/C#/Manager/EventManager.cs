@@ -248,7 +248,7 @@ public class EventManager : MonoBehaviour
             case EventEffectType.AddReputation: PlayerManager.Instance?.AddReputation(effect.amount); break;
             case EventEffectType.AddAura: actor?.AddAura(effect.amount); break;
             case EventEffectType.AddAuraControl: actor?.AddAuraControl(effect.amount); break;
-            case EventEffectType.AddTechniqueMastery: actor?.AddTechniqueMastery(effect.amount); break;
+            case EventEffectType.AddTechniqueUnderstanding: PlayerManager.Instance?.AddTechniqueUnderstanding(effect.amount, actor); break;
             case EventEffectType.AddTrait: actor?.Character.AddTrait(effect.value); break;
             case EventEffectType.RemoveTrait: actor?.Character.traitIds.Remove(effect.value); break;
             case EventEffectType.AddRelationship:
@@ -274,8 +274,11 @@ public class EventManager : MonoBehaviour
                 });
                 break;
             case EventEffectType.Recruit: NPCManager.Instance?.RecruitFromTemplate(effect.value); break;
-            case EventEffectType.AddTechniqueUnderstanding:
-                PlayerManager.Instance?.AddTechniqueUnderstanding(effect.amount, actor);
+            case EventEffectType.AddInheritancePreparation:
+                PlayerManager.Instance?.AddInheritancePreparation(effect.amount, actor);
+                break;
+            case EventEffectType.AddTechniqueAnnotation:
+                PlayerManager.Instance?.ResolveTechniqueAnnotation(effect.value);
                 break;
             case EventEffectType.AddVillageRelation:
                 PlayerManager.Instance?.AddVillageRelation(effect.amount, actor);
@@ -572,8 +575,8 @@ public class EventManager : MonoBehaviour
                 case EventEffectType.AddAuraControl:
                     parts.Add($"{name}灵气控制 {Signed(effect.amount)}");
                     break;
-                case EventEffectType.AddTechniqueMastery:
-                    parts.Add($"{name}功法掌握 {Signed(effect.amount)}");
+                case EventEffectType.AddTechniqueUnderstanding:
+                    parts.Add($"{name}功法理解 {Signed(effect.amount)}");
                     break;
                 case EventEffectType.AddTrait:
                     parts.Add($"{name}获得特质：{TraitName(effect.value)}");
@@ -602,8 +605,11 @@ public class EventManager : MonoBehaviour
                 case EventEffectType.Recruit:
                     parts.Add($"招募：{effect.value}");
                     break;
-                case EventEffectType.AddTechniqueUnderstanding:
-                    parts.Add($"功法理解 {Signed(effect.amount)}");
+                case EventEffectType.AddInheritancePreparation:
+                    parts.Add($"传承整理 {Signed(effect.amount)}");
+                    break;
+                case EventEffectType.AddTechniqueAnnotation:
+                    parts.Add("形成宗门功法注解");
                     break;
                 case EventEffectType.AddVillageRelation:
                     parts.Add($"青石村关系 {Signed(effect.amount)}");

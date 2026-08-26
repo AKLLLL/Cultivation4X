@@ -138,10 +138,10 @@ public class NPCInfoPanel : MonoBehaviour
         AddRow("纳气进度", $"{currentNPC.Character.naqiProgress:0.0}%");
         AddRow("灵气控制", $"{currentNPC.Character.auraControl:0.0}");
         AddRow("疲劳", $"{currentNPC.Character.fatigue:0.0}");
-        FoundingState founding = PlayerManager.Instance?.playerData?.founding;
-        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(founding?.selectedTechniqueId);
-        AddRow("宗门传承", technique == null ? "未选择" : technique.name);
-        AddRow("传承掌握", $"{currentNPC.Character.techniqueMastery:0.0}%");
+        TechniqueDefinition technique = TechniqueRules.MainTechnique(currentNPC.Character);
+        float understanding = TechniqueRules.MainUnderstanding(currentNPC.Character);
+        AddRow("当前主修", technique == null ? "未选择" : technique.name);
+        AddRow("个人理解", $"{understanding:0.0}%（{TechniqueRules.PersonalStageName(TechniqueRules.PersonalStage(understanding))}）");
         AddRow("心境", $"{currentNPC.MentalState} / {DiscipleMentalStateRules.MaxMentalState}");
         AddRow("健康", FormatHealth(currentNPC.Health));
         AddSection("弟子概况");

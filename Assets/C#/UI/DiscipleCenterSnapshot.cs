@@ -43,7 +43,9 @@ public sealed class DiscipleCenterSnapshot
     public float auraControl;
     public float fatigue;
     public float naqiProgress;
-    public float techniqueMastery;
+    public float techniqueUnderstanding;
+    public string mainTechniqueName;
+    public string techniqueStage;
     public string overview;
     public string abilities;
     public string relationships;
@@ -104,7 +106,12 @@ public static class DiscipleCenterSnapshotBuilder
         snapshot.auraControl = character.auraControl;
         snapshot.fatigue = character.fatigue;
         snapshot.naqiProgress = character.naqiProgress;
-        snapshot.techniqueMastery = character.techniqueMastery;
+        snapshot.techniqueUnderstanding = TechniqueRules.MainUnderstanding(character);
+        TechniqueDefinition mainTechnique = TechniqueRules.MainTechnique(character);
+        snapshot.mainTechniqueName = mainTechnique?.name ?? "未修习";
+        snapshot.techniqueStage = mainTechnique == null
+            ? "未修习"
+            : TechniqueRules.PersonalStageName(TechniqueRules.PersonalStage(snapshot.techniqueUnderstanding));
         snapshot.overview = BuildOverview(selected);
         snapshot.abilities = BuildAbilities(selected);
         snapshot.relationships = BuildRelationships(character.relationships);
@@ -120,15 +127,15 @@ public static class DiscipleCenterSnapshotBuilder
     private static string BuildOverview(NPCRuntime npc)
     {
         CharacterState state = npc.Character;
-        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(
-            PlayerManager.Instance?.playerData?.founding?.selectedTechniqueId);
+        TechniqueDefinition technique = TechniqueRules.MainTechnique(state);
+        float understanding = TechniqueRules.MainUnderstanding(state);
         return $"身份：宗门弟子\n年龄：{state.age}\n健康：{Health(state.health)}\n" +
                $"心境：{state.mentalState} / {DiscipleMentalStateRules.MaxMentalState}\n" +
                $"当前灵气：{state.currentAura:0.0} / {DailyCultivationSimulator.AuraCapacity(npc):0.0}\n" +
                $"纳气进度：{state.naqiProgress:0.0}%\n灵气控制：{state.auraControl:0.0}\n疲劳：{state.fatigue:0.0}\n" +
                $"灵根：{FoundingRules.SpiritRootName(state.spiritRoot?.quality ?? SpiritRootQuality.Medium)}\n" +
                $"五行：金{state.spiritRoot.gold:P0} 木{state.spiritRoot.wood:P0} 水{state.spiritRoot.water:P0} 火{state.spiritRoot.fire:P0} 土{state.spiritRoot.earth:P0}\n" +
-               $"宗门传承：{technique?.name ?? "未选择"}\n传承掌握：{state.techniqueMastery:0.0}%";
+               $"当前主修：{technique?.name ?? "未选择"}\n个人理解：{understanding:0.0}%（{TechniqueRules.PersonalStageName(TechniqueRules.PersonalStage(understanding))}）";
     }
 
     private static string BuildAbilities(NPCRuntime npc)

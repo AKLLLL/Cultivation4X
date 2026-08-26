@@ -7,9 +7,9 @@
     {"id":"steady_hands","name":"手脚稳健","description":"做事细致，很少因急躁出错。"},
     {"id":"keen_spirit","name":"灵觉敏锐","description":"偶尔能察觉常人忽略的灵气变化。"}
   ],
-  "techniques":[
-    {"id":"qingmu","name":"青木长生诀","description":"偏向灵植、丹药与恢复。","tags":["wood","herb","alchemy","recovery"],"effects":[{"type":"CultivationGainFlat","amount":1,"requiredUnderstanding":50},{"type":"CultivationGainFlat","amount":1,"requiredUnderstanding":100},{"type":"MatchedMissionScoreFlat","amount":10,"requiredUnderstanding":100}],"unlockFacility":"AlchemyRoom","milestoneEventId":"founding_qingmu_milestone","buildMissionId":"founding_build_alchemy","actionMissionId":"founding_route_alchemy"},
-    {"id":"chiyang","name":"赤阳炼体诀","description":"偏向炼体、防御与炼器。","tags":["fire","body","combat","forge"],"effects":[{"type":"CombatPowerFlat","amount":10,"requiredUnderstanding":50},{"type":"CombatPowerFlat","amount":10,"requiredUnderstanding":100},{"type":"MatchedMissionScoreFlat","amount":10,"requiredUnderstanding":100}],"unlockFacility":"ForgeRoom","milestoneEventId":"founding_chiyang_milestone","buildMissionId":"founding_build_forge","actionMissionId":"founding_route_forge"},
-    {"id":"taixu","name":"太虚观想法","description":"偏向神魂、探索与阵法。","tags":["soul","formation","exploration","research"],"effects":[{"type":"TechniqueUnderstandingGainFlat","amount":1,"requiredUnderstanding":0},{"type":"TechniqueUnderstandingGainFlat","amount":1,"requiredUnderstanding":50},{"type":"MatchedMissionScoreFlat","amount":10,"requiredUnderstanding":100}],"unlockFacility":"FormationPlatform","milestoneEventId":"founding_taixu_milestone","buildMissionId":"founding_build_formation","actionMissionId":"founding_route_formation"}
+  "techniqueOptions":[
+    {"techniqueId":"qingmu","unlockFacility":"AlchemyRoom","milestoneEventId":"founding_qingmu_milestone","buildMissionId":"founding_build_alchemy","actionMissionId":"founding_route_alchemy"},
+    {"techniqueId":"chiyang","unlockFacility":"ForgeRoom","milestoneEventId":"founding_chiyang_milestone","buildMissionId":"founding_build_forge","actionMissionId":"founding_route_forge"},
+    {"techniqueId":"taixu","unlockFacility":"FormationPlatform","milestoneEventId":"founding_taixu_milestone","buildMissionId":"founding_build_formation","actionMissionId":"founding_route_formation"}
   ]
 }

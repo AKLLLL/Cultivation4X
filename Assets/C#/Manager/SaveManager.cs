@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Cultivation4X.WorldMap;
@@ -292,7 +293,7 @@ public class SaveManager : MonoBehaviour
             state.sect.founding.selectedFounderIds = state.sect.founding.selectedFounderIds ?? new System.Collections.Generic.List<string>();
             state.sect.founding.village = state.sect.founding.village ?? new VillageState();
             state.sect.founding.externalThreat = NormalizeThreatState(state.sect.founding.externalThreat);
-            state.sect.founding.techniqueUnderstanding = Mathf.Clamp(state.sect.founding.techniqueUnderstanding, 0, FoundingRules.MaxUnderstanding);
+            state.sect.founding.inheritancePreparationProgress = Mathf.Clamp(state.sect.founding.inheritancePreparationProgress, 0, FoundingRules.MaxUnderstanding);
             state.sect.founding.village.relation = Mathf.Clamp(state.sect.founding.village.relation, 0, 100);
             state.sect.founding.village.reservedLabor = Mathf.Clamp(state.sect.founding.village.reservedLabor, 0,
                 Mathf.Max(0, state.sect.founding.village.totalLabor));
@@ -333,6 +334,10 @@ public class SaveManager : MonoBehaviour
             character.auraControl = Mathf.Clamp(character.auraControl, 0f, 100f);
             character.fatigue = Mathf.Clamp(character.fatigue, 0f, 100f);
             character.combatExperience = Mathf.Max(0, character.combatExperience);
+            character.activeAuxiliaryTechniqueIds = character.activeAuxiliaryTechniqueIds ?? new System.Collections.Generic.List<string>();
+            character.techniqueProgresses = character.techniqueProgresses ?? new System.Collections.Generic.List<PersonalTechniqueProgress>();
+            foreach (PersonalTechniqueProgress progress in character.techniqueProgresses.Where(item => item != null))
+                progress.understanding = Mathf.Clamp(progress.understanding, 0f, 100f);
             if (character.hasGeneratedProfile && character.baseCombatComprehension <= 0)
                 character.baseCombatComprehension = Mathf.Max(0, character.baseComprehension);
         }
@@ -340,6 +345,7 @@ public class SaveManager : MonoBehaviour
         {
             state.sect.monthlyPlanTemplates = state.sect.monthlyPlanTemplates ?? new System.Collections.Generic.List<MonthlyPlanTemplate>();
             foreach (MonthlyPlanTemplate plan in state.sect.monthlyPlanTemplates.Where(item => item != null)) MonthlyPlanRules.Normalize(plan);
+            NormalizeTechniqueLibrary(state.sect);
         }
         state.version = SaveDataVersion.Current;
     }
@@ -352,6 +358,7 @@ public class SaveManager : MonoBehaviour
             state.sect.monthlyPlanTemplates = state.sect.monthlyPlanTemplates ?? new System.Collections.Generic.List<MonthlyPlanTemplate>();
             foreach (MonthlyPlanTemplate plan in state.sect.monthlyPlanTemplates.Where(item => item != null))
                 MonthlyPlanRules.Normalize(plan);
+            NormalizeTechniqueLibrary(state.sect);
         }
         if (state.worldMap != null)
         {
@@ -404,6 +411,7 @@ public class SaveManager : MonoBehaviour
     {
         if (state?.worldMap == null)
             throw new InvalidDataException("存档缺少世界地图快照");
+        ValidateTechniqueState(state);
         if (state.characters == null || state.characters.Any(character => character == null ||
             character.mentalState < DiscipleMentalStateRules.MinMentalState ||
             character.mentalState > DiscipleMentalStateRules.MaxMentalState ||
@@ -413,8 +421,7 @@ public class SaveManager : MonoBehaviour
             !Enum.IsDefined(typeof(SpiritRootQuality), character.spiritRoot.quality) ||
             Mathf.Abs(character.spiritRoot.gold + character.spiritRoot.wood + character.spiritRoot.water +
                 character.spiritRoot.fire + character.spiritRoot.earth - 1f) > 0.001f ||
-            character.naqiProgress < 0f || character.naqiProgress > 100f ||
-            character.techniqueMastery < 0f || character.techniqueMastery > 100f))
+            character.naqiProgress < 0f || character.naqiProgress > 100f))
             throw new InvalidDataException("弟子练气、灵根或心境数据无效");
         if (state.sect == null || state.sect.sectDutyWorkCredit < 0 || state.sect.sectDutyWorkCredit >= 5 ||
             state.sect.monthlyPlanTemplates == null ||
@@ -1092,6 +1099,44 @@ public class SaveManager : MonoBehaviour
             .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
             .GroupBy(pair => pair.Key)
             .ToDictionary(group => group.Key, group => group.First().Value);
+    }
+
+    private static void NormalizeTechniqueLibrary(PlayerData player)
+    {
+        if (player == null) return;
+        player.techniqueLibrary = player.techniqueLibrary ?? new System.Collections.Generic.List<SectTechniqueState>();
+        foreach (SectTechniqueState technique in player.techniqueLibrary.Where(item => item != null))
+        {
+            technique.masteryProgress = Mathf.Clamp(technique.masteryProgress, 0f, 100f);
+            technique.annotationIds = technique.annotationIds ?? new System.Collections.Generic.List<string>();
+        }
+    }
+
+    private static void ValidateTechniqueState(GameState state)
+    {
+        if (state?.sect?.techniqueLibrary == null || state.characters == null)
+            throw new InvalidDataException("功法状态缺失");
+        if (state.sect.techniqueLibrary.Any(item => item == null || TechniqueRules.Get(item.techniqueId) == null ||
+                item.masteryProgress < 0f || item.masteryProgress > 100f || item.annotationIds == null ||
+                item.annotationIds.Any(id => id != TechniqueRules.BeginnerAnnotationId && id != TechniqueRules.AdaptiveAnnotationId) ||
+                item.annotationIds.Distinct().Count() != item.annotationIds.Count) ||
+            state.sect.techniqueLibrary.GroupBy(item => item.techniqueId).Any(group => group.Count() > 1))
+            throw new InvalidDataException("宗门功法库数据无效");
+        HashSet<string> owned = new HashSet<string>(state.sect.techniqueLibrary.Select(item => item.techniqueId));
+        foreach (CharacterState character in state.characters)
+        {
+            if (character.techniqueProgresses == null || character.activeAuxiliaryTechniqueIds == null ||
+                character.techniqueProgresses.Any(item => item == null || TechniqueRules.Get(item.techniqueId) == null ||
+                    !owned.Contains(item.techniqueId) || item.understanding < 0f || item.understanding > 100f) ||
+                character.techniqueProgresses.GroupBy(item => item.techniqueId).Any(group => group.Count() > 1) ||
+                character.activeAuxiliaryTechniqueIds.Distinct().Count() != character.activeAuxiliaryTechniqueIds.Count ||
+                character.activeAuxiliaryTechniqueIds.Any(id => TechniqueRules.Get(id)?.category != TechniqueCategory.Auxiliary ||
+                    TechniqueRules.Progress(character, id) == null) ||
+                (!string.IsNullOrWhiteSpace(character.mainTechniqueId) &&
+                 (TechniqueRules.Get(character.mainTechniqueId)?.category != TechniqueCategory.Main ||
+                  TechniqueRules.Progress(character, character.mainTechniqueId) == null)))
+                throw new InvalidDataException("弟子功法状态无效");
+        }
     }
 
     private static string RepeatableEventKey(string eventId,

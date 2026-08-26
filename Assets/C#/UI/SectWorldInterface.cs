@@ -406,23 +406,20 @@ public sealed class SectWorldInterface : MonoBehaviour
     private void OpenScriptureSummary()
     {
         FoundingState founding = PlayerManager.Instance?.playerData?.founding;
-        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(founding?.selectedTechniqueId);
+        TechniqueDefinition technique = FoundingRules.GetTechnique(founding?.selectedTechniqueId);
         string tags = technique == null
             ? "无"
             : string.Join("、", (technique.tags ?? new System.Collections.Generic.List<string>())
                 .Select(FoundingRules.TechniqueTagName));
-        string effects = technique == null
-            ? "无"
-            : string.Join("、", (technique.effects ?? new System.Collections.Generic.List<TechniqueEffectDefinition>())
-                .Where(effect => effect != null &&
-                                 founding.techniqueUnderstanding >= effect.requiredUnderstanding)
-                .Select(FoundingRules.TechniqueEffectDescription));
-        if (string.IsNullOrEmpty(effects)) effects = "尚未解锁";
+        SectTechniqueState mastery = TechniqueRules.SectState(PlayerManager.Instance?.playerData, technique?.id);
+        string annotations = mastery?.annotationIds == null || mastery.annotationIds.Count == 0
+            ? "无" : string.Join("、", mastery.annotationIds.Select(id =>
+                id == TechniqueRules.BeginnerAnnotationId ? "入门详解" : "因材施教"));
         Clear(summaryPanel);
         RuntimeUIFactory.Text(summaryPanel, "藏经阁", 30, 48);
         RuntimeUIFactory.Text(summaryPanel,
-            $"传承：{technique?.name ?? "无"}\n理解度：{founding?.techniqueUnderstanding ?? 0}%\n" +
-            $"标签：{tags}\n已生效：{effects}\n\n功法管理尚未开放。",
+            $"传承：{technique?.name ?? "无"}\n宗门推演：{mastery?.masteryProgress ?? 0:0.0}%（{TechniqueRules.SectStageName(mastery)}）\n" +
+            $"标签：{tags}\n注解：{annotations}\n\n功法管理尚未开放。",
             19, 132);
         AddCloseButton(summaryPanel);
         OpenManaged(summaryPanel);

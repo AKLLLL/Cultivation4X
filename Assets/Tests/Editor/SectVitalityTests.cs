@@ -34,11 +34,11 @@ public class SectVitalityTests
     }
 
     [Test]
-    public void CombatPower_UsesRealmExperienceTechniqueAndEquipment()
+    public void CombatPower_UsesRealmExperienceAndEquipmentWithoutLegacyTechniqueFlatBonus()
     {
         CreatePlayerWithTechnique("chiyang", 100);
         NPCRuntime npc = CreateRuntime(10, 8, 9, 7, CultivationRealm.QiRefining, 140);
-        Assert.AreEqual(10 * 2 + 8 + 9 * 2 + 7 + 100 + 20 + 20 + 6,
+        Assert.AreEqual(10 * 2 + 8 + 9 * 2 + 7 + 100 + 20 + 6,
             CharacterCapabilityRules.CalculateCombatPower(npc, 6));
     }
 
@@ -51,13 +51,12 @@ public class SectVitalityTests
     }
 
     [Test]
-    public void TechniqueEffects_UnlockAtConfiguredUnderstandingStages()
+    public void TechniqueCatalog_UsesApprovedLightweightProfiles()
     {
-        Assert.AreEqual(0, FoundingRules.GetEffectTotal("qingmu", 49, TechniqueEffectType.CultivationGainFlat));
-        Assert.AreEqual(1, FoundingRules.GetEffectTotal("qingmu", 50, TechniqueEffectType.CultivationGainFlat));
-        Assert.AreEqual(2, FoundingRules.GetEffectTotal("qingmu", 100, TechniqueEffectType.CultivationGainFlat));
-        Assert.AreEqual(20, FoundingRules.GetEffectTotal("chiyang", 100, TechniqueEffectType.CombatPowerFlat));
-        Assert.AreEqual(2, FoundingRules.GetEffectTotal("taixu", 50, TechniqueEffectType.TechniqueUnderstandingGainFlat));
+        Assert.AreEqual(1.08f, TechniqueRules.Get("qingmu").absorptionMultiplier);
+        Assert.AreEqual(1.08f, TechniqueRules.Get("chiyang").refiningMultiplier);
+        Assert.AreEqual(0.05f, TechniqueRules.Get("taixu").stabilityModifier);
+        Assert.IsTrue(TechniqueRules.Get("qingmu").tags.Contains("alchemy"));
     }
 
     [Test]
@@ -72,8 +71,11 @@ public class SectVitalityTests
 
         data.preferredTraitIds = new List<string> { "diligent" };
         data.preferredTechniqueTags = new List<string> { "combat" };
-        CreatePlayerWithTechnique("chiyang", 100);
+        PlayerManager player = CreatePlayerWithTechnique("chiyang", 100);
+        Assert.IsTrue(player.LearnTechnique(qualified, "chiyang", true, true));
+        player.AddTechniqueUnderstanding(100f, qualified);
         qualified.Character.AddTrait("diligent");
+        data.excellentScore = 120;
         MissionCapabilityEvaluation excellent = CharacterCapabilityRules.EvaluateMission(data, qualified);
         Assert.IsTrue(excellent.techniqueMatched);
         Assert.IsTrue(excellent.traitMatched);
@@ -252,7 +254,7 @@ public class SectVitalityTests
         PlayerManager player = go.AddComponent<PlayerManager>();
         PlayerManager.Instance = player;
         player.playerData.founding.selectedTechniqueId = techniqueId;
-        player.playerData.founding.techniqueUnderstanding = understanding;
+        player.playerData.techniqueLibrary.Add(new SectTechniqueState { techniqueId = techniqueId });
         return player;
     }
 
@@ -277,6 +279,12 @@ public class SectVitalityTests
             realm = realm,
             combatExperience = combatExperience
         };
+        string techniqueId = PlayerManager.Instance?.playerData?.founding?.selectedTechniqueId;
+        if (!string.IsNullOrWhiteSpace(techniqueId))
+        {
+            state.mainTechniqueId = techniqueId;
+            state.techniqueProgresses.Add(new PersonalTechniqueProgress { techniqueId = techniqueId, understanding = 100f });
+        }
         return new NPCRuntime(data, state);
     }
 

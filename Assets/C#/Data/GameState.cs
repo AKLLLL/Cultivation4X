@@ -5,9 +5,9 @@ using Cultivation4X.WorldMap;
 public static class SaveDataVersion
 {
     /// <summary>
-    /// 20：将逐月弟子计划替换为可绑定多名弟子的30日循环模板，不兼容旧档。
+    /// 21：统一功法、个人理解与宗门推演状态，不兼容旧档。
     /// </summary>
-    public const int Current = 20;
+    public const int Current = 21;
 }
 
 [Serializable]

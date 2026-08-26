@@ -64,11 +64,11 @@ public class FoundingSystemTests
     public void V4Save_PreservesZeroFacilitiesAndIncompleteFounding()
     {
         GameState state = JsonConvert.DeserializeObject<GameState>(
-            "{\"version\":4,\"sect\":{\"missionHallLevel\":0,\"trainingRoomLevel\":0,\"warehouseLevel\":0,\"secretRealmLevel\":0,\"alchemyRoomLevel\":0,\"founding\":{\"initialized\":true,\"completed\":false,\"stage\":\"Cave\",\"techniqueUnderstanding\":42}}}");
+            "{\"version\":4,\"sect\":{\"missionHallLevel\":0,\"trainingRoomLevel\":0,\"warehouseLevel\":0,\"secretRealmLevel\":0,\"alchemyRoomLevel\":0,\"founding\":{\"initialized\":true,\"completed\":false,\"stage\":\"Cave\",\"inheritancePreparationProgress\":42}}}");
         SaveManager.MigrateState(state);
         Assert.AreEqual(0, state.sect.missionHallLevel);
         Assert.IsFalse(state.sect.founding.completed);
-        Assert.AreEqual(42, state.sect.founding.techniqueUnderstanding);
+        Assert.AreEqual(42, state.sect.founding.inheritancePreparationProgress);
     }
 
     [Test]
@@ -194,10 +194,10 @@ public class FoundingSystemTests
         player.playerData.founding.stage = FoundingStage.Cave;
         NPCRuntime actor = npcs.GetRuntime(selected[0].candidateId);
         player.ProcessIdleFounderDay(actor);
-        Assert.AreEqual(1 + selected[0].comprehension / 10, player.playerData.founding.techniqueUnderstanding);
+        Assert.AreEqual(1 + selected[0].comprehension / 10, player.playerData.founding.inheritancePreparationProgress);
         player.SetFacilityLevelForStory(FacilityType.InheritanceChamber, 1);
         player.ProcessIdleFounderDay(actor);
-        Assert.AreEqual((1 + selected[0].comprehension / 10) * 2 + 1, player.playerData.founding.techniqueUnderstanding);
+        Assert.AreEqual((1 + selected[0].comprehension / 10) * 2 + 1, player.playerData.founding.inheritancePreparationProgress);
     }
 
     private static void AssertMissionMaterialCost(MissionManager missions, string missionId, int expected)
@@ -231,7 +231,7 @@ public class FoundingSystemTests
         FoundingState state = player.playerData.founding;
         state.stage = FoundingStage.Cave;
         state.selectedTechniqueId = "qingmu";
-        state.techniqueUnderstanding = 100;
+        state.inheritancePreparationProgress = 100;
         player.SetFacilityLevelForStory(FacilityType.AlchemyRoom, 1);
         Assert.IsFalse(state.completed);
         player.SetFacilityLevelForStory(FacilityType.TrainingRoom, 1);
@@ -246,8 +246,8 @@ public class FoundingSystemTests
         EventManager events = Add<EventManager>("Events");
         missions.LoadMissionsFromJson();
         events.LoadDefinitions();
-        Assert.AreEqual(3, FoundingRules.Catalog.techniques.Count);
-        foreach (FoundingTechniqueDefinition technique in FoundingRules.Catalog.techniques)
+        Assert.AreEqual(3, FoundingRules.Catalog.techniqueOptions.Count);
+        foreach (FoundingTechniqueOption technique in FoundingRules.Catalog.techniqueOptions)
         {
             Assert.IsNotNull(missions.GetMissionData(technique.buildMissionId), technique.buildMissionId);
             Assert.IsNotNull(missions.GetMissionData(technique.actionMissionId), technique.actionMissionId);
@@ -273,7 +273,7 @@ public class FoundingSystemTests
         state.selectedFounderIds = selected.Select(item => item.candidateId).ToList();
         state.selectedTechniqueId = "qingmu";
         state.stage = FoundingStage.Cave;
-        state.techniqueUnderstanding = 100;
+        state.inheritancePreparationProgress = 100;
         player.SetFacilityLevelForStory(FacilityType.TrainingRoom, 1);
         player.AddVillageRelation(50);
         missions.LoadMissionsFromJson();

@@ -63,7 +63,7 @@ namespace Cultivation4X.WorldMap
                     ExternalThreatRules.ApplyBeastLairClearance(currentDay);
                     break;
                 case MapSiteType.Ruin:
-                    PlayerManager.Instance?.AddTechniqueUnderstanding(RuinTechniqueUnderstandingReward);
+                    PlayerManager.Instance?.AddInheritancePreparation(RuinTechniqueUnderstandingReward);
                     break;
             }
         }

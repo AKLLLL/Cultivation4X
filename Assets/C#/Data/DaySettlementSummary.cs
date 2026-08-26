@@ -9,7 +9,7 @@ public class CharacterDayChange
     public float currentAuraChange;
     public float currentAura;
     public float naqiProgressChange;
-    public float techniqueMasteryChange;
+    public float techniqueUnderstandingChange;
     public float auraControlChange;
     public float fatigueChange;
     public int realmLayerBefore;

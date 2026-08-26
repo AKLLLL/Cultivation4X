@@ -428,6 +428,82 @@ public class WorldMap3DControllerTests
     }
 
     [Test]
+    public void Controller_CharacterSetupToSectPlacement_ReactivatesTerrainAndGrid()
+    {
+        WorldMap map = CreateSmallMap();
+        WorldMapSession.Set(map, new WorldMapProgressState());
+        GameObject flowObject = new GameObject("GameFlowStateManager");
+        GameFlowStateManager flow = flowObject.AddComponent<GameFlowStateManager>();
+        SetPropertyValue(flow, "Current", GameFlowState.CharacterSetup);
+        GameObject playerObject = new GameObject("PlayerManager");
+        PlayerManager player = playerObject.AddComponent<PlayerManager>();
+        player.playerData = new PlayerData
+        {
+            founding = new FoundingState
+            {
+                initialized = true,
+                completed = false,
+                stage = FoundingStage.SectConfirmation
+            }
+        };
+        PlayerManager.Instance = player;
+        GameObject cameraObject = EnsureMainCamera();
+        GameObject root = new GameObject("WorldMap3DControllerPlacementTransitionTest");
+        try
+        {
+            GameObject pipelineObject = new GameObject("RenderPipeline");
+            pipelineObject.transform.SetParent(root.transform, false);
+            WorldMapRenderPipeline pipeline = pipelineObject.AddComponent<WorldMapRenderPipeline>();
+            GameObject terrainObject = new GameObject("TerrainRenderer");
+            terrainObject.transform.SetParent(root.transform, false);
+            TerrainRenderer terrainRenderer = terrainObject.AddComponent<TerrainRenderer>();
+            SetPrivateField(pipeline, "terrainRenderer", terrainRenderer);
+            GameObject gridObject = new GameObject("HexGridOverlayRenderer");
+            gridObject.transform.SetParent(root.transform, false);
+            HexGridOverlayRenderer gridRenderer = gridObject.AddComponent<HexGridOverlayRenderer>();
+            SetPrivateField(pipeline, "gridRenderer", gridRenderer);
+            GameObject interactionObject = new GameObject("Interaction");
+            interactionObject.transform.SetParent(root.transform, false);
+            WorldMapInteractionController interaction =
+                interactionObject.AddComponent<WorldMapInteractionController>();
+            GameObject hudObject = new GameObject("HUD");
+            hudObject.transform.SetParent(root.transform, false);
+            WorldMapHudController hud = hudObject.AddComponent<WorldMapHudController>();
+
+            WorldMap3DController controller = root.AddComponent<WorldMap3DController>();
+            SetPrivateField(controller, "renderPipeline", pipeline);
+            SetPrivateField(controller, "interaction", interaction);
+            SetPrivateField(controller, "hud", hud);
+            InvokePrivate(controller, "Awake");
+            InvokePrivate(hud, "Awake");
+
+            controller.ApplyCurrentWorld();
+            Assert.IsFalse(terrainObject.activeSelf);
+            Assert.IsFalse(gridObject.activeSelf);
+
+            player.playerData.founding.stage = FoundingStage.WorldSelection;
+            SetPropertyValue(flow, "Current", GameFlowState.SectPlacement);
+            controller.RefreshPresentation();
+
+            Assert.IsTrue(terrainObject.activeSelf,
+                "同一 Play 会话从角色创建进入选址时必须重新激活地形");
+            Assert.IsTrue(gridObject.activeSelf,
+                "同一 Play 会话从角色创建进入选址时必须重新激活六角网格");
+            Assert.Greater(terrainRenderer.ChunkCount, 0);
+            Assert.IsTrue(pipeline.SectPlacementMode);
+            Assert.IsTrue(interactionObject.activeSelf);
+            Assert.IsTrue(hudObject.activeSelf);
+        }
+        finally
+        {
+            Object.DestroyImmediate(root);
+            Object.DestroyImmediate(playerObject);
+            Object.DestroyImmediate(flowObject);
+            if (cameraObject != null) Object.DestroyImmediate(cameraObject);
+        }
+    }
+
+    [Test]
     public void Controller_MainMenuWithoutMapHidesWorldHud()
     {
         GameObject flowObject = new GameObject("GameFlowStateManager");

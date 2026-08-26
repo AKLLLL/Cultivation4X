@@ -131,7 +131,7 @@ public class TimeManager : MonoBehaviour
                 if (string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
                 result.characters[npc.CharacterId] = new CharacterSnapshot
                 { currentAura = npc.CurrentAura, naqiProgress = npc.Character.naqiProgress,
-                    techniqueMastery = npc.Character.techniqueMastery, auraControl = npc.Character.auraControl,
+                    techniqueUnderstanding = TechniqueRules.MainUnderstanding(npc.Character), auraControl = npc.Character.auraControl,
                     fatigue = npc.Character.fatigue, realmLayer = npc.RealmLayer, realm = npc.Realm, health = npc.Health };
             }
         return result;
@@ -171,14 +171,14 @@ public class TimeManager : MonoBehaviour
                 old = old ?? new CharacterSnapshot { realm = npc.Realm, health = npc.Health };
                 float auraChange = npc.CurrentAura - old.currentAura;
                 float naqiChange = npc.Character.naqiProgress - old.naqiProgress;
-                float masteryChange = npc.Character.techniqueMastery - old.techniqueMastery;
+                float understandingChange = TechniqueRules.MainUnderstanding(npc.Character) - old.techniqueUnderstanding;
                 float controlChange = npc.Character.auraControl - old.auraControl;
                 float fatigueChange = npc.Character.fatigue - old.fatigue;
-                if (auraChange != 0f || naqiChange != 0f || masteryChange != 0f || controlChange != 0f || fatigueChange != 0f ||
+                if (auraChange != 0f || naqiChange != 0f || understandingChange != 0f || controlChange != 0f || fatigueChange != 0f ||
                     old.realmLayer != npc.RealmLayer || old.realm != npc.Realm || old.health != npc.Health)
                     result.characterChanges.Add(new CharacterDayChange { characterId = npc.CharacterId, displayName = npc.Character.displayName,
                         currentAuraChange = auraChange, currentAura = npc.CurrentAura,
-                        naqiProgressChange = naqiChange, techniqueMasteryChange = masteryChange,
+                        naqiProgressChange = naqiChange, techniqueUnderstandingChange = understandingChange,
                         auraControlChange = controlChange, fatigueChange = fatigueChange,
                         realmLayerBefore = old.realmLayer, realmLayerAfter = npc.RealmLayer,
                         cultivationResult = npc.Character.latestCultivationResult?.date == CurrentDay ? npc.Character.latestCultivationResult : null,
@@ -213,7 +213,7 @@ public class TimeManager : MonoBehaviour
     {
         public float currentAura;
         public float naqiProgress;
-        public float techniqueMastery;
+        public float techniqueUnderstanding;
         public float auraControl;
         public float fatigue;
         public int realmLayer;

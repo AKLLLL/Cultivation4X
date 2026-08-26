@@ -254,7 +254,7 @@ public class FoundingPanel : MonoBehaviour
     {
         RuntimeUIFactory.Text(content, "选择古修传承", 32, 50);
         RuntimeUIFactory.Text(content, "洞府石壁中留下三道完整传承。此选择决定宗门最初的发展方向，确认后不可更改。", 19, 62);
-        foreach (FoundingTechniqueDefinition technique in FoundingRules.Catalog.techniques)
+        foreach (TechniqueDefinition technique in TechniqueRules.Catalog.techniques.Where(item => item.category == TechniqueCategory.Main))
         {
             string tags = string.Join("、", (technique.tags ?? new List<string>()).Select(FoundingRules.TechniqueTagName));
             Button button = RuntimeUIFactory.Button(content, $"{technique.name}\n{technique.description}\n标签：{tags}", 86);
@@ -269,7 +269,7 @@ public class FoundingPanel : MonoBehaviour
 
     private void ShowSectConfirmation(FoundingState state)
     {
-        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
+        TechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
         Cultivation4X.WorldMap.WorldMap map = Cultivation4X.WorldMap.WorldMapSession.Current;
         Cultivation4X.WorldMap.WorldCell cell = map?.cells != null &&
             state.selectedWorldCellIndex >= 0 && state.selectedWorldCellIndex < map.cells.Length
@@ -329,17 +329,11 @@ public class FoundingPanel : MonoBehaviour
 
     private void ShowCave(FoundingState state)
     {
-        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
+        TechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
         RuntimeUIFactory.Text(content, state.completed ? "宗门初立" : "破败洞府", 32, 50);
         string tags = technique == null ? "无" : string.Join("、", (technique.tags ?? new List<string>()).Select(FoundingRules.TechniqueTagName));
-        string effects = technique == null
-            ? "无"
-            : string.Join("、", (technique.effects ?? new List<TechniqueEffectDefinition>())
-                .Where(effect => effect != null && state.techniqueUnderstanding >= effect.requiredUnderstanding)
-                .Select(FoundingRules.TechniqueEffectDescription));
-        if (string.IsNullOrEmpty(effects)) effects = "尚未解锁";
         RuntimeUIFactory.Text(content,
-            $"传承：{technique?.name ?? "旧档传承"}　理解度 {state.techniqueUnderstanding}%\n标签：{tags}\n已解锁：{effects}\n所有行动请前往“宗门事务”。",
+            $"传承：{technique?.name ?? "无效传承"}　整理进度 {state.inheritancePreparationProgress}%\n标签：{tags}\n长期功法推演将在正式立宗后独立进行。\n所有行动请前往“宗门事务”。",
             19, 102);
 
         RuntimeUIFactory.Text(content, "核心弟子", 24, 38);

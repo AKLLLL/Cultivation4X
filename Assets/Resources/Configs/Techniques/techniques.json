@@ -1,0 +1,61 @@
+{
+  "techniques": [
+    {
+      "id": "qingmu",
+      "name": "青木长生诀",
+      "description": "偏向灵植、丹药与恢复的温和传承。",
+      "category": "Main",
+      "tags": ["wood", "herb", "alchemy", "recovery"],
+      "elements": {"metal": 0.0, "wood": 0.8, "water": 0.2, "fire": 0.0, "earth": 0.0},
+      "absorptionMultiplier": 1.08,
+      "refiningMultiplier": 0.98,
+      "stabilityModifier": 0.03,
+      "applicationBiases": [
+        {"tag": "alchemy", "score": 1.5},
+        {"tag": "recovery", "score": 0.5},
+        {"tag": "refining", "score": 0.5}
+      ],
+      "learningRequirement": {"minimumComprehension": 0, "minimumElementAffinity": 0.0},
+      "theory": "顺应草木生息，以绵长吐纳积蓄灵气。",
+      "originStory": "由洞府残存的木行传承整理而成。"
+    },
+    {
+      "id": "chiyang",
+      "name": "赤阳炼体诀",
+      "description": "偏向炼体、防御与炼器的刚烈传承。",
+      "category": "Main",
+      "tags": ["fire", "body", "combat", "forge"],
+      "elements": {"metal": 0.0, "wood": 0.0, "water": 0.0, "fire": 0.8, "earth": 0.2},
+      "absorptionMultiplier": 0.98,
+      "refiningMultiplier": 1.08,
+      "stabilityModifier": -0.02,
+      "applicationBiases": [
+        {"tag": "cultivation", "score": 0.5},
+        {"tag": "body", "score": 1.0},
+        {"tag": "forge", "score": 1.0}
+      ],
+      "learningRequirement": {"minimumComprehension": 0, "minimumElementAffinity": 0.0},
+      "theory": "以火意锤炼气血，在高强度运转中完成炼化。",
+      "originStory": "由洞府石壁上的赤阳行功图复原而来。"
+    },
+    {
+      "id": "taixu",
+      "name": "太虚观想法",
+      "description": "偏向神魂、探索与阵法的均衡传承。",
+      "category": "Main",
+      "tags": ["soul", "formation", "exploration", "research"],
+      "elements": {"metal": 0.2, "wood": 0.2, "water": 0.2, "fire": 0.2, "earth": 0.2},
+      "absorptionMultiplier": 1.0,
+      "refiningMultiplier": 1.03,
+      "stabilityModifier": 0.05,
+      "applicationBiases": [
+        {"tag": "exploration", "score": 1.0},
+        {"tag": "research", "score": 0.5},
+        {"tag": "control", "score": 1.0}
+      ],
+      "learningRequirement": {"minimumComprehension": 0, "minimumElementAffinity": 0.0},
+      "theory": "以观想梳理灵气轨迹，先求清明稳定，再求变化。",
+      "originStory": "由洞府残阵与观想札记共同补全。"
+    }
+  ]
+}

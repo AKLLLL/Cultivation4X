@@ -116,10 +116,9 @@ public sealed class DiscipleCenterView : UIWindowView
         SetTag(stateText, hasSelection ? snapshot.state : "无", StateColor(snapshot.state));
         SetTag(healthText, hasSelection ? snapshot.health : "无", HealthColor(snapshot.health));
         SetProgress(naqiFill, naqiText, snapshot.naqiProgress);
-        SetProgress(masteryFill, masteryText, snapshot.techniqueMastery);
-        Set(mentalText, hasSelection
-            ? $"心境：{snapshot.mentalState} / {DiscipleMentalStateRules.MaxMentalState}"
-            : string.Empty);
+        SetTechniqueProgress(masteryFill, masteryText, snapshot.techniqueUnderstanding,
+            hasSelection ? snapshot.techniqueStage : string.Empty);
+        SetCultivationSummary(mentalText, hasSelection, snapshot);
         Set(dailyAuraText, hasSelection ? $"当前灵气：{snapshot.currentAura:0.0} / {snapshot.auraCapacity:0.0}　控制 {snapshot.auraControl:0.0}　疲劳 {snapshot.fatigue:0.0}" : string.Empty);
         Set(abilitiesText, snapshot.abilities);
         Set(relationshipsText, snapshot.relationships);
@@ -174,6 +173,51 @@ public sealed class DiscipleCenterView : UIWindowView
         float normalized = Mathf.Clamp01(progress / 100f);
         if (fill != null) fill.rectTransform.anchorMax = new Vector2(normalized, 1f);
         if (value != null) value.text = $"{progress:0.0}%";
+    }
+
+    private static void SetTechniqueProgress(Image fill, TMP_Text value, float progress, string stage)
+    {
+        float normalized = Mathf.Clamp01(progress / 100f);
+        if (fill != null) fill.rectTransform.anchorMax = new Vector2(normalized, 1f);
+        if (value == null) return;
+        value.text = string.IsNullOrWhiteSpace(stage)
+            ? string.Empty
+            : $"{stage} · {progress:0.0}%";
+        LayoutElement valueSize = value.GetComponent<LayoutElement>();
+        if (valueSize != null)
+        {
+            valueSize.minWidth = 100f;
+            valueSize.preferredWidth = 100f;
+        }
+
+        Transform row = value.transform.parent;
+        if (row == null) return;
+        foreach (TMP_Text text in row.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (text == value) continue;
+            text.text = "功法理解";
+            LayoutElement labelSize = text.GetComponent<LayoutElement>();
+            if (labelSize != null)
+            {
+                labelSize.minWidth = 68f;
+                labelSize.preferredWidth = 68f;
+            }
+            break;
+        }
+    }
+
+    private static void SetCultivationSummary(TMP_Text text, bool hasSelection,
+        DiscipleCenterSnapshot snapshot)
+    {
+        if (text == null) return;
+        text.text = hasSelection
+            ? $"主修功法：{snapshot.mainTechniqueName}\n心境：{snapshot.mentalState} / {DiscipleMentalStateRules.MaxMentalState}"
+            : string.Empty;
+        text.enableWordWrapping = false;
+        LayoutElement size = text.GetComponent<LayoutElement>();
+        if (size == null) return;
+        size.minHeight = 54f;
+        size.preferredHeight = 54f;
     }
 
     private static void SetTag(TMP_Text text, string value, Color background)

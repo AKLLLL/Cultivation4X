@@ -31,7 +31,7 @@ public class MissionData
 
     // 完成所需天数
     public int needDays;
-    public float techniqueMasteryReward;
+    public float techniqueUnderstandingReward;
     //物品奖励
     public List<ItemReward> itemRewards;
     // 所需力量

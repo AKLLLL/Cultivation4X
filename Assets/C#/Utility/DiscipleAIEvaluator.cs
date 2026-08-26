@@ -148,6 +148,10 @@ public static class DiscipleAIEvaluator
                     reasonLabel = label;
                 }
             }
+            result.TechniqueContribution = TechniqueRules.ApplicationScore(npc.Character, action.tags);
+            score += result.TechniqueContribution;
+            if (result.TechniqueContribution > bestPositive)
+                reasonLabel = $"主修功法倾向：{action.displayName}";
 
             result.Score = score;
             result.ReasonLabel = reasonLabel;
@@ -350,7 +354,7 @@ public static class DiscipleAIEvaluator
     public static float CultivationRatio(NPCRuntime npc)
     {
         if (npc == null || !npc.Character.IsAlive) return 0f;
-        return Mathf.Clamp01(npc.Character.techniqueMastery / 100f);
+        return Mathf.Clamp01(TechniqueRules.MainUnderstanding(npc.Character) / 100f);
     }
 
     private static bool HealthMatches(HealthState health, string value)

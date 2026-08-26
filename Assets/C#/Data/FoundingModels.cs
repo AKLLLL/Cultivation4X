@@ -29,14 +29,6 @@ public enum FoundingActionKind
     RouteFormation
 }
 
-public enum TechniqueEffectType
-{
-    CultivationGainFlat,
-    CombatPowerFlat,
-    TechniqueUnderstandingGainFlat,
-    MatchedMissionScoreFlat
-}
-
 [Serializable]
 public class FounderCandidateData
 {
@@ -82,7 +74,7 @@ public class FoundingState
     public List<FounderCandidateData> candidates = new List<FounderCandidateData>();
     public List<string> selectedFounderIds = new List<string>();
     public string selectedTechniqueId;
-    public int techniqueUnderstanding;
+    public int inheritancePreparationProgress;
     public bool techniqueMilestoneQueued;
     public bool techniqueMilestoneResolved;
     public VillageState village = new VillageState();
@@ -90,25 +82,13 @@ public class FoundingState
 }
 
 [Serializable]
-public class FoundingTechniqueDefinition
+public class FoundingTechniqueOption
 {
-    public string id;
-    public string name;
-    public string description;
-    public List<string> tags = new List<string>();
-    public List<TechniqueEffectDefinition> effects = new List<TechniqueEffectDefinition>();
+    public string techniqueId;
     public FacilityType unlockFacility;
     public string milestoneEventId;
     public string buildMissionId;
     public string actionMissionId;
-}
-
-[Serializable]
-public class TechniqueEffectDefinition
-{
-    public TechniqueEffectType type;
-    public int amount;
-    public int requiredUnderstanding;
 }
 
 [Serializable]
@@ -125,7 +105,7 @@ public class FoundingCatalogData
     public List<string> surnames = new List<string>();
     public List<string> givenNames = new List<string>();
     public List<FoundingFeatureDefinition> features = new List<FoundingFeatureDefinition>();
-    public List<FoundingTechniqueDefinition> techniques = new List<FoundingTechniqueDefinition>();
+    public List<FoundingTechniqueOption> techniqueOptions = new List<FoundingTechniqueOption>();
 }
 
 public static class FoundingRules
@@ -155,8 +135,10 @@ public static class FoundingRules
     public static bool HasReachedCave(FoundingState state) =>
         state != null && (state.stage == FoundingStage.Cave || state.stage == FoundingStage.Completed);
 
-    public static FoundingTechniqueDefinition GetTechnique(string id) =>
-        Catalog.techniques.FirstOrDefault(item => item.id == id);
+    public static TechniqueDefinition GetTechnique(string id) => TechniqueRules.Get(id);
+
+    public static FoundingTechniqueOption GetTechniqueOption(string id) =>
+        Catalog.techniqueOptions.FirstOrDefault(item => item.techniqueId == id);
 
     public static FoundingFeatureDefinition GetFeature(string id) =>
         Catalog.features.FirstOrDefault(item => item.id == id);
@@ -230,26 +212,11 @@ public static class FoundingRules
     }
 
     public static int UnderstandingGain(FounderCandidateData candidate, bool hasInheritanceChamber) =>
-        candidate == null ? 0 : 1 + Mathf.Max(0, candidate.comprehension) / 10 + (hasInheritanceChamber ? 1 : 0) +
-            GetActiveEffectTotal(TechniqueEffectType.TechniqueUnderstandingGainFlat);
-
-    public static int GetActiveEffectTotal(TechniqueEffectType type)
-    {
-        FoundingState state = PlayerManager.Instance?.playerData?.founding;
-        return GetEffectTotal(state?.selectedTechniqueId, state?.techniqueUnderstanding ?? 0, type);
-    }
-
-    public static int GetEffectTotal(string techniqueId, int understanding, TechniqueEffectType type)
-    {
-        FoundingTechniqueDefinition technique = GetTechnique(techniqueId);
-        return technique?.effects?
-            .Where(effect => effect != null && effect.type == type && understanding >= effect.requiredUnderstanding)
-            .Sum(effect => effect.amount) ?? 0;
-    }
+        candidate == null ? 0 : 1 + Mathf.Max(0, candidate.comprehension) / 10 + (hasInheritanceChamber ? 1 : 0);
 
     public static bool HasAnyTag(string techniqueId, IEnumerable<string> tags)
     {
-        FoundingTechniqueDefinition technique = GetTechnique(techniqueId);
+        TechniqueDefinition technique = GetTechnique(techniqueId);
         if (technique?.tags == null || tags == null) return false;
         HashSet<string> requested = new HashSet<string>(tags.Where(tag => !string.IsNullOrWhiteSpace(tag)),
             StringComparer.OrdinalIgnoreCase);
@@ -274,21 +241,6 @@ public static class FoundingRules
             case "research": return "研究";
             default: return tag ?? string.Empty;
         }
-    }
-
-    public static string TechniqueEffectDescription(TechniqueEffectDefinition effect)
-    {
-        if (effect == null) return string.Empty;
-        string name;
-        switch (effect.type)
-        {
-            case TechniqueEffectType.CultivationGainFlat: name = "旧修炼增益（炼气V1停用）"; break;
-            case TechniqueEffectType.CombatPowerFlat: name = "战力"; break;
-            case TechniqueEffectType.TechniqueUnderstandingGainFlat: name = "理解增长"; break;
-            case TechniqueEffectType.MatchedMissionScoreFlat: name = "匹配任务评分"; break;
-            default: name = effect.type.ToString(); break;
-        }
-        return $"{name}+{effect.amount}";
     }
 
     public static string SpiritRootName(SpiritRootQuality quality)

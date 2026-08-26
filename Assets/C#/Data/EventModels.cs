@@ -18,7 +18,7 @@ public enum EventEffectType
     AddReputation,
     AddAura,
     AddAuraControl,
-    AddTechniqueMastery,
+    AddTechniqueUnderstanding,
     AddTrait,
     RemoveTrait,
     AddRelationship,
@@ -29,7 +29,8 @@ public enum EventEffectType
     RemoveItem,
     ScheduleEvent,
     Recruit,
-    AddTechniqueUnderstanding,
+    AddInheritancePreparation,
+    AddTechniqueAnnotation,
     AddVillageRelation
 }
 

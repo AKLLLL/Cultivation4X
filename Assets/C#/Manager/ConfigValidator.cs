@@ -12,6 +12,7 @@ public static class ConfigValidator
         ValidateItems();
         ValidateResources();
         ValidateMissions();
+        ValidateTechniques();
         ValidateFounding();
         ValidateExternalThreats();
     }
@@ -91,7 +92,7 @@ public static class ConfigValidator
         try
         {
             FoundingCatalogData catalog = JsonConvert.DeserializeObject<FoundingCatalogData>(catalogFile.text);
-            if (catalog == null || catalog.techniques == null || catalog.techniques.Count != 3)
+            if (catalog == null || catalog.techniqueOptions == null || catalog.techniqueOptions.Count != 3)
             { Debug.LogError("立宗配置必须包含三种传承"); return; }
             if (catalog.surnames == null || catalog.givenNames == null || catalog.surnames.Count * catalog.givenNames.Count < 10)
                 Debug.LogError("立宗候选姓名组合不足10个");
@@ -111,22 +112,35 @@ public static class ConfigValidator
                 foreach (EventDefinition definition in definitions ?? new List<EventDefinition>())
                     if (!string.IsNullOrWhiteSpace(definition?.id)) eventIds.Add(definition.id);
             }
-            foreach (FoundingTechniqueDefinition technique in catalog.techniques)
+            foreach (FoundingTechniqueOption option in catalog.techniqueOptions)
             {
-                if (technique == null || string.IsNullOrWhiteSpace(technique.id) || technique.tags == null || technique.tags.Count == 0)
-                { Debug.LogError("传承标签配置无效"); continue; }
-                if (!missionIds.Contains(technique.buildMissionId)) Debug.LogError($"路线建设任务不存在: {technique.buildMissionId}");
-                if (!missionIds.Contains(technique.actionMissionId)) Debug.LogError($"路线行动不存在: {technique.actionMissionId}");
-                if (!eventIds.Contains(technique.milestoneEventId)) Debug.LogError($"传承事件不存在: {technique.milestoneEventId}");
-                foreach (TechniqueEffectDefinition effect in technique.effects ?? new List<TechniqueEffectDefinition>())
-                    if (effect == null || effect.amount < 0 || effect.requiredUnderstanding < 0 ||
-                        effect.requiredUnderstanding > FoundingRules.MaxUnderstanding)
-                        Debug.LogError($"传承效果配置无效: {technique.id}");
+                if (option == null || TechniqueRules.Get(option.techniqueId) == null)
+                { Debug.LogError("立宗传承引用无效"); continue; }
+                if (!missionIds.Contains(option.buildMissionId)) Debug.LogError($"路线建设任务不存在: {option.buildMissionId}");
+                if (!missionIds.Contains(option.actionMissionId)) Debug.LogError($"路线行动不存在: {option.actionMissionId}");
+                if (!eventIds.Contains(option.milestoneEventId)) Debug.LogError($"传承事件不存在: {option.milestoneEventId}");
             }
         }
         catch (Exception exception)
         {
             Debug.LogError($"立宗配置解析失败: {exception.Message}");
+        }
+    }
+
+    private static void ValidateTechniques()
+    {
+        HashSet<string> ids = new HashSet<string>();
+        foreach (TechniqueDefinition technique in TechniqueRules.Catalog.techniques ?? new List<TechniqueDefinition>())
+        {
+            if (technique == null || string.IsNullOrWhiteSpace(technique.id) || !ids.Add(technique.id) ||
+                technique.tags == null || technique.tags.Count == 0 || technique.elements == null)
+            { Debug.LogError($"功法配置无效: {technique?.id}"); continue; }
+            float total = technique.elements.metal + technique.elements.wood + technique.elements.water +
+                technique.elements.fire + technique.elements.earth;
+            if (Math.Abs(total - 1f) > 0.0001f || technique.absorptionMultiplier < 0.9f ||
+                technique.absorptionMultiplier > 1.1f || technique.refiningMultiplier < 0.9f ||
+                technique.refiningMultiplier > 1.1f || Math.Abs(technique.stabilityModifier) > 0.05f)
+                Debug.LogError($"功法倍率或五行画像无效: {technique.id}");
         }
     }
 

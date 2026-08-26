@@ -80,6 +80,7 @@ public class PlayerManager : MonoBehaviour
         if (state == null || state.stage != FoundingStage.TechniqueSelection) { reason = "当前不能选择传承"; return false; }
         if (FoundingRules.GetTechnique(techniqueId) == null) { reason = "传承配置不存在"; return false; }
         state.selectedTechniqueId = techniqueId;
+        EnsureFoundingTechniqueGranted(state);
         state.stage = FoundingStage.SectConfirmation;
         reason = null;
         OnFoundingChanged?.Invoke();
@@ -221,28 +222,108 @@ public class PlayerManager : MonoBehaviour
         FoundingState state = playerData.founding;
         if (npc == null || state == null || GameFlowPermission.IsFoundingDevelopmentComplete(state) ||
             state.stage != FoundingStage.Cave ||
-            state.techniqueUnderstanding >= FoundingRules.MaxUnderstanding ||
+            state.inheritancePreparationProgress >= FoundingRules.MaxUnderstanding ||
             !state.selectedFounderIds.Contains(npc.CharacterId)) return;
 
         FounderCandidateData candidate = state.candidates.FirstOrDefault(item => item.candidateId == npc.CharacterId);
         int gain = FoundingRules.UnderstandingGain(candidate, GetFacilityLevel(FacilityType.InheritanceChamber) > 0);
-        AddTechniqueUnderstanding(gain, npc);
+        AddInheritancePreparation(gain, npc);
     }
 
-    public void AddTechniqueUnderstanding(int amount, NPCRuntime actor = null)
+    public void AddInheritancePreparation(int amount, NPCRuntime actor = null)
     {
         FoundingState state = playerData.founding;
         if (state == null || GameFlowPermission.IsFoundingDevelopmentComplete(state) || amount <= 0) return;
-        state.techniqueUnderstanding = Mathf.Clamp(state.techniqueUnderstanding + amount, 0, FoundingRules.MaxUnderstanding);
-        if (state.techniqueUnderstanding >= FoundingRules.TechniqueMilestone && !state.techniqueMilestoneQueued)
+        state.inheritancePreparationProgress = Mathf.Clamp(state.inheritancePreparationProgress + amount, 0, FoundingRules.MaxUnderstanding);
+        if (state.inheritancePreparationProgress >= FoundingRules.TechniqueMilestone && !state.techniqueMilestoneQueued)
         {
-            FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
-            if (technique != null && EventManager.Instance != null &&
-                EventManager.Instance.TryEnqueueEventById(technique.milestoneEventId, actor))
+            FoundingTechniqueOption option = FoundingRules.GetTechniqueOption(state.selectedTechniqueId);
+            if (option != null && EventManager.Instance != null &&
+                EventManager.Instance.TryEnqueueEventById(option.milestoneEventId, actor))
                 state.techniqueMilestoneQueued = true;
         }
         EvaluateFoundingCompletion();
         OnFoundingChanged?.Invoke();
+    }
+
+    public bool LearnTechnique(NPCRuntime npc, string techniqueId, bool setAsMain, bool bypassRequirements = false)
+    {
+        TechniqueDefinition definition = TechniqueRules.Get(techniqueId);
+        if (npc?.Character == null || definition == null ||
+            TechniqueRules.SectState(playerData, techniqueId) == null) return false;
+        if (!bypassRequirements)
+        {
+            TechniqueLearningRequirement requirement = definition.learningRequirement ?? new TechniqueLearningRequirement();
+            if (npc.Comprehension < requirement.minimumComprehension ||
+                TechniqueRules.RootAffinity(npc.Character.spiritRoot, definition.elements) < requirement.minimumElementAffinity)
+                return false;
+        }
+        npc.Character.techniqueProgresses = npc.Character.techniqueProgresses ?? new List<PersonalTechniqueProgress>();
+        if (TechniqueRules.Progress(npc.Character, techniqueId) == null)
+            npc.Character.techniqueProgresses.Add(new PersonalTechniqueProgress { techniqueId = techniqueId, understanding = 0f });
+        if (setAsMain && definition.category == TechniqueCategory.Main)
+            npc.Character.mainTechniqueId = techniqueId;
+        return true;
+    }
+
+    public bool SwitchMainTechnique(NPCRuntime npc, string techniqueId)
+    {
+        TechniqueDefinition definition = TechniqueRules.Get(techniqueId);
+        if (npc?.Character == null || definition?.category != TechniqueCategory.Main ||
+            TechniqueRules.SectState(playerData, techniqueId) == null ||
+            TechniqueRules.Progress(npc.Character, techniqueId) == null) return false;
+        npc.Character.mainTechniqueId = techniqueId;
+        return true;
+    }
+
+    public float AddTechniqueUnderstanding(float amount, NPCRuntime actor)
+    {
+        if (actor?.Character == null || amount <= 0f || string.IsNullOrWhiteSpace(actor.Character.mainTechniqueId)) return 0f;
+        PersonalTechniqueProgress progress = TechniqueRules.Progress(actor.Character, actor.Character.mainTechniqueId);
+        if (progress == null) return 0f;
+        float before = progress.understanding;
+        progress.understanding = Mathf.Clamp(progress.understanding + amount, 0f, 100f);
+        return progress.understanding - before;
+    }
+
+    public float AddSectTechniqueMastery(string techniqueId, float amount, NPCRuntime contributor)
+    {
+        SectTechniqueState state = TechniqueRules.SectState(playerData, techniqueId);
+        if (state == null || amount <= 0f) return 0f;
+        float before = state.masteryProgress;
+        float cap = state.firstAnnotationResolved ? 100f : TechniqueRules.FirstAnnotationThreshold;
+        state.masteryProgress = Mathf.Clamp(state.masteryProgress + amount, 0f, cap);
+        if (state.masteryProgress >= TechniqueRules.FirstAnnotationThreshold && !state.firstAnnotationResolved &&
+            !state.firstAnnotationQueued && contributor != null && EventManager.Instance != null)
+        {
+            string eventId = $"technique_{techniqueId}_first_annotation";
+            if (EventManager.Instance.TryEnqueueEventById(eventId, contributor)) state.firstAnnotationQueued = true;
+        }
+        return state.masteryProgress - before;
+    }
+
+    public bool ResolveTechniqueAnnotation(string payload)
+    {
+        string[] parts = (payload ?? string.Empty).Split('|');
+        if (parts.Length != 2) return false;
+        SectTechniqueState state = TechniqueRules.SectState(playerData, parts[0]);
+        if (state == null || state.firstAnnotationResolved || state.masteryProgress < TechniqueRules.FirstAnnotationThreshold ||
+            (parts[1] != TechniqueRules.BeginnerAnnotationId && parts[1] != TechniqueRules.AdaptiveAnnotationId)) return false;
+        state.annotationIds = state.annotationIds ?? new List<string>();
+        state.annotationIds.Add(parts[1]);
+        state.firstAnnotationResolved = true;
+        state.firstAnnotationQueued = true;
+        return true;
+    }
+
+    private void EnsureFoundingTechniqueGranted(FoundingState state)
+    {
+        if (state == null || TechniqueRules.Get(state.selectedTechniqueId) == null) return;
+        playerData.techniqueLibrary = playerData.techniqueLibrary ?? new List<SectTechniqueState>();
+        if (TechniqueRules.SectState(playerData, state.selectedTechniqueId) == null)
+            playerData.techniqueLibrary.Add(new SectTechniqueState { techniqueId = state.selectedTechniqueId });
+        foreach (string characterId in state.selectedFounderIds ?? new List<string>())
+            LearnTechnique(NPCManager.Instance?.GetRuntime(characterId), state.selectedTechniqueId, true, true);
     }
 
     public void AddVillageRelation(int amount, NPCRuntime actor = null)
@@ -412,13 +493,13 @@ public class PlayerManager : MonoBehaviour
     {
         FoundingState state = playerData.founding;
         if (state == null || GameFlowPermission.IsFoundingDevelopmentComplete(state) ||
-            state.techniqueUnderstanding < FoundingRules.MaxUnderstanding) return;
+            state.inheritancePreparationProgress < FoundingRules.MaxUnderstanding) return;
         bool repairedAny = GetFacilityLevel(FacilityType.TrainingRoom) > 0 ||
                            GetFacilityLevel(FacilityType.Warehouse) > 0 ||
                            GetFacilityLevel(FacilityType.ProtectionArray) > 0 ||
                            GetFacilityLevel(FacilityType.InheritanceChamber) > 0;
-        FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
-        if (!repairedAny || technique == null || GetFacilityLevel(technique.unlockFacility) <= 0) return;
+        FoundingTechniqueOption option = FoundingRules.GetTechniqueOption(state.selectedTechniqueId);
+        if (!repairedAny || option == null || GetFacilityLevel(option.unlockFacility) <= 0) return;
         state.completed = true;
         state.stage = FoundingStage.Completed;
         OnFoundingChanged?.Invoke();

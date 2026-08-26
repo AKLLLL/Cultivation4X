@@ -9,7 +9,7 @@
 
   "itemCosts": [],
   "needDays": 5,
-  "techniqueMasteryReward": 5,
+  "techniqueUnderstandingReward": 5,
   "itemRewards": [],
   "requiredAttack": 0,
   "requiredIntelligence": 0,

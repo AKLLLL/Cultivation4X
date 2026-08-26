@@ -648,10 +648,10 @@ public class MissionManager : MonoBehaviour
         }
         if (data.foundingAction == FoundingActionKind.BuildRouteFacility)
         {
-            FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(state.selectedTechniqueId);
-            if (technique == null || technique.buildMissionId != data.id) { reason = "该设施不属于当前传承路线"; return false; }
-            if (state.techniqueUnderstanding < FoundingRules.MaxUnderstanding) { reason = "功法理解尚未达到100%"; return false; }
-            if (PlayerManager.Instance.GetFacilityLevel(technique.unlockFacility) > 0) { reason = "路线设施已经建成"; return false; }
+            FoundingTechniqueOption option = FoundingRules.GetTechniqueOption(state.selectedTechniqueId);
+            if (option == null || option.buildMissionId != data.id) { reason = "该设施不属于当前传承路线"; return false; }
+            if (state.inheritancePreparationProgress < FoundingRules.MaxUnderstanding) { reason = "传承整理尚未达到100%"; return false; }
+            if (PlayerManager.Instance.GetFacilityLevel(option.unlockFacility) > 0) { reason = "路线设施已经建成"; return false; }
             if (state.village == null || state.village.totalLabor - state.village.reservedLabor < data.laborCost)
             { reason = "可用劳动力不足"; return false; }
         }
@@ -824,8 +824,8 @@ public class MissionManager : MonoBehaviour
             tier == MissionResultTier.Insufficient ? "能力不足" : "达标";
         npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
             "Mission", $"{result}：{data.name}", data.id);
-        if (tier != MissionResultTier.Insufficient && data.techniqueMasteryReward > 0f)
-            npc.AddTechniqueMastery(data.techniqueMasteryReward);
+        if (tier != MissionResultTier.Insufficient && data.techniqueUnderstandingReward > 0f)
+            npc.AddTechniqueUnderstanding(data.techniqueUnderstandingReward);
         DiscipleMentalStateRules.ApplyMissionResult(npc, data.id, tier);
     }
 
@@ -1024,8 +1024,8 @@ public class MissionManager : MonoBehaviour
                 data.foundingAction == FoundingActionKind.RouteForge ||
                 data.foundingAction == FoundingActionKind.RouteFormation)
             {
-                FoundingTechniqueDefinition technique = FoundingRules.GetTechnique(founding.selectedTechniqueId);
-                return technique != null && (technique.buildMissionId == data.id || technique.actionMissionId == data.id);
+                FoundingTechniqueOption option = FoundingRules.GetTechniqueOption(founding.selectedTechniqueId);
+                return option != null && (option.buildMissionId == data.id || option.actionMissionId == data.id);
             }
             return true;
         }

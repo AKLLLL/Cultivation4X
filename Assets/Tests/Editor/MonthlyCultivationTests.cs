@@ -130,7 +130,6 @@ public class MonthlyCultivationTests
     {
         NPCRuntime npc = Runtime("standard");
         npc.Character.spiritRoot.quality = SpiritRootQuality.Medium;
-        npc.Character.techniqueMastery = 50f;
         int completedDay = 0;
         for (int day = 1; day <= 120; day++)
         {
@@ -178,8 +177,7 @@ public class MonthlyCultivationTests
         return new NPCRuntime(data, new CharacterState
         {
             characterId = id, templateId = id, displayName = id,
-            realm = CultivationRealm.QiRefining, realmLayer = 1,
-            techniqueMastery = 50f, health = HealthState.Healthy
+            realm = CultivationRealm.QiRefining, realmLayer = 1, health = HealthState.Healthy
         });
     }
 
