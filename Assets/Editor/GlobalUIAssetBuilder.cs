@@ -37,6 +37,89 @@ public static class GlobalUIAssetBuilder
         Debug.Log("Global UI V1 资产与 SampleScene 迁移完成。");
     }
 
+    [MenuItem("Cultivation4X/UI/Migrate World Time HUD V22")]
+    public static void MigrateWorldTimeHud()
+    {
+        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontPath);
+        if (font == null) throw new System.InvalidOperationException($"缺少 TMP 字体: {FontPath}");
+        GameObject root = PrefabUtility.LoadPrefabContents(RootPath);
+        try
+        {
+            Transform top = root.transform.Find("GlobalHudCanvas/ShellRoot/TopBar");
+            GlobalHudView hud = root.GetComponentInChildren<GlobalHudView>(true);
+            if (top == null || hud == null) throw new System.InvalidOperationException("UIRoot 缺少世界地图顶部 HUD");
+            SetPreferredWidth(top.Find("SectGroup"), 190f);
+            SetPreferredWidth(top.Find("ResourceGroup"), 245f);
+            Transform progress = top.Find("ProgressGroup");
+            SetPreferredWidth(progress, 250f);
+            Transform action = top.Find("ActionGroup");
+            SetPreferredWidth(action, 310f);
+
+            Button pause = action?.GetComponentInChildren<Button>(true);
+            if (pause == null) throw new System.InvalidOperationException("顶部 HUD 缺少旧时间操作按钮");
+            pause.name = "暂停";
+            SetButtonText(pause, "暂停");
+            ConfigureHudButton(pause, 54f);
+            Button settlement = EnsureHudButton(action, "结算", font, 62f);
+            Button speed1 = EnsureHudButton(action, "×1", font, 48f);
+            Button speed2 = EnsureHudButton(action, "×2", font, 48f);
+            Button speed4 = EnsureHudButton(action, "×4", font, 48f);
+
+            TMP_Text day = progress?.Find("Text")?.GetComponent<TMP_Text>();
+            if (day != null)
+            {
+                day.text = "第1年·第1月·第1日　06:00";
+                LayoutElement daySize = day.GetComponent<LayoutElement>();
+                daySize.preferredWidth = 158f;
+                daySize.flexibleWidth = 0f;
+            }
+            Button eventButton = progress?.GetComponentInChildren<Button>(true);
+            if (eventButton != null) ConfigureHudButton(eventButton, 76f);
+
+            hud.ConfigureTimeControls(settlement, speed1, speed2, speed4);
+            EditorUtility.SetDirty(hud);
+            PrefabUtility.SaveAsPrefabAsset(root, RootPath);
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(root);
+        }
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("V22 世界时间 HUD 迁移完成。");
+    }
+
+    private static Button EnsureHudButton(Transform parent, string label, TMP_FontAsset font, float width)
+    {
+        Transform existing = parent?.Find(label);
+        Button button = existing == null ? CreateButton(parent, label, font) : existing.GetComponent<Button>();
+        SetButtonText(button, label);
+        ConfigureHudButton(button, width);
+        return button;
+    }
+
+    private static void SetButtonText(Button button, string label)
+    {
+        TMP_Text text = button?.GetComponentInChildren<TMP_Text>(true);
+        if (text != null) text.text = label;
+    }
+
+    private static void ConfigureHudButton(Button button, float width)
+    {
+        if (button == null) return;
+        LayoutElement size = button.GetComponent<LayoutElement>() ?? button.gameObject.AddComponent<LayoutElement>();
+        size.minWidth = width;
+        size.preferredWidth = width;
+        size.flexibleWidth = 0f;
+    }
+
+    private static void SetPreferredWidth(Transform target, float width)
+    {
+        if (target == null) return;
+        LayoutElement size = target.GetComponent<LayoutElement>() ?? target.gameObject.AddComponent<LayoutElement>();
+        size.preferredWidth = width;
+    }
+
     private static void EnsureFolders()
     {
         EnsureFolder("Assets", "UI");
@@ -494,7 +577,7 @@ public static class GlobalUIAssetBuilder
         topLayout.childAlignment = TextAnchor.MiddleCenter;
         topLayout.childControlWidth = true;
         topLayout.childControlHeight = true;
-        GameObject sectGroup = CreateTopGroup(top.transform, "SectGroup", 240f,
+        GameObject sectGroup = CreateTopGroup(top.transform, "SectGroup", 190f,
             new Color(0.055f, 0.105f, 0.078f, 1f));
         TMP_Text sectName = CreateText(sectGroup.transform, "未立宗", 21, font, 44);
         sectName.fontStyle = FontStyles.Bold;
@@ -502,20 +585,28 @@ public static class GlobalUIAssetBuilder
         TMP_Text context = CreateText(top.transform, "世界地图", 22, font, 50);
         context.alignment = TextAlignmentOptions.Center;
         context.GetComponent<LayoutElement>().flexibleWidth = 1f;
-        GameObject resourceGroup = CreateTopGroup(top.transform, "ResourceGroup", 300f,
+        GameObject resourceGroup = CreateTopGroup(top.transform, "ResourceGroup", 245f,
             new Color(0.060f, 0.115f, 0.085f, 1f));
         TMP_Text resources = CreateText(resourceGroup.transform, "灵石 0　材料 0　弟子 0", 15, font, 44);
         resources.GetComponent<LayoutElement>().flexibleWidth = 1f;
-        GameObject progressGroup = CreateTopGroup(top.transform, "ProgressGroup", 205f,
+        GameObject progressGroup = CreateTopGroup(top.transform, "ProgressGroup", 250f,
             new Color(0.050f, 0.095f, 0.075f, 1f));
         Button eventButton = CreateButton(progressGroup.transform, "事件 0", font);
-        eventButton.GetComponent<LayoutElement>().preferredWidth = 100f;
-        TMP_Text day = CreateText(progressGroup.transform, "第 0 天", 15, font, 44);
-        day.GetComponent<LayoutElement>().preferredWidth = 90f;
-        GameObject actionGroup = CreateTopGroup(top.transform, "ActionGroup", 128f,
+        ConfigureHudButton(eventButton, 76f);
+        TMP_Text day = CreateText(progressGroup.transform, "第1年·第1月·第1日　06:00", 15, font, 44);
+        day.GetComponent<LayoutElement>().preferredWidth = 158f;
+        GameObject actionGroup = CreateTopGroup(top.transform, "ActionGroup", 310f,
             new Color(0.115f, 0.095f, 0.045f, 1f));
-        Button endDay = CreateButton(actionGroup.transform, "结束今天", font);
-        endDay.GetComponent<LayoutElement>().flexibleWidth = 1f;
+        Button endDay = CreateButton(actionGroup.transform, "暂停", font);
+        ConfigureHudButton(endDay, 54f);
+        Button settlement = CreateButton(actionGroup.transform, "结算", font);
+        ConfigureHudButton(settlement, 62f);
+        Button speed1 = CreateButton(actionGroup.transform, "×1", font);
+        ConfigureHudButton(speed1, 48f);
+        Button speed2 = CreateButton(actionGroup.transform, "×2", font);
+        ConfigureHudButton(speed2, 48f);
+        Button speed4 = CreateButton(actionGroup.transform, "×4", font);
+        ConfigureHudButton(speed4, 48f);
 
         GameObject rail = Panel(shell.transform, "NavigationRail", new Color(0.028f, 0.060f, 0.047f, 0.985f));
         RectTransform railRect = rail.GetComponent<RectTransform>();
@@ -566,6 +657,7 @@ public static class GlobalUIAssetBuilder
 
         hud.Configure(shell, sectName, context, resources, eventButton.GetComponentInChildren<TMP_Text>(),
             day, map, sect, disciple, plan, mission, resource, eventButton, endDay, returnButton);
+        hud.ConfigureTimeControls(settlement, speed1, speed2, speed4);
         root.GetComponent<UIManager>().Configure(screenLayer.transform, modalLayer.transform,
             overlayLayer.transform, hud, theme, new[]
             {

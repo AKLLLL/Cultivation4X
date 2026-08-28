@@ -58,6 +58,8 @@ public class ResourceProductionRecord
 public class DaySettlementSummary
 {
     public int day;
+    public bool isMonthEnd;
+    public int monthIndex;
     public int reputationChange;
     public List<ItemDayChange> itemChanges = new List<ItemDayChange>();
     public List<ResourceProductionRecord> resourceProduction = new List<ResourceProductionRecord>();

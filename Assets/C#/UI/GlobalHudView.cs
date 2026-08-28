@@ -20,7 +20,11 @@ public sealed class GlobalHudView : MonoBehaviour
     [SerializeField] private Button missionButton;
     [SerializeField] private Button resourceButton;
     [SerializeField] private Button eventButton;
+    [SerializeField] private Button settlementButton;
     [SerializeField] private Button endDayButton;
+    [SerializeField] private Button speed1Button;
+    [SerializeField] private Button speed2Button;
+    [SerializeField] private Button speed4Button;
     [SerializeField] private Button returnToMapButton;
 
     private UIManager manager;
@@ -48,6 +52,14 @@ public sealed class GlobalHudView : MonoBehaviour
         eventButton = eventInbox;
         endDayButton = endDay;
         returnToMapButton = returnToMap;
+    }
+
+    public void ConfigureTimeControls(Button settlement, Button speed1, Button speed2, Button speed4)
+    {
+        settlementButton = settlement;
+        speed1Button = speed1;
+        speed2Button = speed2;
+        speed4Button = speed4;
     }
 
     public void Bind(UIManager uiManager, UITheme uiTheme)
@@ -79,7 +91,11 @@ public sealed class GlobalHudView : MonoBehaviour
         missionButton?.onClick.RemoveAllListeners();
         resourceButton?.onClick.RemoveAllListeners();
         eventButton?.onClick.RemoveAllListeners();
+        settlementButton?.onClick.RemoveAllListeners();
         endDayButton?.onClick.RemoveAllListeners();
+        speed1Button?.onClick.RemoveAllListeners();
+        speed2Button?.onClick.RemoveAllListeners();
+        speed4Button?.onClick.RemoveAllListeners();
         returnToMapButton?.onClick.RemoveAllListeners();
         mapButton?.onClick.AddListener(() => manager?.ReturnToWorldMap());
         returnToMapButton?.onClick.AddListener(() => manager?.ReturnToWorldMap());
@@ -89,7 +105,11 @@ public sealed class GlobalHudView : MonoBehaviour
         missionButton?.onClick.AddListener(OpenMissionPanel);
         resourceButton?.onClick.AddListener(OpenResourcePanel);
         eventButton?.onClick.AddListener(OpenEventInbox);
-        endDayButton?.onClick.AddListener(() => TimeManager.Instance?.EndDay());
+        settlementButton?.onClick.AddListener(OpenLatestSettlement);
+        endDayButton?.onClick.AddListener(() => TimeManager.Instance?.PauseByPlayer());
+        speed1Button?.onClick.AddListener(() => SelectSpeed(1f));
+        speed2Button?.onClick.AddListener(() => SelectSpeed(2f));
+        speed4Button?.onClick.AddListener(() => SelectSpeed(4f));
     }
 
     private void BindDomainEvents()
@@ -100,7 +120,12 @@ public sealed class GlobalHudView : MonoBehaviour
         if (GameFlowStateManager.Instance != null) GameFlowStateManager.Instance.StateChanged += ApplyFlowState;
         if (WarehouseManager.Instance != null) WarehouseManager.Instance.OnInventoryChanged += RefreshAll;
         if (NPCManager.Instance != null) NPCManager.Instance.OnRosterChanged += RefreshAll;
-        if (TimeManager.Instance != null) TimeManager.Instance.OnDayPassed += OnDayPassed;
+        if (TimeManager.Instance != null)
+        {
+            TimeManager.Instance.OnDayPassed += OnDayPassed;
+            TimeManager.Instance.OnTimeChanged += OnTimeChanged;
+            TimeManager.Instance.OnDaySettlementReady += OnSettlementReady;
+        }
         if (PlayerManager.Instance != null) PlayerManager.Instance.OnFoundingChanged += RefreshAll;
         if (EventManager.Instance != null)
         {
@@ -117,7 +142,12 @@ public sealed class GlobalHudView : MonoBehaviour
         if (GameFlowStateManager.Instance != null) GameFlowStateManager.Instance.StateChanged -= ApplyFlowState;
         if (WarehouseManager.Instance != null) WarehouseManager.Instance.OnInventoryChanged -= RefreshAll;
         if (NPCManager.Instance != null) NPCManager.Instance.OnRosterChanged -= RefreshAll;
-        if (TimeManager.Instance != null) TimeManager.Instance.OnDayPassed -= OnDayPassed;
+        if (TimeManager.Instance != null)
+        {
+            TimeManager.Instance.OnDayPassed -= OnDayPassed;
+            TimeManager.Instance.OnTimeChanged -= OnTimeChanged;
+            TimeManager.Instance.OnDaySettlementReady -= OnSettlementReady;
+        }
         if (PlayerManager.Instance != null) PlayerManager.Instance.OnFoundingChanged -= RefreshAll;
         if (EventManager.Instance != null)
         {
@@ -170,12 +200,39 @@ public sealed class GlobalHudView : MonoBehaviour
         int materials = WarehouseManager.Instance?.GetItemCount(FacilityRules.BasicMaterialId) ?? 0;
         int disciples = NPCManager.Instance?.GetAllNPC().Count(item => item?.Character?.IsAlive == true) ?? 0;
         if (resourceText != null) resourceText.text = $"灵石 {stones}　材料 {materials}　弟子 {disciples}";
-        if (dayText != null) dayText.text = $"第 {TimeManager.Instance?.CurrentDay ?? 0} 天";
+        RefreshTimeControls();
         if (eventText != null) eventText.text = $"事件 {EventManager.Instance?.GetInbox().Count ?? 0}";
         RefreshWindowState();
     }
 
+    private void RefreshTimeControls()
+    {
+        TimeManager time = TimeManager.Instance;
+        if (dayText != null)
+        {
+            GameDateTime current = time?.CurrentDateTime ?? GameCalendarRules.FromActiveDay(1, 6f);
+            dayText.text = $"{current.DateLabel}　{current.TimeLabel}";
+        }
+        if (settlementButton != null)
+        {
+            bool unread = time?.UnreadDaySettlement != null;
+            TMP_Text label = settlementButton.GetComponentInChildren<TMP_Text>();
+            if (label != null) label.text = unread ? "结算 ●" : "结算";
+            settlementButton.interactable = unread;
+        }
+        SetSelected(endDayButton, time?.IsPaused == true);
+        SetSelected(speed1Button, time != null && !time.IsPaused && Mathf.Approximately(time.SelectedSpeed, 1f));
+        SetSelected(speed2Button, time != null && !time.IsPaused && Mathf.Approximately(time.SelectedSpeed, 2f));
+        SetSelected(speed4Button, time != null && !time.IsPaused && Mathf.Approximately(time.SelectedSpeed, 4f));
+        bool speedAllowed = time != null && (time.PauseReasons & ~PauseReason.Player) == PauseReason.None;
+        if (speed1Button != null) speed1Button.interactable = speedAllowed;
+        if (speed2Button != null) speed2Button.interactable = speedAllowed;
+        if (speed4Button != null) speed4Button.interactable = speedAllowed;
+    }
+
     private void OnDayPassed(int _) => RefreshAll();
+    private void OnTimeChanged(GameDateTime _) => RefreshTimeControls();
+    private void OnSettlementReady(DaySettlementSummary _) => RefreshAll();
     private void OnEventPresented(ActiveCharacterEvent _) => RefreshAll();
     private void OnEventResolved(EventHistoryRecord _) => RefreshAll();
 
@@ -195,6 +252,19 @@ public sealed class GlobalHudView : MonoBehaviour
     {
         CharacterEventPanel panel = Object.FindObjectOfType<CharacterEventPanel>(true);
         panel?.OpenInbox();
+    }
+
+    private static void OpenLatestSettlement()
+    {
+        DaySettlementPanel panel = Object.FindObjectOfType<DaySettlementPanel>(true);
+        panel?.OpenLatest();
+    }
+
+    private static void SelectSpeed(float speed)
+    {
+        if (TimeManager.Instance == null) return;
+        if (!TimeManager.Instance.TrySetSpeed(speed, out string reason) && !string.IsNullOrWhiteSpace(reason))
+            Debug.LogWarning($"无法继续时间：{reason}");
     }
 
     private void ApplyTheme()

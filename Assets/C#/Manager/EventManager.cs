@@ -686,6 +686,7 @@ public class EventManager : MonoBehaviour
     public IReadOnlyList<EventHistoryRecord> GetHistory() => history.AsReadOnly();
     public IReadOnlyList<PendingEvent> GetPendingEvents() => pending.AsReadOnly();
     public IReadOnlyList<EventInboxEntry> GetInbox() => inbox.AsReadOnly();
+    public bool HasCriticalInbox => inbox.Any(IsCritical);
     public string ActiveEventEntryId => activeEvent?.EntryId;
     public int NextInboxSequence => nextInboxSequence;
     public IReadOnlyCollection<EventDefinition> GetDefinitions() => definitions.Values;

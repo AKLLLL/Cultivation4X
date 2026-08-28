@@ -365,11 +365,18 @@ public class NPCManager : MonoBehaviour
             {
                 continue;
             }
-            MonthlyActivityType activity = MonthlyPlanRules.ActivityFor(npc, day);
+            MonthlyActivityType activity;
+            string lockedActionId;
+            if (TimeManager.Instance == null ||
+                !TimeManager.Instance.TryGetLockedActivity(npc.CharacterId, day, out activity, out lockedActionId))
+            {
+                activity = MonthlyPlanRules.ActivityFor(npc, day);
+                lockedActionId = null;
+            }
             if (npc.State == NPCState.Idle)
             {
                 if (activity == MonthlyActivityType.Training)
-                    DailyCultivationSimulator.SimulateTrainingDay(npc, day);
+                    DailyCultivationSimulator.SimulateTrainingDay(npc, day, lockedActionId);
                 else if (activity == MonthlyActivityType.SectDuty)
                     ProcessSectDutyDay();
             }

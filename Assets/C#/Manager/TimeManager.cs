@@ -1,11 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Cultivation4X.WorldMap;
 using UnityEngine;
 
 /// <summary>
 /// 游戏时间管理器。
-/// 负责推进游戏天数，并通知其他系统。
+/// 负责现实秒到游戏小时的换算、日历节点与唯一日结编排。
 /// </summary>
 public class TimeManager : MonoBehaviour
 {
@@ -15,6 +16,12 @@ public class TimeManager : MonoBehaviour
     /// 当前是第几天。
     /// </summary>
     public int CurrentDay { get; private set; } = 0;
+    public int ActiveDay => CurrentDay + 1;
+    public float CurrentHour { get; private set; } = 6f;
+    public float SelectedSpeed { get; private set; } = 1f;
+    public PauseReason PauseReasons { get; private set; } = PauseReason.Player | PauseReason.FlowState;
+    public bool IsPaused => PauseReasons != PauseReason.None;
+    public GameDateTime CurrentDateTime => GameCalendarRules.FromActiveDay(ActiveDay, CurrentHour);
 
     /// <summary>
     /// 每经过一天触发一次。
@@ -22,11 +29,20 @@ public class TimeManager : MonoBehaviour
     /// </summary>
     public event Action<int> OnDayPassed;
     public event Action<DaySettlementSummary> OnDaySettlementReady;
+    public event Action<GameDateTime> OnTimeChanged;
+    public event Action<GameDateTime> OnHourChanged;
+    public event Action<GameDateTime> OnDayStarted;
+    public event Action<GameDateTime> OnDayEnding;
+    public event Action<DaySettlementSummary> OnDayEnded;
+    public event Action<GameDateTime> OnMonthStarted;
+    public event Action<DaySettlementSummary> OnMonthEnded;
     private readonly System.Collections.Generic.List<FacilityUpgradeRecord> facilityUpgrades = new System.Collections.Generic.List<FacilityUpgradeRecord>();
     private readonly System.Collections.Generic.Dictionary<string, int> preAdvanceItemChanges =
         new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
     private readonly System.Collections.Generic.List<string> threatNotices = new System.Collections.Generic.List<string>();
     private bool isAdvancingDay;
+    private DailyScheduleState dailySchedule;
+    private WorldTimeConfig config;
     public DaySettlementSummary UnreadDaySettlement { get; private set; }
     public bool IsSettlementOpen { get; private set; }
 
@@ -35,6 +51,7 @@ public class TimeManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
+            config = WorldTimeConfigLoader.Load();
         }
         else
         {
@@ -42,49 +59,376 @@ public class TimeManager : MonoBehaviour
         }
     }
 
+    private void Update()
+    {
+        SynchronizePauseReasons();
+        EnsureCurrentDayPrepared();
+        if (IsPaused || !CanWorldClockRun()) return;
+        float gameHours = Time.unscaledDeltaTime * 24f / config.secondsPerDay * SelectedSpeed;
+        AdvanceHoursInternal(gameHours, false);
+    }
+
     /// <summary>
-    /// 点击"结束今天"按钮调用。
+    /// 兼容旧测试入口；正式玩法由世界时钟跨过午夜触发。
     /// </summary>
     public void EndDay()
     {
-        if (isAdvancingDay) { Debug.LogWarning("正在推进天数，忽略重复调用"); return; }
-        if (IsSettlementOpen) { Debug.LogWarning("请先关闭每日结算"); return; }
-        if (EventManager.Instance != null && !EventManager.Instance.PrepareForDayAdvance(CurrentDay, out string reason))
+        AdvanceOneDayForTesting();
+    }
+
+    public void PauseByPlayer()
+    {
+        PauseReasons |= PauseReason.Player;
+        NotifyTimeChanged();
+    }
+
+    public bool TrySetSpeed(float multiplier, out string reason)
+    {
+        config = config ?? WorldTimeConfigLoader.Load();
+        if (!config.speedMultipliers.Any(value => Mathf.Approximately(value, multiplier)))
         {
-            Debug.LogWarning($"无法结束今天: {reason}");
+            reason = "时间倍率无效";
+            return false;
+        }
+        SynchronizePauseReasons();
+        PauseReason blocking = PauseReasons & ~(PauseReason.Player);
+        if (blocking != PauseReason.None)
+        {
+            reason = PauseReasonLabel(blocking);
+            return false;
+        }
+        SelectedSpeed = multiplier;
+        PauseReasons &= ~PauseReason.Player;
+        reason = null;
+        NotifyTimeChanged();
+        return true;
+    }
+
+    public void AcknowledgeMonthEnd()
+    {
+        PauseReasons &= ~PauseReason.MonthEnd;
+        PauseReasons |= PauseReason.Player;
+        NotifyTimeChanged();
+    }
+
+    public string PauseReasonText() => PauseReasonLabel(PauseReasons);
+
+    public void AdvanceOneHourForTesting() => AdvanceHoursInternal(1f, true);
+
+    public void AdvanceOneDayForTesting()
+    {
+        if (isAdvancingDay) { Debug.LogWarning("正在推进天数，忽略重复调用"); return; }
+        EnsureCurrentDayPrepared();
+        float hours = 24f - CurrentHour;
+        if (hours <= 0.0001f) hours = 24f;
+        AdvanceHoursInternal(hours, true);
+    }
+
+    public int AdvanceDaysForTesting(int days)
+    {
+        int requested = Mathf.Max(0, days);
+        int before = CurrentDay;
+        for (int index = 0; index < requested; index++)
+        {
+            PauseReasons &= ~PauseReason.MonthEnd;
+            AdvanceOneDayForTesting();
+            if (CurrentDay == before + index) break;
+        }
+        return CurrentDay - before;
+    }
+
+    public int AdvanceMonthsForTesting(int months) =>
+        AdvanceDaysForTesting(Mathf.Max(0, months) * GameCalendarRules.DaysPerMonth);
+
+    public DailyScheduleState GetDailySchedule() => dailySchedule;
+
+    public DiscipleDailySchedule GetSchedule(string characterId) =>
+        dailySchedule?.day == ActiveDay ? dailySchedule.Get(characterId) : null;
+
+    public string GetCurrentActivityLabel(string characterId)
+    {
+        Mission mission = NPCManager.Instance?.GetRuntime(characterId)?.CurrentMission;
+        if (mission != null && (mission.State == MissionState.Active || mission.State == MissionState.WaitingNode))
+            return mission.Data?.name ?? "执行任务";
+        return GetSchedule(characterId)?.ActivityAt(CurrentHour) ??
+               (CurrentHour < 6f || CurrentHour >= 20f ? "休息" : "自由活动");
+    }
+
+    public bool TryGetLockedActivity(string characterId, int day, out MonthlyActivityType activity,
+        out string cultivationActionId)
+    {
+        DiscipleDailySchedule entry = dailySchedule?.day == day ? dailySchedule.Get(characterId) : null;
+        if (entry == null)
+        {
+            activity = default;
+            cultivationActionId = null;
+            return false;
+        }
+        activity = entry.activity;
+        cultivationActionId = entry.cultivationActionId;
+        return true;
+    }
+
+    public WorldTimeSaveData CaptureWorldTime() => new WorldTimeSaveData
+    {
+        currentHour = CurrentHour,
+        selectedSpeed = SelectedSpeed,
+        dayPrepared = dailySchedule?.day == ActiveDay,
+        dailySchedule = dailySchedule
+    };
+
+    public void RestoreWorldTime(WorldTimeSaveData state)
+    {
+        config = config ?? WorldTimeConfigLoader.Load();
+        CurrentHour = Mathf.Clamp(state?.currentHour ?? config.dayStartHour, 0f, 23.9999f);
+        float requestedSpeed = state?.selectedSpeed ?? 1f;
+        SelectedSpeed = config.speedMultipliers.Any(value => Mathf.Approximately(value, requestedSpeed))
+            ? requestedSpeed : 1f;
+        dailySchedule = state?.dayPrepared == true ? state.dailySchedule : null;
+        if (dailySchedule != null && dailySchedule.day != ActiveDay) dailySchedule = null;
+        PauseReasons = PauseReason.Player | PauseReason.FlowState;
+        NotifyTimeChanged();
+    }
+
+    public void ResetForNewGame()
+    {
+        config = config ?? WorldTimeConfigLoader.Load();
+        CurrentDay = 0;
+        CurrentHour = config.dayStartHour;
+        SelectedSpeed = 1f;
+        dailySchedule = null;
+        UnreadDaySettlement = null;
+        IsSettlementOpen = false;
+        PauseReasons = PauseReason.Player | PauseReason.FlowState;
+        NotifyTimeChanged();
+    }
+
+    private void AdvanceHoursInternal(float gameHours, bool testing)
+    {
+        if (gameHours <= 0f || isAdvancingDay) return;
+        config = config ?? WorldTimeConfigLoader.Load();
+        float remaining = gameHours;
+        int guard = 0;
+        while (remaining > 0.00001f && guard++ < 10000)
+        {
+            if (!testing)
+            {
+                SynchronizePauseReasons();
+                if (IsPaused || !CanWorldClockRun()) break;
+            }
+            float nextHour = Mathf.Min(24f, Mathf.Floor(CurrentHour + 0.0001f) + 1f);
+            float distance = nextHour - CurrentHour;
+            if (remaining + 0.00001f < distance)
+            {
+                CurrentHour += remaining;
+                remaining = 0f;
+                NotifyTimeChanged();
+                break;
+            }
+            if (Mathf.Approximately(nextHour, 24f) && !CanCrossMidnight(out string reason))
+            {
+                CurrentHour = Mathf.Min(23.999f, CurrentHour + Mathf.Max(0f, distance - 0.001f));
+                AutoPause(PauseReason.CriticalEvent, reason);
+                break;
+            }
+            CurrentHour = nextHour;
+            remaining -= distance;
+            ProcessHourBoundary(Mathf.RoundToInt(nextHour));
+        }
+    }
+
+    private void ProcessHourBoundary(int hour)
+    {
+        if (hour >= 24)
+        {
+            if (!SettleActiveDay()) return;
+            CurrentHour = 0f;
+            dailySchedule = null;
+            GameDateTime date = CurrentDateTime;
+            if (date.day == 1) SafeInvoke(OnMonthStarted, date, "OnMonthStarted");
+            SafeInvoke(OnHourChanged, date, "OnHourChanged");
+            NotifyTimeChanged();
             return;
+        }
+        GameDateTime current = CurrentDateTime;
+        SafeInvoke(OnHourChanged, current, "OnHourChanged");
+        if (Mathf.Approximately(hour, config.dayStartHour)) PrepareCurrentDay();
+        if (Mathf.Approximately(hour, config.dayEndingHour)) SafeInvoke(OnDayEnding, current, "OnDayEnding");
+        NotifyTimeChanged();
+    }
+
+    private bool SettleActiveDay()
+    {
+        if (isAdvancingDay) return false;
+        if (!CanCrossMidnight(out string reason))
+        {
+            AutoPause(PauseReason.CriticalEvent, reason);
+            return false;
         }
         try
         {
+            EnsureCurrentDayPrepared();
             DayStartSnapshot before = CaptureDayStart();
             CurrentDay++;
             isAdvancingDay = true;
+            Debug.Log($"完成第 {CurrentDay} 天结算");
 
-            Debug.Log($"今天是第 {CurrentDay} 天");
-
-            // 固定顺序：角色恢复/修炼 -> 任务推进 -> 外部威胁 -> 事件抽取 -> 月产出 -> 结算 -> 自动保存。
             NPCManager.Instance?.OnDayPassed();
             Cultivation4X.WorldMap.WorldMapContentEffects.ApplyDaily(CurrentDay);
-            OnDayPassed?.Invoke(CurrentDay);
+            MissionManager.Instance?.ProcessDay(CurrentDay);
             ExternalThreatRules.ProcessDay(CurrentDay);
             EventManager.Instance?.ProcessDay(CurrentDay);
             NPCManager.Instance?.ApplyNightlyCultivationSettlement();
-            System.Collections.Generic.List<ResourceProductionRecord> monthlyProduction =
-                CurrentDay > 0 && CurrentDay % ResourceManager.DaysPerMonth == 0
-                    ? ResourceManager.MonthUpdate(CurrentDay, CurrentDay / ResourceManager.DaysPerMonth)
-                    : new System.Collections.Generic.List<ResourceProductionRecord>();
-            isAdvancingDay = false;
+            bool monthEnd = CurrentDay > 0 && CurrentDay % GameCalendarRules.DaysPerMonth == 0;
+            List<ResourceProductionRecord> monthlyProduction = monthEnd
+                ? ResourceManager.MonthUpdate(CurrentDay, CurrentDay / GameCalendarRules.DaysPerMonth)
+                : new List<ResourceProductionRecord>();
             UnreadDaySettlement = BuildSettlement(before, monthlyProduction);
+            UnreadDaySettlement.isMonthEnd = monthEnd;
+            UnreadDaySettlement.monthIndex = MonthlyPlanRules.MonthIndex(CurrentDay);
+            DiscipleDecisionManager.Instance?.ProcessSettledDay(CurrentDay);
+            // 最终自动存档必须已经处于次日 00:00，不能写入 24:00 或上一日锁定日程。
+            CurrentHour = 0f;
+            dailySchedule = null;
+            isAdvancingDay = false;
             SaveManager.Instance?.AutoSave();
-            OnDaySettlementReady?.Invoke(UnreadDaySettlement);
+            SafeInvoke(OnDayPassed, CurrentDay, "OnDayPassed");
+            SafeInvoke(OnDayEnded, UnreadDaySettlement, "OnDayEnded");
+            SafeInvoke(OnDaySettlementReady, UnreadDaySettlement, "OnDaySettlementReady");
+            if (monthEnd)
+            {
+                AutoPause(PauseReason.MonthEnd, "月结待确认");
+                SafeInvoke(OnMonthEnded, UnreadDaySettlement, "OnMonthEnded");
+            }
+            if (EventManager.Instance?.HasCriticalInbox == true)
+                AutoPause(PauseReason.CriticalEvent, "存在尚未处理的关键事件");
+            return true;
         }
         catch (Exception exception)
         {
-            Debug.LogError($"结束今天失败: {exception}");
+            PauseReasons |= PauseReason.SettlementFailure | PauseReason.Player;
+            Debug.LogError($"日结失败，世界时间已暂停，请读取上一份完整存档: {exception}");
+            return false;
         }
         finally
         {
             isAdvancingDay = false;
+        }
+    }
+
+    private bool CanCrossMidnight(out string reason)
+    {
+        if (IsSettlementOpen) { reason = "请先关闭结算窗口"; return false; }
+        if (EventManager.Instance != null && !EventManager.Instance.PrepareForDayAdvance(CurrentDay, out reason))
+            return false;
+        reason = null;
+        return true;
+    }
+
+    private void EnsureCurrentDayPrepared()
+    {
+        if (!CanWorldClockRun() || CurrentHour < config.dayStartHour || dailySchedule?.day == ActiveDay) return;
+        PrepareCurrentDay();
+    }
+
+    private void PrepareCurrentDay()
+    {
+        if (dailySchedule?.day == ActiveDay) return;
+        DailyScheduleState state = new DailyScheduleState { day = ActiveDay };
+        foreach (NPCRuntime npc in NPCManager.Instance?.GetLivingNPC() ?? Enumerable.Empty<NPCRuntime>())
+        {
+            if (npc?.Character == null || string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
+            MonthlyActivityType activity = MonthlyPlanRules.ActivityFor(npc, ActiveDay);
+            Mission mission = npc.CurrentMission;
+            DiscipleDailySchedule entry = new DiscipleDailySchedule
+            {
+                characterId = npc.CharacterId,
+                activity = activity,
+                missionOccupied = mission != null &&
+                    (mission.State == MissionState.Active || mission.State == MissionState.WaitingNode)
+            };
+            if (entry.missionOccupied)
+            {
+                entry.segments.Add(Segment(config.dayStartHour, config.dayEndingHour,
+                    mission.Data?.name ?? "执行任务"));
+            }
+            else if (activity == MonthlyActivityType.Training)
+            {
+                entry.cultivationActionId = DailyCultivationSimulator.SelectActionId(npc, ActiveDay);
+                entry.segments.Add(Segment(6f, 11f, "吸收天地灵气"));
+                entry.segments.Add(Segment(11f, 18f,
+                    DailyCultivationSimulator.ActionName(entry.cultivationActionId)));
+                entry.segments.Add(Segment(18f, 20f, "调息"));
+            }
+            else if (activity == MonthlyActivityType.SectDuty)
+            {
+                entry.segments.Add(Segment(6f, 12f, "处理宗门事务"));
+                entry.segments.Add(Segment(12f, 18f, "宗门劳作"));
+                entry.segments.Add(Segment(18f, 20f, "整理交接"));
+            }
+            else
+            {
+                entry.segments.Add(Segment(6f, 12f, "自由活动"));
+                entry.segments.Add(Segment(12f, 18f, "游历休整"));
+                entry.segments.Add(Segment(18f, 20f, "自省"));
+            }
+            state.disciples.Add(entry);
+        }
+        dailySchedule = state;
+        SafeInvoke(OnDayStarted, CurrentDateTime, "OnDayStarted");
+        NotifyTimeChanged();
+    }
+
+    private static DailyScheduleSegment Segment(float start, float end, string label) =>
+        new DailyScheduleSegment { startHour = start, endHour = end, label = label };
+
+    private bool CanWorldClockRun()
+    {
+        if (SaveManager.Instance == null || !SaveManager.Instance.IsInitializationComplete ||
+            !SaveManager.Instance.HasGameSession) return false;
+        if (GameFlowStateManager.Instance == null || GameFlowStateManager.Instance.Current != GameFlowState.WorldMap)
+            return false;
+        return GameFlowPermission.IsSectEstablished(PlayerManager.Instance?.playerData?.founding);
+    }
+
+    private void SynchronizePauseReasons()
+    {
+        if (CanWorldClockRun()) PauseReasons &= ~PauseReason.FlowState;
+        else PauseReasons |= PauseReason.FlowState;
+        if (EventManager.Instance?.HasCriticalInbox == true)
+        {
+            if ((PauseReasons & PauseReason.CriticalEvent) == 0)
+                PauseReasons |= PauseReason.Player;
+            PauseReasons |= PauseReason.CriticalEvent;
+        }
+        else PauseReasons &= ~PauseReason.CriticalEvent;
+    }
+
+    private void AutoPause(PauseReason reason, string message)
+    {
+        PauseReasons |= reason | PauseReason.Player;
+        if (!string.IsNullOrWhiteSpace(message)) Debug.Log($"世界时间暂停: {message}");
+        NotifyTimeChanged();
+    }
+
+    private static string PauseReasonLabel(PauseReason reasons)
+    {
+        if ((reasons & PauseReason.SettlementFailure) != 0) return "日结失败，请读档";
+        if ((reasons & PauseReason.CriticalEvent) != 0) return "请先处理关键事件";
+        if ((reasons & PauseReason.MonthEnd) != 0) return "请先查看月结";
+        if ((reasons & PauseReason.FlowState) != 0) return "当前流程不运行世界时间";
+        return (reasons & PauseReason.Player) != 0 ? "已暂停" : null;
+    }
+
+    private void NotifyTimeChanged() => SafeInvoke(OnTimeChanged, CurrentDateTime, "OnTimeChanged");
+
+    private static void SafeInvoke<T>(Action<T> handlers, T value, string eventName)
+    {
+        if (handlers == null) return;
+        foreach (Action<T> handler in handlers.GetInvocationList())
+        {
+            try { handler(value); }
+            catch (Exception exception) { Debug.LogError($"时间通知 {eventName} 订阅者异常: {exception}"); }
         }
     }
 
@@ -113,9 +457,15 @@ public class TimeManager : MonoBehaviour
     public void RestoreUnreadSettlement(DaySettlementSummary summary)
     {
         UnreadDaySettlement = summary;
-        if (summary != null) OnDaySettlementReady?.Invoke(summary);
+        if (summary?.isMonthEnd == true) PauseReasons |= PauseReason.MonthEnd | PauseReason.Player;
     }
-    public void MarkSettlementRead() => UnreadDaySettlement = null;
+    public void MarkSettlementRead()
+    {
+        bool wasMonthEnd = UnreadDaySettlement?.isMonthEnd == true;
+        UnreadDaySettlement = null;
+        if (wasMonthEnd) AcknowledgeMonthEnd();
+        else NotifyTimeChanged();
+    }
     public void SetSettlementOpen(bool open) => IsSettlementOpen = open;
 
     private DayStartSnapshot CaptureDayStart()
@@ -224,5 +574,6 @@ public class TimeManager : MonoBehaviour
     public void RestoreDay(int day)
     {
         CurrentDay = Mathf.Max(0, day);
+        if (dailySchedule != null && dailySchedule.day != ActiveDay) dailySchedule = null;
     }
 }

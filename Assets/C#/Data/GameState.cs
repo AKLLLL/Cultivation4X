@@ -5,9 +5,9 @@ using Cultivation4X.WorldMap;
 public static class SaveDataVersion
 {
     /// <summary>
-    /// 21：统一功法、个人理解与宗门推演状态，不兼容旧档。
+    /// 22：加入自动世界时钟、小时、速度与当日锁定日程，不兼容旧档。
     /// </summary>
-    public const int Current = 21;
+    public const int Current = 22;
 }
 
 [Serializable]
@@ -15,6 +15,7 @@ public class GameState
 {
     public int version = SaveDataVersion.Current;
     public int currentDay;
+    public WorldTimeSaveData worldTime = new WorldTimeSaveData();
     public int randomSeed = 48621;
     public int randomRollCount;
     public PlayerData sect = new PlayerData();

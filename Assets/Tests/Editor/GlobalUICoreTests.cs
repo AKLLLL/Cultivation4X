@@ -157,6 +157,46 @@ public sealed class GlobalUICoreTests
         Assert.That(Enumerable.Range(0, registrations.arraySize)
             .Select(index => registrations.GetArrayElementAtIndex(index).FindPropertyRelative("id").enumValueIndex)
             .Distinct().Count(), Is.EqualTo(registrations.arraySize));
+
+        SerializedObject hud = new SerializedObject(root.GetComponentInChildren<GlobalHudView>(true));
+        Assert.That(hud.FindProperty("settlementButton").objectReferenceValue, Is.Not.Null);
+        Assert.That(hud.FindProperty("endDayButton").objectReferenceValue, Is.Not.Null);
+        Assert.That(hud.FindProperty("speed1Button").objectReferenceValue, Is.Not.Null);
+        Assert.That(hud.FindProperty("speed2Button").objectReferenceValue, Is.Not.Null);
+        Assert.That(hud.FindProperty("speed4Button").objectReferenceValue, Is.Not.Null);
+    }
+
+    [TestCase(1920f, 1080f)]
+    [TestCase(1280f, 720f)]
+    public void WorldTimeHud_ControlsFitAtReferenceSizes(float width, float height)
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Prefab/UI/UIRoot.prefab");
+        GameObject instance = UnityEngine.Object.Instantiate(prefab);
+        instance.name = $"UITest_WorldTimeHud_{width}x{height}";
+        RectTransform canvas = FindChild(instance.transform, "GlobalHudCanvas").GetComponent<RectTransform>();
+        canvas.anchorMin = canvas.anchorMax = new Vector2(0.5f, 0.5f);
+        canvas.sizeDelta = new Vector2(width, height);
+        RectTransform top = FindChild(instance.transform, "TopBar").GetComponent<RectTransform>();
+
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(top);
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(top);
+
+        RectTransform action = FindChild(top, "ActionGroup").GetComponent<RectTransform>();
+        Button[] controls = action.GetComponentsInChildren<Button>(true);
+        Assert.That(controls.Length, Is.EqualTo(5));
+        foreach (Button control in controls)
+        {
+            Assert.That(control.GetComponent<RectTransform>().rect.width, Is.GreaterThanOrEqualTo(47.5f));
+            Assert.That(control.GetComponentInChildren<TMP_Text>(true).text, Is.Not.Empty);
+        }
+        Bounds actionBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(top, action);
+        Assert.That(actionBounds.max.x, Is.LessThanOrEqualTo(top.rect.xMax + 0.5f));
+        Assert.That(actionBounds.min.x, Is.GreaterThanOrEqualTo(top.rect.xMin - 0.5f));
+        TMP_Text day = FindChild(top, "ProgressGroup").GetComponentsInChildren<TMP_Text>(true)
+            .First(text => text.text.Contains("年"));
+        Assert.That(day.rectTransform.rect.width, Is.GreaterThanOrEqualTo(157.5f));
     }
 
     [Test]
@@ -205,6 +245,40 @@ public sealed class GlobalUICoreTests
         TMP_Text mentalText = serialized.FindProperty("mentalText").objectReferenceValue as TMP_Text;
         Assert.That(mentalText.text, Does.Contain("主修功法：青木长生诀"));
         Assert.That(mentalText.GetComponent<LayoutElement>().preferredHeight, Is.EqualTo(54f));
+    }
+
+    [Test]
+    public void DiscipleCenterPresenter_SubscribesTimeRefreshOnlyWhileOpen()
+    {
+        TimeManager previousTime = TimeManager.Instance;
+        GameObject timeObject = new GameObject("UITest_DiscipleCenterTime");
+        GameObject viewObject = new GameObject("UITest_DiscipleCenterPresenter");
+        DiscipleCenterPresenter presenter = null;
+        try
+        {
+            TimeManager.Instance = null;
+            TimeManager time = timeObject.AddComponent<TimeManager>();
+            TimeManager.Instance = time;
+            DiscipleCenterView view = viewObject.AddComponent<DiscipleCenterView>();
+            presenter = new DiscipleCenterPresenter(view);
+
+            presenter.Open(null);
+
+            Assert.That(HasPresenterHandler(time, "OnDayPassed", presenter), Is.True);
+            Assert.That(HasPresenterHandler(time, "OnDayStarted", presenter), Is.True);
+            Assert.That(HasPresenterHandler(time, "OnHourChanged", presenter), Is.True);
+            presenter.Close();
+            Assert.That(HasPresenterHandler(time, "OnDayPassed", presenter), Is.False);
+            Assert.That(HasPresenterHandler(time, "OnDayStarted", presenter), Is.False);
+            Assert.That(HasPresenterHandler(time, "OnHourChanged", presenter), Is.False);
+        }
+        finally
+        {
+            presenter?.Close();
+            TimeManager.Instance = previousTime;
+            UnityEngine.Object.DestroyImmediate(viewObject);
+            UnityEngine.Object.DestroyImmediate(timeObject);
+        }
     }
 
     [Test]
@@ -583,6 +657,15 @@ public sealed class GlobalUICoreTests
             if (nested != null) return nested;
         }
         return null;
+    }
+
+    private static bool HasPresenterHandler(TimeManager time, string eventFieldName,
+        DiscipleCenterPresenter presenter)
+    {
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
+                                                     System.Reflection.BindingFlags.NonPublic;
+        Delegate handlers = typeof(TimeManager).GetField(eventFieldName, flags)?.GetValue(time) as Delegate;
+        return handlers?.GetInvocationList().Any(handler => ReferenceEquals(handler.Target, presenter)) == true;
     }
 
     private static void InvokePrivateAwake(MonthlyPlanPanel view)

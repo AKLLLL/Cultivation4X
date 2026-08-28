@@ -133,6 +133,7 @@ public class NPCInfoPanel : MonoBehaviour
     private void ShowBasicPage()
     {
         AddSection("修行状态");
+        AddRow("当前行动", TimeManager.Instance?.GetCurrentActivityLabel(currentNPC.CharacterId) ?? "自由活动");
         AddRow("境界", $"{FormatRealm(currentNPC.Realm)} {currentNPC.RealmLayer} 层");
         AddRow("当前灵气", $"{currentNPC.CurrentAura:0.0} / {DailyCultivationSimulator.AuraCapacity(currentNPC):0.0}");
         AddRow("纳气进度", $"{currentNPC.Character.naqiProgress:0.0}%");

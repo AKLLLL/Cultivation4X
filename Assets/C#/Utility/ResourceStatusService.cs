@@ -99,7 +99,7 @@ public static class ResourceStatusService
 
     /// <summary>
     /// 下一个资源结算日的前一天。例如第 7 天 → 29；第 29 天 → 59。
-    /// 跳转只用于开发/测试存档：跳过的日期不逐日推进任务和事件。
+    /// 只计算目标日；实际调试推进必须逐日走 TimeManager 的完整结算链。
     /// </summary>
     public static int NextSettlementEveDay(int currentDay)
     {

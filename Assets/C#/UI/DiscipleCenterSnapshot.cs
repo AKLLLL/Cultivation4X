@@ -64,7 +64,7 @@ public static class DiscipleCenterSnapshotBuilder
     public static DiscipleCenterSnapshot Build(string selectedCharacterId = null)
     {
         IReadOnlyList<NPCRuntime> roster = NPCManager.Instance?.GetAllNPC();
-        int day = TimeManager.Instance?.CurrentDay ?? 0;
+        int day = TimeManager.Instance?.ActiveDay ?? 1;
         return Build(roster, selectedCharacterId, day);
     }
 
@@ -182,9 +182,12 @@ public static class DiscipleCenterSnapshotBuilder
         out string currentPlan, out string nextPlan)
     {
         Mission mission = npc.CurrentMission;
-        currentAction = mission?.Data == null
-            ? $"{State(npc.State)}（剩余 {Math.Max(0, npc.StateRemainDays)} 天）"
-            : $"{mission.Data.name}（剩余 {mission.RemainingDays} 天）";
+        string scheduledAction = TimeManager.Instance?.GetCurrentActivityLabel(npc.CharacterId);
+        currentAction = string.IsNullOrWhiteSpace(scheduledAction)
+            ? (mission?.Data == null
+                ? $"{State(npc.State)}（剩余 {Math.Max(0, npc.StateRemainDays)} 天）"
+                : $"{mission.Data.name}（剩余 {mission.RemainingDays} 天）")
+            : $"当前时段：{scheduledAction}";
         MonthlyPlanTemplate template = MonthlyPlanRules.GetTemplateFor(npc.CharacterId);
         currentPlan = template == null ? "未绑定计划（全部自由）" : $"{template.name}\n{Plan(template)}";
         nextPlan = $"明日安排\n{ActivityName(MonthlyPlanRules.ActivityFor(npc, day + 1))}";

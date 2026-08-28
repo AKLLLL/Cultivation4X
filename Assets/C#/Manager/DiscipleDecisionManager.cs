@@ -21,7 +21,6 @@ public class DiscipleDecisionManager : MonoBehaviour
         new Dictionary<string, DiscipleAIContext>(StringComparer.Ordinal);
 
     private int lastProcessedDay = -1;
-    private bool subscribedToTimeManager;
     private bool missionReferencesValidated;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -40,34 +39,11 @@ public class DiscipleDecisionManager : MonoBehaviour
         }
         Instance = this;
         DontDestroyUtility.MarkPersistent(gameObject);
-        TrySubscribe();
     }
-
-    private void Start() => TrySubscribe();
 
     private void OnDestroy()
     {
-        Unsubscribe();
         if (Instance == this) Instance = null;
-    }
-
-    private void TrySubscribe()
-    {
-        if (subscribedToTimeManager || TimeManager.Instance == null) return;
-        TimeManager.Instance.OnDaySettlementReady += OnDaySettlementReady;
-        subscribedToTimeManager = true;
-    }
-
-    private void Unsubscribe()
-    {
-        if (!subscribedToTimeManager || TimeManager.Instance == null) return;
-        TimeManager.Instance.OnDaySettlementReady -= OnDaySettlementReady;
-        subscribedToTimeManager = false;
-    }
-
-    private void OnDaySettlementReady(DaySettlementSummary summary)
-    {
-        ProcessSettledDay(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
     }
 
     /// <summary>公开入口，便于测试与后续把触发点接到其他结算流程。</summary>
@@ -98,7 +74,6 @@ public class DiscipleDecisionManager : MonoBehaviour
             ProcessDecisions(disciples, config, identity, day);
 
             CleanupContexts(disciples);
-            SaveManager.Instance?.AutoSave();
         }
         catch (Exception exception)
         {

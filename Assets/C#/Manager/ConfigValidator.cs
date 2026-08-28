@@ -12,9 +12,25 @@ public static class ConfigValidator
         ValidateItems();
         ValidateResources();
         ValidateMissions();
+        ValidateWorldTime();
         ValidateTechniques();
         ValidateFounding();
         ValidateExternalThreats();
+    }
+
+    private static void ValidateWorldTime()
+    {
+        TextAsset file = Resources.Load<TextAsset>(WorldTimeConfigLoader.ResourcePath);
+        if (file == null) { Debug.LogError("世界时间配置不存在"); return; }
+        try
+        {
+            WorldTimeConfig config = JsonConvert.DeserializeObject<WorldTimeConfig>(file.text);
+            if (config == null || !config.IsValid()) Debug.LogError("世界时间配置无效");
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError($"世界时间配置解析失败: {exception.Message}");
+        }
     }
 
     private static void ValidateResources()

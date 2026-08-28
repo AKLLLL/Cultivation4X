@@ -88,9 +88,6 @@ public class MissionManager : MonoBehaviour
     private void Start()
     {
 
-        if (TimeManager.Instance != null) TimeManager.Instance.OnDayPassed += OnDayPassed;
-
-
         LoadMissionsFromJson();
         RefreshDailyCandidates(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay);
 
@@ -953,7 +950,7 @@ public class MissionManager : MonoBehaviour
     /// <summary>
     /// 每天推进任务
     /// </summary>
-    private void OnDayPassed(int currentDay)
+    public void ProcessDay(int currentDay)
     {
         //复制列表
         //避免任务完成后删除导致foreach异常
@@ -1104,17 +1101,5 @@ public class MissionManager : MonoBehaviour
 
 
 
-
-    private void OnDisable()
-    {
-
-        if (TimeManager.Instance != null)
-        {
-
-            TimeManager.Instance.OnDayPassed -= OnDayPassed;
-
-        }
-
-    }
 
 }

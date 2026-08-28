@@ -96,6 +96,7 @@ public class SaveManager : MonoBehaviour
         try
         {
             int seed = unchecked(Environment.TickCount ^ DateTime.UtcNow.Millisecond);
+            TimeManager.Instance?.ResetForNewGame();
             PlayerManager.Instance?.InitializeNewFoundingGame(seed);
             NPCManager.Instance?.ClearCharacters();
             if (WarehouseManager.Instance != null) WarehouseManager.Instance.warehouseData = new WarehouseData();
@@ -121,6 +122,7 @@ public class SaveManager : MonoBehaviour
         return new GameState
         {
             currentDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            worldTime = TimeManager.Instance == null ? new WorldTimeSaveData() : TimeManager.Instance.CaptureWorldTime(),
             randomSeed = EventManager.Instance == null ? 48621 : EventManager.Instance.RandomSeed,
             randomRollCount = EventManager.Instance == null ? 0 : EventManager.Instance.RandomRollCount,
             sect = PlayerManager.Instance == null ? new PlayerData() : PlayerManager.Instance.playerData,
@@ -198,6 +200,7 @@ public class SaveManager : MonoBehaviour
             ValidateWorldMapState(state);
             MigrateState(state);
             TimeManager.Instance?.RestoreDay(state.currentDay);
+            TimeManager.Instance?.RestoreWorldTime(state.worldTime);
             if (PlayerManager.Instance != null) PlayerManager.Instance.playerData = state.sect ?? new PlayerData();
             WorldMapSession.Set(state.worldMap, state.worldMapProgress);
             if (WarehouseManager.Instance != null)
@@ -247,6 +250,7 @@ public class SaveManager : MonoBehaviour
     {
         int sourceVersion = state.version;
         state.sect = state.sect ?? new PlayerData();
+        state.worldTime = state.worldTime ?? new WorldTimeSaveData();
         state.worldMapProgress = state.worldMapProgress ?? new WorldMapProgressState();
         state.worldMapProgress.revealedCellIndices =
             state.worldMapProgress.revealedCellIndices ?? new System.Collections.Generic.List<int>();
@@ -353,6 +357,14 @@ public class SaveManager : MonoBehaviour
     private static void NormalizeCurrentVersionCollections(GameState state)
     {
         if (state == null) return;
+        state.worldTime = state.worldTime ?? new WorldTimeSaveData();
+        if (state.worldTime.dailySchedule != null)
+        {
+            state.worldTime.dailySchedule.disciples = state.worldTime.dailySchedule.disciples ??
+                new System.Collections.Generic.List<DiscipleDailySchedule>();
+            foreach (DiscipleDailySchedule schedule in state.worldTime.dailySchedule.disciples.Where(item => item != null))
+                schedule.segments = schedule.segments ?? new System.Collections.Generic.List<DailyScheduleSegment>();
+        }
         if (state.sect != null)
         {
             state.sect.monthlyPlanTemplates = state.sect.monthlyPlanTemplates ?? new System.Collections.Generic.List<MonthlyPlanTemplate>();
@@ -411,6 +423,7 @@ public class SaveManager : MonoBehaviour
     {
         if (state?.worldMap == null)
             throw new InvalidDataException("存档缺少世界地图快照");
+        ValidateWorldTimeState(state);
         ValidateTechniqueState(state);
         if (state.characters == null || state.characters.Any(character => character == null ||
             character.mentalState < DiscipleMentalStateRules.MinMentalState ||
@@ -1099,6 +1112,34 @@ public class SaveManager : MonoBehaviour
             .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
             .GroupBy(pair => pair.Key)
             .ToDictionary(group => group.Key, group => group.First().Value);
+    }
+
+    private static void ValidateWorldTimeState(GameState state)
+    {
+        WorldTimeSaveData time = state?.worldTime;
+        WorldTimeConfig config = WorldTimeConfigLoader.Load();
+        if (time == null || time.currentHour < 0f || time.currentHour >= 24f ||
+            !config.speedMultipliers.Any(value => Mathf.Approximately(value, time.selectedSpeed)))
+            throw new InvalidDataException("世界时间状态无效");
+        DailyScheduleState schedule = time.dailySchedule;
+        if (time.dayPrepared != (schedule != null))
+            throw new InvalidDataException("世界时间准备状态与锁定日程不一致");
+        if (schedule == null) return;
+        HashSet<string> characterIds = new HashSet<string>((state.characters ??
+            new System.Collections.Generic.List<CharacterState>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.characterId))
+            .Select(item => item.characterId));
+        if (schedule.day != state.currentDay + 1 || schedule.disciples == null ||
+            schedule.disciples.Any(item => item == null || string.IsNullOrWhiteSpace(item.characterId) ||
+                !characterIds.Contains(item.characterId) ||
+                !Enum.IsDefined(typeof(MonthlyActivityType), item.activity) || item.segments == null ||
+                (item.activity == MonthlyActivityType.Training && !item.missionOccupied &&
+                 !DailyCultivationSimulator.IsActionId(item.cultivationActionId)) ||
+                item.segments.Any(segment => segment == null || segment.startHour < 0f ||
+                    segment.endHour > 24f || segment.endHour <= segment.startHour ||
+                    string.IsNullOrWhiteSpace(segment.label))) ||
+            schedule.disciples.GroupBy(item => item.characterId).Any(group => group.Count() > 1))
+            throw new InvalidDataException("当日锁定日程无效");
     }
 
     private static void NormalizeTechniqueLibrary(PlayerData player)

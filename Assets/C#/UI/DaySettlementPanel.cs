@@ -58,13 +58,24 @@ public class DaySettlementPanel : MonoBehaviour
     private void Start()
     {
         if (TimeManager.Instance == null) return;
-        TimeManager.Instance.OnDaySettlementReady += Show;
-        if (TimeManager.Instance.UnreadDaySettlement != null) Show(TimeManager.Instance.UnreadDaySettlement);
+        TimeManager.Instance.OnDaySettlementReady += Remember;
+        currentSummary = TimeManager.Instance.UnreadDaySettlement;
     }
 
     private void OnDestroy()
     {
-        if (TimeManager.Instance != null) TimeManager.Instance.OnDaySettlementReady -= Show;
+        if (TimeManager.Instance != null) TimeManager.Instance.OnDaySettlementReady -= Remember;
+    }
+
+    private void Remember(DaySettlementSummary summary)
+    {
+        if (summary != null) currentSummary = summary;
+    }
+
+    public void OpenLatest()
+    {
+        DaySettlementSummary summary = TimeManager.Instance?.UnreadDaySettlement ?? currentSummary;
+        if (summary != null) Show(summary);
     }
 
     private void Show(DaySettlementSummary summary)
@@ -75,6 +86,7 @@ public class DaySettlementPanel : MonoBehaviour
         Refresh();
         if (UIManager.Instance != null) UIManager.Instance.OpenPanel(modalRoot.gameObject, CloseInternal);
         else modalRoot.gameObject.SetActive(true);
+        TimeManager.Instance?.PauseByPlayer();
         TimeManager.Instance?.SetSettlementOpen(true);
     }
 

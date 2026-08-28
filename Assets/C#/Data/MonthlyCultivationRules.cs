@@ -11,13 +11,13 @@ public class MonthlyPlanTemplate
 {
     public string id;
     public string name;
-    public List<MonthlyActivityType> days = Enumerable.Repeat(MonthlyActivityType.Free, 30).ToList();
+    public List<MonthlyActivityType> days = Enumerable.Repeat(MonthlyActivityType.Free, GameCalendarRules.DaysPerMonth).ToList();
     public List<string> discipleIds = new List<string>();
 }
 
 public static class MonthlyPlanRules
 {
-    public const int DaysPerMonth = 30;
+    public const int DaysPerMonth = GameCalendarRules.DaysPerMonth;
     public static int MonthIndex(int day) => day <= 0 ? 1 : (day - 1) / DaysPerMonth + 1;
     public static int DayOfMonth(int day) => day <= 0 ? 0 : (day - 1) % DaysPerMonth + 1;
     public static IReadOnlyList<MonthlyPlanTemplate> GetTemplates() =>
@@ -255,14 +255,17 @@ public static class DailyCultivationSimulator
         npc.Character.currentAura = Mathf.Clamp(npc.Character.currentAura, 0f, AuraCapacity(npc));
     }
 
-    public static DailyCultivationResult SimulateTrainingDay(NPCRuntime npc, int day)
+    public static DailyCultivationResult SimulateTrainingDay(NPCRuntime npc, int day,
+        string lockedActionId = null)
     {
         if (npc?.Character == null || !npc.Character.IsAlive) return null;
         CharacterState state = npc.Character;
         int layerBefore = state.realmLayer;
         float fatigueBefore = state.fatigue;
         float absorbed = Absorb(npc);
-        CultivationActionDefinition action = SelectAction(npc, day);
+        CultivationActionDefinition action = string.IsNullOrWhiteSpace(lockedActionId)
+            ? SelectAction(npc, day)
+            : Actions.FirstOrDefault(item => item.id == lockedActionId) ?? SelectAction(npc, day);
         float consumed = Mathf.Min(state.currentAura, action.auraCost);
         state.currentAura -= consumed;
         CultivationActionOutcome outcome = ResolveOutcome(npc, action, day);
@@ -291,6 +294,15 @@ public static class DailyCultivationSimulator
         EventManager.Instance?.TryTriggerSource(EventSource.Training, npc);
         return result;
     }
+
+    public static string SelectActionId(NPCRuntime npc, int day) =>
+        npc?.Character == null ? null : SelectAction(npc, day).id;
+
+    public static string ActionName(string actionId) =>
+        Actions.FirstOrDefault(item => item.id == actionId)?.displayName ?? "打坐修行";
+
+    public static bool IsActionId(string actionId) =>
+        !string.IsNullOrWhiteSpace(actionId) && Actions.Any(item => item.id == actionId);
 
     public static float ApplyNightLeak(NPCRuntime npc)
     {

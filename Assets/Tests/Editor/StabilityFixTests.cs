@@ -63,14 +63,14 @@ public class StabilityFixTests
         Action<int> throwingSubscriber = _ => throw new InvalidOperationException("OnDayPassed subscriber failure");
         time.OnDayPassed += throwingSubscriber;
 
-        LogAssert.Expect(LogType.Error, new Regex("结束今天失败"));
+        LogAssert.Expect(LogType.Error, new Regex("时间通知 OnDayPassed 订阅者异常"));
         time.EndDay();
         Assert.AreEqual(1, time.CurrentDay);
 
         // 若 isAdvancingDay 未复位，第二次 EndDay 会被防重入直接忽略。
-        LogAssert.Expect(LogType.Error, new Regex("结束今天失败"));
+        LogAssert.Expect(LogType.Error, new Regex("时间通知 OnDayPassed 订阅者异常"));
         time.EndDay();
-        Assert.AreEqual(2, time.CurrentDay, "异常后 isAdvancingDay 必须复位，否则“结束今天”永久卡死");
+        Assert.AreEqual(2, time.CurrentDay, "异常后 isAdvancingDay 必须复位，否则日结会永久卡死");
 
         time.OnDayPassed -= throwingSubscriber;
     }

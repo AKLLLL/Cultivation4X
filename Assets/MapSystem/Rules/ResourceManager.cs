@@ -5,7 +5,7 @@ namespace Cultivation4X.WorldMap
 {
     public static class ResourceManager
     {
-        public const int DaysPerMonth = 30;
+        public const int DaysPerMonth = GameCalendarRules.DaysPerMonth;
 
         public static List<ResourceProductionRecord> MonthUpdate(int currentDay, int monthIndex)
         {

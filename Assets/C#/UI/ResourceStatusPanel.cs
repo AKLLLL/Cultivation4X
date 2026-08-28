@@ -126,9 +126,11 @@ public sealed class ResourceStatusPanel : MonoBehaviour
         if (time.IsSettlementOpen) { SetFeedback("请先关闭每日结算。"); return; }
         int target = ResourceStatusService.NextSettlementEveDay(time.CurrentDay);
         if (target <= time.CurrentDay) { SetFeedback("没有更晚的结算日前一天可跳转。"); return; }
-        time.RestoreDay(target);
-        SetFeedback($"已跳至第 {target} 天。请点击“结束今天”完成真实月结算。\n" +
-                    "仅限测试存档：跳过的日期不会逐日推进任务和事件。");
+        int requested = target - time.CurrentDay;
+        int advanced = time.AdvanceDaysForTesting(requested);
+        SetFeedback(advanced == requested
+            ? $"已通过真实结算链推进至第 {time.CurrentDay} 天。"
+            : $"推进在第 {time.CurrentDay} 天停止，请先处理事件或结算阻塞。");
     }
 
     private void SetFeedback(string text)

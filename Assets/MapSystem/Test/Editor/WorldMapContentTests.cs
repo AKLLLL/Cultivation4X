@@ -342,7 +342,7 @@ public class WorldMapContentTests
     [Test]
     public void CurrentVersion_RoundTripsAndRejectsIllegalContentState()
     {
-        Assert.AreEqual(21, SaveDataVersion.Current);
+        Assert.AreEqual(22, SaveDataVersion.Current);
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5105 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
