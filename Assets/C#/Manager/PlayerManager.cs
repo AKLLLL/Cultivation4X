@@ -31,15 +31,9 @@ public class PlayerManager : MonoBehaviour
         WorldMapSession.Set(generatedMap, initialProgress);
         playerData = new PlayerData
         {
-            missionHallLevel = 0,
-            warehouseLevel = 0,
-            trainingRoomLevel = 0,
-            secretRealmLevel = 0,
-            alchemyRoomLevel = 0,
-            protectionArrayLevel = 0,
-            inheritanceChamberLevel = 0,
-            forgeRoomLevel = 0,
-            formationPlatformLevel = 0,
+            availableFacilities = new List<FacilityType>(),
+            departments = new List<SectDepartmentState>(),
+            nextDepartmentSequence = 1,
             founding = new FoundingState
             {
                 initialized = true,
@@ -137,82 +131,20 @@ public class PlayerManager : MonoBehaviour
         playerData.reputation = Mathf.Max(0, playerData.reputation + amount);
     }
 
-    public int GetFacilityLevel(FacilityType facility)
+    public bool HasFacility(FacilityType facility) =>
+        playerData?.availableFacilities?.Contains(facility) == true;
+
+    public void SetFacilityAvailableForStory(FacilityType facility, bool available = true)
     {
-        switch (facility)
+        if (playerData == null) return;
+        if (playerData.availableFacilities == null)
+            playerData.availableFacilities = new List<FacilityType>();
+        if (available)
         {
-            case FacilityType.MissionHall: return playerData.missionHallLevel;
-            case FacilityType.Warehouse: return playerData.warehouseLevel;
-            case FacilityType.TrainingRoom: return playerData.trainingRoomLevel;
-            case FacilityType.SecretRealm: return playerData.secretRealmLevel;
-            case FacilityType.AlchemyRoom: return playerData.alchemyRoomLevel;
-            case FacilityType.ProtectionArray: return playerData.protectionArrayLevel;
-            case FacilityType.InheritanceChamber: return playerData.inheritanceChamberLevel;
-            case FacilityType.ForgeRoom: return playerData.forgeRoomLevel;
-            case FacilityType.FormationPlatform: return playerData.formationPlatformLevel;
-            default: return 0;
+            if (!playerData.availableFacilities.Contains(facility))
+                playerData.availableFacilities.Add(facility);
         }
-    }
-
-    public bool CanUpgradeFacility(FacilityType facility, out string reason)
-    {
-        if (facility == FacilityType.MissionHall)
-        {
-            reason = "宗门事务是界面入口，不作为设施升级";
-            return false;
-        }
-        int level = GetFacilityLevel(facility);
-        if (level <= 0) { reason = "设施尚未修复或建成"; return false; }
-        if (facility == FacilityType.ProtectionArray ||
-            facility == FacilityType.InheritanceChamber || facility == FacilityType.ForgeRoom ||
-            facility == FacilityType.FormationPlatform)
-        { reason = "该设施当前不可升级"; return false; }
-        if (level >= FacilityRules.MaxLevel) { reason = "设施已达到最高等级"; return false; }
-        if (WarehouseManager.Instance == null) { reason = "仓库尚未初始化"; return false; }
-        if (!WarehouseManager.Instance.HasItem(FacilityRules.SpiritStoneId, FacilityRules.UpgradeSpiritStoneCost(level)))
-        { reason = "灵石不足"; return false; }
-        if (WarehouseManager.Instance.GetItemCount(FacilityRules.BasicMaterialId) < FacilityRules.UpgradeMaterialCost(level))
-        { reason = "基础材料不足"; return false; }
-        reason = null;
-        return true;
-    }
-
-    public FacilityUpgradeResult TryUpgradeFacility(FacilityType facility)
-    {
-        if (!CanUpgradeFacility(facility, out string reason))
-            return new FacilityUpgradeResult { success = false, reason = reason, newLevel = GetFacilityLevel(facility) };
-
-        int level = GetFacilityLevel(facility);
-        int spiritStoneCost = FacilityRules.UpgradeSpiritStoneCost(level);
-        int materialCost = FacilityRules.UpgradeMaterialCost(level);
-        if (!WarehouseManager.Instance.RemoveItem(FacilityRules.SpiritStoneId, spiritStoneCost))
-            return new FacilityUpgradeResult { success = false, reason = "灵石扣除失败", newLevel = level };
-        WarehouseManager.Instance.RemoveItem(FacilityRules.BasicMaterialId, materialCost);
-        SetFacilityLevel(facility, level + 1);
-        TimeManager.Instance?.RecordFacilityUpgrade(facility, level + 1);
-        EventManager.Instance?.TryTriggerSource(EventSource.FacilityUpgrade);
-        return new FacilityUpgradeResult { success = true, newLevel = level + 1 };
-    }
-
-    private void SetFacilityLevel(FacilityType facility, int level)
-    {
-        switch (facility)
-        {
-            case FacilityType.MissionHall: playerData.missionHallLevel = level; break;
-            case FacilityType.Warehouse: playerData.warehouseLevel = level; break;
-            case FacilityType.TrainingRoom: playerData.trainingRoomLevel = level; break;
-            case FacilityType.SecretRealm: playerData.secretRealmLevel = level; break;
-            case FacilityType.AlchemyRoom: playerData.alchemyRoomLevel = level; break;
-            case FacilityType.ProtectionArray: playerData.protectionArrayLevel = level; break;
-            case FacilityType.InheritanceChamber: playerData.inheritanceChamberLevel = level; break;
-            case FacilityType.ForgeRoom: playerData.forgeRoomLevel = level; break;
-            case FacilityType.FormationPlatform: playerData.formationPlatformLevel = level; break;
-        }
-    }
-
-    public void SetFacilityLevelForStory(FacilityType facility, int level)
-    {
-        SetFacilityLevel(facility, Mathf.Clamp(level, 0, FacilityRules.MaxLevel));
+        else playerData.availableFacilities.Remove(facility);
         EvaluateFoundingCompletion();
         OnFoundingChanged?.Invoke();
     }
@@ -226,7 +158,7 @@ public class PlayerManager : MonoBehaviour
             !state.selectedFounderIds.Contains(npc.CharacterId)) return;
 
         FounderCandidateData candidate = state.candidates.FirstOrDefault(item => item.candidateId == npc.CharacterId);
-        int gain = FoundingRules.UnderstandingGain(candidate, GetFacilityLevel(FacilityType.InheritanceChamber) > 0);
+        int gain = FoundingRules.UnderstandingGain(candidate, HasFacility(FacilityType.InheritanceChamber));
         AddInheritancePreparation(gain, npc);
     }
 
@@ -405,6 +337,8 @@ public class PlayerManager : MonoBehaviour
             mapSites = new List<MapSiteData>(progress?.mapSites ?? new List<MapSiteData>()) { sectBase },
             resourceNodes = new List<ResourceNodeRuntime>(progress?.resourceNodes ?? new List<ResourceNodeRuntime>()),
             spiritualVeins = new List<SpiritualVeinRuntime>(progress?.spiritualVeins ?? new List<SpiritualVeinRuntime>()),
+            functionalZones = new List<SectFunctionalZoneState>(
+                progress?.functionalZones ?? new List<SectFunctionalZoneState>()),
             influenceSources = new List<InfluenceSourceData>(progress?.influenceSources ?? new List<InfluenceSourceData>())
                 { sectBaseSource },
             cellInfluences = new List<CellInfluenceState>(),
@@ -423,6 +357,7 @@ public class PlayerManager : MonoBehaviour
         playerData.sectName = sectName;
         playerData.foundedDay = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
         playerData.influenceRadius = 2;
+        SetFacilityAvailableForStory(FacilityType.MissionHall);
         // 宗门在选址确认时即真实成立；stage 只是后续流程状态。
         state.sectCreated = true;
         state.stage = FoundingStage.Cave;
@@ -494,12 +429,12 @@ public class PlayerManager : MonoBehaviour
         FoundingState state = playerData.founding;
         if (state == null || GameFlowPermission.IsFoundingDevelopmentComplete(state) ||
             state.inheritancePreparationProgress < FoundingRules.MaxUnderstanding) return;
-        bool repairedAny = GetFacilityLevel(FacilityType.TrainingRoom) > 0 ||
-                           GetFacilityLevel(FacilityType.Warehouse) > 0 ||
-                           GetFacilityLevel(FacilityType.ProtectionArray) > 0 ||
-                           GetFacilityLevel(FacilityType.InheritanceChamber) > 0;
+        bool repairedAny = HasFacility(FacilityType.TrainingRoom) ||
+                           HasFacility(FacilityType.Warehouse) ||
+                           HasFacility(FacilityType.ProtectionArray) ||
+                           HasFacility(FacilityType.InheritanceChamber);
         FoundingTechniqueOption option = FoundingRules.GetTechniqueOption(state.selectedTechniqueId);
-        if (!repairedAny || option == null || GetFacilityLevel(option.unlockFacility) <= 0) return;
+        if (!repairedAny || option == null || !HasFacility(option.unlockFacility)) return;
         state.completed = true;
         state.stage = FoundingStage.Completed;
         OnFoundingChanged?.Invoke();

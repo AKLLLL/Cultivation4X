@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using UnityEngine;
 
 /// <summary>
@@ -13,18 +14,23 @@ public class PlayerData
     public int influenceRadius;
 
     public int reputation = 0;
-    public int trainingRoomLevel = 1;
-    public int missionHallLevel = 1;
-    public int infirmaryLevel = 1;
-    public int warehouseLevel = 1;
-    public int secretRealmLevel = 1;
-    public int alchemyRoomLevel = 1;
-    public int protectionArrayLevel = 1;
-    public int inheritanceChamberLevel = 1;
-    public int forgeRoomLevel = 1;
-    public int formationPlatformLevel = 1;
-    public int sectDutyWorkCredit;
+    [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+    public List<FacilityType> availableFacilities = new List<FacilityType>
+    {
+        FacilityType.MissionHall,
+        FacilityType.Warehouse,
+        FacilityType.TrainingRoom,
+        FacilityType.SecretRealm,
+        FacilityType.AlchemyRoom,
+        FacilityType.ProtectionArray,
+        FacilityType.InheritanceChamber,
+        FacilityType.ForgeRoom,
+        FacilityType.FormationPlatform
+    };
+    public List<SectDepartmentState> departments = new List<SectDepartmentState>();
+    public int nextDepartmentSequence = 1;
     public List<MonthlyPlanTemplate> monthlyPlanTemplates = new List<MonthlyPlanTemplate>();
     public List<SectTechniqueState> techniqueLibrary = new List<SectTechniqueState>();
+    public SectGrowthFeedbackState growthFeedback = new SectGrowthFeedbackState();
     public FoundingState founding = new FoundingState { initialized = true, sectCreated = true, completed = true, stage = FoundingStage.Completed };
 }

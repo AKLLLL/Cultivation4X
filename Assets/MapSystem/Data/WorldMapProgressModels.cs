@@ -98,6 +98,7 @@ namespace Cultivation4X.WorldMap
         public List<CellInfluenceState> cellInfluences = new List<CellInfluenceState>();
         public List<ResourceNodeRuntime> resourceNodes = new List<ResourceNodeRuntime>();
         public List<SpiritualVeinRuntime> spiritualVeins = new List<SpiritualVeinRuntime>();
+        public List<SectFunctionalZoneState> functionalZones = new List<SectFunctionalZoneState>();
         public bool isInfluenceDirty;
     }
 

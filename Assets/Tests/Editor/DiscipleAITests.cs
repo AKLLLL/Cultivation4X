@@ -185,7 +185,7 @@ public class DiscipleAITests
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
-        player.playerData.secretRealmLevel = 0;
+        player.SetFacilityAvailableForStory(FacilityType.SecretRealm, false);
         Add<WarehouseManager>("Warehouse");
         MissionManager missions = Add<MissionManager>("Missions");
         MissionManager.Instance = missions;
@@ -205,11 +205,10 @@ public class DiscipleAITests
         ActionScoreResult social = results.First(item => item.Action.id == "social");
         Assert.IsTrue(social.Eligible, social.FilterReason);
         ActionScoreResult explore = results.First(item => item.Action.id == "explore");
-        Assert.IsTrue(explore.Eligible, "普通山野探索不应依赖秘境等级：" + explore.FilterReason);
+        Assert.IsTrue(explore.Eligible, "普通山野探索不应依赖旧秘境功能：" + explore.FilterReason);
         MissionData exploreMission = MissionManager.Instance.GetMissionData("disciple_ai_explore_001");
         Assert.IsFalse(exploreMission.isFacilityAction);
-        Assert.IsFalse(exploreMission.usesFacilityLevelScaling);
-        Assert.AreEqual(0, exploreMission.requiredFacilityLevel);
+        Assert.IsFalse(exploreMission.requiresFacility);
         ActionScoreResult alchemy = results.First(item => item.Action.id == "alchemy");
         Assert.AreEqual("需要消耗资源", alchemy.FilterReason);
 
@@ -245,7 +244,7 @@ public class DiscipleAITests
             missionType = MissionType.Exploration,
             isFacilityAction = true,
             requiredFacility = FacilityType.SecretRealm,
-            requiredFacilityLevel = 1,
+            requiresFacility = true,
             needDays = 3,
             nodes = new List<MissionNodeData>(),
             itemRewards = new List<ItemReward>()
@@ -445,7 +444,11 @@ public class DiscipleAITests
 
         DiscipleAIConfig config = DiscipleAIConfigLoader.Load();
         Assert.AreEqual(4, config.Goals.Count);
-        Assert.AreEqual(5, config.Actions.Count);
+        Assert.AreEqual(10, config.Actions.Count);
+        Assert.AreEqual(5, config.Actions.Count(action =>
+            action.executionKind == ActionExecutionKind.AutonomousMission));
+        Assert.AreEqual(5, config.Actions.Count(action =>
+            action.executionKind == ActionExecutionKind.SectDuty));
         Assert.AreEqual(1, config.Identities.Count);
         Assert.IsNotNull(config.GetIdentity("inner_disciple"));
         Assert.AreEqual(0, DiscipleAIConfigLoader.FindMissingMissionReferences().Count);
@@ -493,8 +496,11 @@ public class DiscipleAITests
         {
             List<ActionScoreResult> results =
                 DiscipleAIEvaluator.EvaluateActions(npc, identity, new List<GoalInstance>(), actions, day);
-            Assert.IsTrue(results.All(item => !item.Eligible));
-            Assert.IsTrue(results.All(item => item.FilterReason == "自主研读后冷却中"),
+            List<ActionScoreResult> autonomousResults = results
+                .Where(item => item.Action.executionKind == ActionExecutionKind.AutonomousMission)
+                .ToList();
+            Assert.IsTrue(autonomousResults.All(item => !item.Eligible));
+            Assert.IsTrue(autonomousResults.All(item => item.FilterReason == "自主研读后冷却中"),
                 $"第 {day} 天所有自主行为都应处于冷却中");
             Assert.IsTrue(npc.CanDispatch(), "自主冷却不得阻止玩家派遣");
         }

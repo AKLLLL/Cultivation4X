@@ -180,9 +180,7 @@ public class MissionManager : MonoBehaviour
         }
 
         MissionData data = missionTemplates[missionId];
-        int facilityLevel = data.isFacilityAction && PlayerManager.Instance != null
-            ? PlayerManager.Instance.GetFacilityLevel(data.requiredFacility) : 1;
-        Mission mission = new Mission(data, facilityLevel);
+        Mission mission = new Mission(data);
 
 
         return mission;
@@ -456,16 +454,19 @@ public class MissionManager : MonoBehaviour
         ActiveThreatState threat = ExternalThreatRules.GetState();
         if (threat == null || threat.status == ExternalThreatStatus.Resolved)
         {
-            npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-                "ThreatInvestigation", "调查青石村威胁时，威胁已被处理。", mission.Data.id);
+            ExperienceRecordRules.Add(npc.Character, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+                ExperienceType.Mission, ExperienceImportance.Major, "mission",
+                "调查青石村威胁时，威胁已被处理。", mission.Data.id);
             mission.CompleteMission();
             RecordResult(mission, MissionState.Completed);
             SaveManager.Instance?.AutoSave();
             return;
         }
         int gain = ExternalThreatRules.AddIntelligence(npc);
-        npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-            "ThreatInvestigation", $"调查青石村威胁，情报+{gain}", mission.Data.id);
+        ExperienceRecordRules.Add(npc.Character, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            ExperienceType.Mission, ExperienceImportance.Major, "mission",
+            "深入调查青石村的异动后，掌握了新的威胁线索。", mission.Data.id,
+            new[] { ExperienceRecordRules.Value("intelligenceGain", gain) });
         mission.CompleteMission();
         RecordResult(mission, MissionState.Completed);
         SaveManager.Instance?.AutoSave();
@@ -545,7 +546,8 @@ public class MissionManager : MonoBehaviour
         if (!IsMissionVisible(data)) { reason = "当前宗门状态未开放该任务"; return false; }
         if (data.threatMissionKind == ThreatMissionKind.Investigation && ExternalThreatRules.IsInvestigationRunning())
         { reason = "已有弟子正在调查该威胁"; return false; }
-        if (data.requiredFacilityLevel > PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) { reason = "设施等级不足"; return false; }
+        if (data.requiresFacility && !PlayerManager.Instance.HasFacility(data.requiredFacility))
+        { reason = "对应宗门功能尚未开放"; return false; }
         if (!CanStartFoundingAction(data, npc, out reason)) return false;
         Func<Mission, bool> running = item => item.State == MissionState.Active || item.State == MissionState.WaitingNode;
         if (data.isFacilityAction)
@@ -641,14 +643,14 @@ public class MissionManager : MonoBehaviour
         if (data.foundingAction == FoundingActionKind.RepairFacility)
         {
             if (!Enum.TryParse(data.foundingTargetId, out FacilityType facility)) { reason = "修复目标配置无效"; return false; }
-            if (PlayerManager.Instance.GetFacilityLevel(facility) > 0) { reason = "该遗迹已经修复"; return false; }
+            if (PlayerManager.Instance.HasFacility(facility)) { reason = "该遗迹已经修复"; return false; }
         }
         if (data.foundingAction == FoundingActionKind.BuildRouteFacility)
         {
             FoundingTechniqueOption option = FoundingRules.GetTechniqueOption(state.selectedTechniqueId);
             if (option == null || option.buildMissionId != data.id) { reason = "该设施不属于当前传承路线"; return false; }
             if (state.inheritancePreparationProgress < FoundingRules.MaxUnderstanding) { reason = "传承整理尚未达到100%"; return false; }
-            if (PlayerManager.Instance.GetFacilityLevel(option.unlockFacility) > 0) { reason = "路线设施已经建成"; return false; }
+            if (PlayerManager.Instance.HasFacility(option.unlockFacility)) { reason = "路线设施已经建成"; return false; }
             if (state.village == null || state.village.totalLabor - state.village.reservedLabor < data.laborCost)
             { reason = "可用劳动力不足"; return false; }
         }
@@ -663,7 +665,7 @@ public class MissionManager : MonoBehaviour
         {
             case FoundingActionKind.RepairFacility:
                 if (Enum.TryParse(data.foundingTargetId, out FacilityType repaired))
-                    PlayerManager.Instance.SetFacilityLevelForStory(repaired, 1);
+                    PlayerManager.Instance.SetFacilityAvailableForStory(repaired);
                 break;
             case FoundingActionKind.VillagePreach:
                 PlayerManager.Instance.AddVillageRelation(10, actor);
@@ -674,7 +676,7 @@ public class MissionManager : MonoBehaviour
                 break;
             case FoundingActionKind.BuildRouteFacility:
                 if (Enum.TryParse(data.foundingTargetId, out FacilityType built))
-                    PlayerManager.Instance.SetFacilityLevelForStory(built, 1);
+                    PlayerManager.Instance.SetFacilityAvailableForStory(built);
                 PlayerManager.Instance.ReleaseLabor(data.laborCost);
                 PlayerManager.Instance.EvaluateFoundingCompletion();
                 break;
@@ -791,6 +793,7 @@ public class MissionManager : MonoBehaviour
         {
             id = id, name = name, description = name, missionType = MissionType.Exploration,
             generatedByMap = true,
+            isMajorExperience = true,
             needDays = days, itemRewards = new List<ItemReward>(), nodes = new List<MissionNodeData>(),
             requiredAttack = requiredAttack, requiredIntelligence = requiredIntelligence,
             requiredCombatPower = requiredCombatPower, excellentScore = 135
@@ -819,8 +822,10 @@ public class MissionManager : MonoBehaviour
         if (npc?.Character == null || data == null) return;
         string result = tier == MissionResultTier.Excellent ? "优秀" :
             tier == MissionResultTier.Insufficient ? "能力不足" : "达标";
-        npc.Character.AddLifeRecord(TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
-            "Mission", $"{result}：{data.name}", data.id);
+        ExperienceRecordRules.Add(npc.Character, TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay,
+            ExperienceType.Mission, data.isMajorExperience ? ExperienceImportance.Major : ExperienceImportance.Minor,
+            "mission", $"{result}：{data.name}", data.id,
+            new[] { ExperienceRecordRules.Value("result", result), ExperienceRecordRules.Value("name", data.name) });
         if (tier != MissionResultTier.Insufficient && data.techniqueUnderstandingReward > 0f)
             npc.AddTechniqueUnderstanding(data.techniqueUnderstandingReward);
         DiscipleMentalStateRules.ApplyMissionResult(npc, data.id, tier);
@@ -1015,7 +1020,7 @@ public class MissionManager : MonoBehaviour
             if (!GameFlowPermission.HasReachedCave(founding)) return false;
             if (data.foundingAction == FoundingActionKind.RepairFacility &&
                 Enum.TryParse(data.foundingTargetId, out FacilityType repaired) &&
-                PlayerManager.Instance.GetFacilityLevel(repaired) > 0) return false;
+                PlayerManager.Instance.HasFacility(repaired)) return false;
             if (data.foundingAction == FoundingActionKind.BuildRouteFacility ||
                 data.foundingAction == FoundingActionKind.RouteAlchemy ||
                 data.foundingAction == FoundingActionKind.RouteForge ||
@@ -1030,7 +1035,7 @@ public class MissionManager : MonoBehaviour
         if (!GameFlowPermission.IsSectEstablished(founding)) return false;
         int reputation = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.playerData.reputation;
         return data.missionRank <= FacilityRules.MaxMissionRankForReputation(reputation) &&
-               data.requiredFacilityLevel <= (PlayerManager.Instance == null ? 0 : PlayerManager.Instance.GetFacilityLevel(data.requiredFacility));
+               (!data.requiresFacility || PlayerManager.Instance?.HasFacility(data.requiredFacility) == true);
     }
 
     public int MissionCandidateDay => missionCandidateDay;

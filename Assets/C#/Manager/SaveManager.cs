@@ -266,16 +266,13 @@ public class SaveManager : MonoBehaviour
             state.worldMapProgress.resourceNodes ?? new System.Collections.Generic.List<ResourceNodeRuntime>();
         state.worldMapProgress.spiritualVeins =
             state.worldMapProgress.spiritualVeins ?? new System.Collections.Generic.List<SpiritualVeinRuntime>();
-        int minimumFacilityLevel = sourceVersion < 4 ? 1 : 0;
-        state.sect.missionHallLevel = Mathf.Clamp(state.sect.missionHallLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
-        state.sect.trainingRoomLevel = Mathf.Clamp(state.sect.trainingRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
-        state.sect.warehouseLevel = Mathf.Clamp(state.sect.warehouseLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
-        state.sect.secretRealmLevel = Mathf.Clamp(state.sect.secretRealmLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
-        state.sect.alchemyRoomLevel = Mathf.Clamp(state.sect.alchemyRoomLevel, minimumFacilityLevel, FacilityRules.MaxLevel);
-        state.sect.protectionArrayLevel = Mathf.Clamp(state.sect.protectionArrayLevel, 0, FacilityRules.MaxLevel);
-        state.sect.inheritanceChamberLevel = Mathf.Clamp(state.sect.inheritanceChamberLevel, 0, FacilityRules.MaxLevel);
-        state.sect.forgeRoomLevel = Mathf.Clamp(state.sect.forgeRoomLevel, 0, FacilityRules.MaxLevel);
-        state.sect.formationPlatformLevel = Mathf.Clamp(state.sect.formationPlatformLevel, 0, FacilityRules.MaxLevel);
+        state.worldMapProgress.functionalZones =
+            state.worldMapProgress.functionalZones ?? new System.Collections.Generic.List<SectFunctionalZoneState>();
+        state.sect.availableFacilities = state.sect.availableFacilities ??
+            new System.Collections.Generic.List<FacilityType>();
+        state.sect.departments = state.sect.departments ??
+            new System.Collections.Generic.List<SectDepartmentState>();
+        if (state.sect.nextDepartmentSequence < 1) state.sect.nextDepartmentSequence = 1;
         if (sourceVersion < 4)
         {
             state.sect.founding = new FoundingState
@@ -357,6 +354,28 @@ public class SaveManager : MonoBehaviour
     private static void NormalizeCurrentVersionCollections(GameState state)
     {
         if (state == null) return;
+        state.characters = state.characters ?? new System.Collections.Generic.List<CharacterState>();
+        foreach (CharacterState character in state.characters.Where(item => item != null))
+        {
+            character.lifeRecords = (character.lifeRecords ?? new System.Collections.Generic.List<LifeRecord>())
+                .Where(item => item != null).ToList();
+            foreach (LifeRecord record in character.lifeRecords)
+            {
+                record.values = record.values ?? new System.Collections.Generic.List<ExperienceValue>();
+                if (record.type == ExperienceType.Other && !string.IsNullOrWhiteSpace(record.category))
+                    record.type = ExperienceRecordRules.TypeForCategory(record.category);
+                if (record.type == ExperienceType.InternalDecision) record.importance = ExperienceImportance.Internal;
+                if (record.importance == ExperienceImportance.Major)
+                    record.retention = ExperienceRetention.Chronicle;
+                if (record.importance == ExperienceImportance.Internal)
+                    record.retention = ExperienceRetention.Recent;
+                if (string.IsNullOrWhiteSpace(record.category))
+                    record.category = ExperienceRecordRules.CategoryForType(record.type);
+                if (string.IsNullOrWhiteSpace(record.id))
+                    record.id = ExperienceRecordRules.BuildId(character.characterId, record.day, record.type,
+                        record.sourceId, record.descriptionKey, record.text, record.values);
+            }
+        }
         state.worldTime = state.worldTime ?? new WorldTimeSaveData();
         if (state.worldTime.dailySchedule != null)
         {
@@ -371,6 +390,7 @@ public class SaveManager : MonoBehaviour
             foreach (MonthlyPlanTemplate plan in state.sect.monthlyPlanTemplates.Where(item => item != null))
                 MonthlyPlanRules.Normalize(plan);
             NormalizeTechniqueLibrary(state.sect);
+            GrowthFeedbackRules.Normalize(state.sect);
         }
         if (state.worldMap != null)
         {
@@ -416,6 +436,8 @@ public class SaveManager : MonoBehaviour
                 new System.Collections.Generic.List<ItemDayChange>();
             state.unreadDaySettlement.resourceProduction = state.unreadDaySettlement.resourceProduction ??
                 new System.Collections.Generic.List<ResourceProductionRecord>();
+            state.unreadDaySettlement.discipleResults = state.unreadDaySettlement.discipleResults ??
+                new System.Collections.Generic.List<DiscipleDayResult>();
         }
     }
 
@@ -425,6 +447,7 @@ public class SaveManager : MonoBehaviour
             throw new InvalidDataException("存档缺少世界地图快照");
         ValidateWorldTimeState(state);
         ValidateTechniqueState(state);
+        ValidateGrowthFeedbackState(state);
         if (state.characters == null || state.characters.Any(character => character == null ||
             character.mentalState < DiscipleMentalStateRules.MinMentalState ||
             character.mentalState > DiscipleMentalStateRules.MaxMentalState ||
@@ -436,7 +459,9 @@ public class SaveManager : MonoBehaviour
                 character.spiritRoot.fire + character.spiritRoot.earth - 1f) > 0.001f ||
             character.naqiProgress < 0f || character.naqiProgress > 100f))
             throw new InvalidDataException("弟子练气、灵根或心境数据无效");
-        if (state.sect == null || state.sect.sectDutyWorkCredit < 0 || state.sect.sectDutyWorkCredit >= 5 ||
+        if (state.sect == null || state.sect.availableFacilities == null ||
+            state.sect.availableFacilities.Any(facility => !Enum.IsDefined(typeof(FacilityType), facility)) ||
+            state.sect.availableFacilities.Distinct().Count() != state.sect.availableFacilities.Count ||
             state.sect.monthlyPlanTemplates == null ||
             state.sect.monthlyPlanTemplates.Any(plan => plan == null || string.IsNullOrWhiteSpace(plan.id) ||
                 string.IsNullOrWhiteSpace(plan.name) || plan.days == null ||
@@ -510,7 +535,7 @@ public class SaveManager : MonoBehaviour
         WorldMapProgressState progress = state.worldMapProgress;
         if (progress?.revealedCellIndices == null || progress.exploredCellIndices == null || progress.mapSites == null ||
             progress.influenceSources == null || progress.cellInfluences == null ||
-            progress.resourceNodes == null || progress.spiritualVeins == null)
+            progress.resourceNodes == null || progress.spiritualVeins == null || progress.functionalZones == null)
             throw new InvalidDataException("世界地图进度数据缺失");
         if (progress.revealedCellIndices.Any(index => index < 0 || index >= map.cells.Length) ||
             progress.revealedCellIndices.Distinct().Count() != progress.revealedCellIndices.Count)
@@ -542,6 +567,7 @@ public class SaveManager : MonoBehaviour
         ValidateMapSiteLocationBindings(map, progress);
         ValidateMapMissionContexts(state, map, progress);
         ValidateInfluenceCache(map, progress);
+        ValidateSectOrganization(state, map, progress);
 
         FoundingState founding = state.sect?.founding;
         if (founding == null || !founding.initialized)
@@ -1137,9 +1163,128 @@ public class SaveManager : MonoBehaviour
                  !DailyCultivationSimulator.IsActionId(item.cultivationActionId)) ||
                 item.segments.Any(segment => segment == null || segment.startHour < 0f ||
                     segment.endHour > 24f || segment.endHour <= segment.startHour ||
-                    string.IsNullOrWhiteSpace(segment.label))) ||
+                    string.IsNullOrWhiteSpace(segment.actionId) || string.IsNullOrWhiteSpace(segment.label))) ||
             schedule.disciples.GroupBy(item => item.characterId).Any(group => group.Count() > 1))
             throw new InvalidDataException("当日锁定日程无效");
+    }
+
+    private static void ValidateGrowthFeedbackState(GameState state)
+    {
+        SectGrowthFeedbackState feedback = state?.sect?.growthFeedback;
+        if (feedback == null || feedback.activeMonthIndex != MonthlyPlanRules.MonthIndex(state.currentDay + 1) ||
+            feedback.lastProcessedDay != state.currentDay ||
+            feedback.lastFinalizedMonthIndex != state.currentDay / GameCalendarRules.DaysPerMonth ||
+            feedback.currentStats == null || feedback.currentItemChanges == null || feedback.reports == null ||
+            feedback.reports.Count > GrowthFeedbackRules.ReportRetentionCount)
+            throw new InvalidDataException("成长反馈状态无效");
+        if (feedback.currentStats.Any(item => !ValidMonthlyStats(item, feedback.activeMonthIndex)) ||
+            feedback.currentStats.GroupBy(item => item.discipleId).Any(group => group.Count() > 1) ||
+            feedback.currentItemChanges.Any(item => item == null || string.IsNullOrWhiteSpace(item.itemId)) ||
+            feedback.currentItemChanges.GroupBy(item => item.itemId).Any(group => group.Count() > 1) ||
+            feedback.reports.Any(report => report == null || string.IsNullOrWhiteSpace(report.id) ||
+                report.monthIndex <= 0 || report.monthIndex > feedback.lastFinalizedMonthIndex ||
+                report.disciples == null || report.itemChanges == null || report.resourceProduction == null ||
+                report.highlightDiscipleIds == null || report.highlightExperienceIds == null ||
+                report.highlightDiscipleIds.Count > 8 ||
+                report.highlightDiscipleIds.Distinct().Count() != report.highlightDiscipleIds.Count ||
+                report.disciples.Any(item => !ValidMonthlyStats(item, report.monthIndex)) ||
+                report.disciples.GroupBy(item => item.discipleId).Any(group => group.Count() > 1)) ||
+            feedback.reports.GroupBy(report => report.id).Any(group => group.Count() > 1) ||
+            feedback.reports.GroupBy(report => report.monthIndex).Any(group => group.Count() > 1))
+            throw new InvalidDataException("成长月统计或月报无效");
+        foreach (CharacterState character in state.characters)
+        {
+            if (character.lifeRecords == null || character.lifeRecords.Any(record => record == null ||
+                    string.IsNullOrWhiteSpace(record.id) || record.day < 0 ||
+                    !Enum.IsDefined(typeof(ExperienceType), record.type) ||
+                    !Enum.IsDefined(typeof(ExperienceImportance), record.importance) ||
+                    !Enum.IsDefined(typeof(ExperienceRetention), record.retention) || record.values == null ||
+                    record.values.Any(value => value == null || string.IsNullOrWhiteSpace(value.key))) ||
+                character.lifeRecords.GroupBy(record => record.id).Any(group => group.Count() > 1))
+                throw new InvalidDataException("弟子结构化经历无效");
+        }
+    }
+
+    private static bool ValidMonthlyStats(DiscipleMonthlyStats item, int monthIndex)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.discipleId) || item.monthIndex != monthIndex ||
+            item.settledDays < 0 || item.plannedTrainingDays < 0 || item.plannedSectDutyDays < 0 ||
+            item.plannedFreeDays < 0 || item.actualTrainingDays < 0 || item.actualSectDutyDays < 0 ||
+            item.actualFreeDays < 0 || item.missionDays < 0 || item.recoveryDays < 0 ||
+            item.actionCounts == null || item.experienceIds == null || item.narrative == null ||
+            item.narrative.repeatedPatternActivities == null || item.narrative.fatigueStageRecorded < 0 ||
+            item.narrative.fatigueStageRecorded > 2 || item.maxFatigue < 0f || item.maxFatigue > 100f)
+            return false;
+        return item.plannedTrainingDays + item.plannedSectDutyDays + item.plannedFreeDays == item.settledDays &&
+            item.actualTrainingDays + item.actualSectDutyDays + item.actualFreeDays + item.missionDays + item.recoveryDays == item.settledDays &&
+            item.actionCounts.All(action => action != null && !string.IsNullOrWhiteSpace(action.actionId) && action.count > 0) &&
+            item.actionCounts.GroupBy(action => action.actionId).All(group => group.Count() == 1) &&
+            item.narrative.repeatedPatternActivities.All(activity =>
+                activity == "training" || activity == "sect_duty") &&
+            item.narrative.repeatedPatternActivities.Distinct().Count() ==
+                item.narrative.repeatedPatternActivities.Count &&
+            item.experienceIds.All(id => !string.IsNullOrWhiteSpace(id)) &&
+            item.experienceIds.Distinct().Count() == item.experienceIds.Count;
+    }
+
+    private static void ValidateSectOrganization(GameState state, WorldMap map, WorldMapProgressState progress)
+    {
+        PlayerData player = state?.sect;
+        if (player?.departments == null || player.nextDepartmentSequence < 1)
+            throw new InvalidDataException("宗门部门数据缺失");
+        if (player.departments.Any(department => department == null ||
+                string.IsNullOrWhiteSpace(department.departmentId) ||
+                string.IsNullOrWhiteSpace(department.name) || department.name != department.name.Trim() ||
+                department.name.Length < 2 || department.name.Length > 12 || department.name.Any(char.IsControl) ||
+                !Enum.IsDefined(typeof(DepartmentType), department.type) ||
+                department.memberDiscipleIds == null || department.memberDiscipleIds.Any(string.IsNullOrWhiteSpace) ||
+                department.memberDiscipleIds.Distinct(StringComparer.Ordinal).Count() != department.memberDiscipleIds.Count ||
+                (!string.IsNullOrWhiteSpace(department.leaderDiscipleId) &&
+                 !department.memberDiscipleIds.Contains(department.leaderDiscipleId))) ||
+            player.departments.GroupBy(item => item.departmentId).Any(group => group.Count() > 1) ||
+            player.departments.GroupBy(item => item.name, StringComparer.Ordinal).Any(group => group.Count() > 1) ||
+            player.departments.SelectMany(item => item.memberDiscipleIds)
+                .GroupBy(id => id, StringComparer.Ordinal).Any(group => group.Count() > 1))
+            throw new InvalidDataException("宗门部门结构无效");
+
+        HashSet<string> livingIds = new HashSet<string>((state.characters ?? new List<CharacterState>())
+            .Where(character => character?.IsAlive == true).Select(character => character.characterId),
+            StringComparer.Ordinal);
+        if (player.departments.SelectMany(item => item.memberDiscipleIds).Any(id => !livingIds.Contains(id)))
+            throw new InvalidDataException("宗门部门引用了非存活弟子");
+
+        HashSet<string> departmentIds = new HashSet<string>(
+            player.departments.Select(item => item.departmentId), StringComparer.Ordinal);
+        if (progress.functionalZones.Any(zone => zone == null ||
+                zone.zoneId != SectFunctionalZoneRules.ZoneId(zone.cellIndex) ||
+                !WorldMapProgressRules.IsValidCell(map, zone.cellIndex) ||
+                !Enum.IsDefined(typeof(FunctionalZoneType), zone.type) ||
+                !Enum.IsDefined(typeof(FunctionalZoneStage), zone.stage) ||
+                zone.phaseProgress < 0f || zone.harvestProgress < 0f ||
+                (zone.stage == FunctionalZoneStage.Planned &&
+                 zone.phaseProgress >= SectFunctionalZoneRules.PlannedThreshold) ||
+                (zone.stage == FunctionalZoneStage.Developing &&
+                 zone.phaseProgress >= SectFunctionalZoneRules.DevelopingThreshold) ||
+                (zone.stage == FunctionalZoneStage.Operational &&
+                 (zone.phaseProgress != 0f || zone.harvestProgress > SectFunctionalZoneRules.HarvestReadyThreshold)) ||
+                (!string.IsNullOrWhiteSpace(zone.assignedDepartmentId) &&
+                 !departmentIds.Contains(zone.assignedDepartmentId))) ||
+            progress.functionalZones.GroupBy(zone => zone.zoneId).Any(group => group.Count() > 1) ||
+            progress.functionalZones.GroupBy(zone => zone.cellIndex).Any(group => group.Count() > 1))
+            throw new InvalidDataException("宗门功能区结构无效");
+
+        foreach (SectFunctionalZoneState zone in progress.functionalZones)
+        {
+            WorldCell cell = map.cells[zone.cellIndex];
+            CellInfluenceRuntimeState influence = WorldMapInfluenceRules.GetCellState(map, progress, zone.cellIndex);
+            if (progress.exploredCellIndices?.Contains(zone.cellIndex) != true || !cell.isBuildable ||
+                cell.landform == LandformType.DeepWater || cell.landform == LandformType.ShallowWater ||
+                influence.controllerSectId != WorldMapProgressRules.PlayerSectOwnerId ||
+                influence.level < InfluenceLevel.Influence ||
+                progress.mapSites.Any(site => site?.cellIndex == zone.cellIndex) ||
+                progress.resourceNodes.Any(node => node?.cellIndex == zone.cellIndex))
+                throw new InvalidDataException("宗门功能区所在地图格无效");
+        }
     }
 
     private static void NormalizeTechniqueLibrary(PlayerData player)

@@ -35,7 +35,7 @@ public static class DiscipleAIEvaluator
             foreach (ScoreTerm term in definition.weightTerms ?? new List<ScoreTerm>())
             {
                 if (term == null) continue;
-                float input = ResolveInput(npc, null, null, term, out string label);
+                float input = ResolveInput(npc, null, null, term, null, out string label);
                 float curved = EvaluateCurve(input, term.curve);
                 float contribution = term.weight * curved;
                 intensity += contribution;
@@ -116,14 +116,34 @@ public static class DiscipleAIEvaluator
         IReadOnlyList<ActionDefinition> actions,
         int currentDay = -1)
     {
+        return EvaluateActions(npc, identity, goals, actions, new ActionEvaluationContext
+        {
+            ExecutionKind = ActionExecutionKind.AutonomousMission,
+            CurrentDay = currentDay
+        });
+    }
+
+    public static List<ActionScoreResult> EvaluateActions(NPCRuntime npc,
+        IdentityDefinition identity,
+        IReadOnlyList<GoalInstance> goals,
+        IReadOnlyList<ActionDefinition> actions,
+        ActionEvaluationContext context)
+    {
         List<ActionScoreResult> results = new List<ActionScoreResult>();
         if (npc == null || actions == null) return results;
+        context = context ?? new ActionEvaluationContext();
 
         foreach (ActionDefinition action in actions)
         {
             if (action == null) continue;
-            ActionScoreResult result = new ActionScoreResult { Action = action };
-            string filterReason = FilterReason(npc, identity, action, currentDay);
+            ActionScoreResult result = new ActionScoreResult
+            {
+                Action = action,
+                TargetId = context.TargetId,
+                TargetDisplayName = context.TargetDisplayName,
+                DepartmentId = context.DepartmentId
+            };
+            string filterReason = FilterReason(npc, identity, action, context);
             if (!string.IsNullOrEmpty(filterReason))
             {
                 result.FilterReason = filterReason;
@@ -137,7 +157,7 @@ public static class DiscipleAIEvaluator
             foreach (ScoreTerm term in action.scoreTerms ?? new List<ScoreTerm>())
             {
                 if (term == null) continue;
-                float input = ResolveInput(npc, identity, goals, term, out string label);
+                float input = ResolveInput(npc, identity, goals, term, context, out string label);
                 float curved = EvaluateCurve(input, term.curve);
                 float contribution = term.weight * curved;
                 score += contribution;
@@ -152,6 +172,11 @@ public static class DiscipleAIEvaluator
             score += result.TechniqueContribution;
             if (result.TechniqueContribution > bestPositive)
                 reasonLabel = $"主修功法倾向：{action.displayName}";
+
+            result.ContextContribution = context.ContextBonus;
+            score += context.ContextBonus;
+            if (context.ContextBonus > bestPositive && !string.IsNullOrWhiteSpace(context.TargetDisplayName))
+                reasonLabel = $"宗门需要：{context.TargetDisplayName}";
 
             result.Score = score;
             result.ReasonLabel = reasonLabel;
@@ -210,7 +235,8 @@ public static class DiscipleAIEvaluator
     }
 
     private static float ResolveInput(NPCRuntime npc, IdentityDefinition identity,
-        IReadOnlyList<GoalInstance> goals, ScoreTerm term, out string reasonLabel)
+        IReadOnlyList<GoalInstance> goals, ScoreTerm term, ActionEvaluationContext context,
+        out string reasonLabel)
     {
         reasonLabel = null;
         switch (term.source)
@@ -244,7 +270,7 @@ public static class DiscipleAIEvaluator
                 return 0f;
 
             case ScoreSource.Environment:
-                return ResolveEnvironment(term, out reasonLabel);
+                return ResolveEnvironment(term, context, out reasonLabel);
 
             case ScoreSource.Event:
                 // EventContext V1 不做，字段预留恒为 0。
@@ -269,14 +295,26 @@ public static class DiscipleAIEvaluator
             case "RealmIndex":
                 reasonLabel = "境界";
                 return Mathf.Clamp01(((int)npc.Realm + 1) / 4f);
+            case "WoodAffinity":
+                reasonLabel = "木属亲和";
+                return npc.Character?.spiritRoot == null ? 0f : Mathf.Clamp01(npc.Character.spiritRoot.wood);
+            case "FatigueRatio":
+                reasonLabel = "疲劳";
+                return npc.Character == null ? 0f : Mathf.Clamp01(npc.Character.fatigue / 100f);
             default:
                 reasonLabel = key;
                 return 0f;
         }
     }
 
-    private static float ResolveEnvironment(ScoreTerm term, out string reasonLabel)
+    private static float ResolveEnvironment(ScoreTerm term, ActionEvaluationContext context,
+        out string reasonLabel)
     {
+        if (term.key == "ZoneSuitability")
+        {
+            reasonLabel = "区域适宜度";
+            return Mathf.Clamp01(((context?.ZoneSuitability ?? 1f) - 0.8f) / 0.4f);
+        }
         if (term.key.StartsWith("WarehouseTagScarcity.", StringComparison.Ordinal))
         {
             reasonLabel = "资源匮乏";
@@ -300,21 +338,24 @@ public static class DiscipleAIEvaluator
             reasonLabel = "设施";
             string facilityName = term.key.Substring("FacilityAvailable.".Length);
             if (!Enum.TryParse(facilityName, out FacilityType facility)) return 0f;
-            int level = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.GetFacilityLevel(facility);
-            return level > 0 ? 1f : 0f;
+            return PlayerManager.Instance?.HasFacility(facility) == true ? 1f : 0f;
         }
         reasonLabel = term.key;
         return 0f;
     }
 
     private static string FilterReason(NPCRuntime npc, IdentityDefinition identity,
-        ActionDefinition action, int currentDay)
+        ActionDefinition action, ActionEvaluationContext context)
     {
         if (npc == null || !npc.CanDispatch()) return "弟子当前无法自主行动";
         if (identity == null || action.identityIds == null || !action.identityIds.Contains(identity.id))
             return "身份不符";
-        int day = currentDay >= 0
-            ? currentDay
+        if (action.executionKind != context.ExecutionKind) return "执行方式不符";
+        if (context.ExecutionKind == ActionExecutionKind.SectDuty)
+            return string.IsNullOrWhiteSpace(action.sectDutyEffectId) ? "宗务效果不存在" : null;
+
+        int day = context.CurrentDay >= 0
+            ? context.CurrentDay
             : TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
         if (DiscipleMentalStateRules.IsAutonomyCoolingDown(npc, day))
             return "自主研读后冷却中";
@@ -335,8 +376,8 @@ public static class DiscipleAIEvaluator
 
         if (data.isFacilityAction)
         {
-            int level = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.GetFacilityLevel(data.requiredFacility);
-            if (level < data.requiredFacilityLevel) return "设施等级不足";
+            if (data.requiresFacility && PlayerManager.Instance?.HasFacility(data.requiredFacility) != true)
+                return "对应宗门功能尚未开放";
             bool occupied = MissionManager.Instance.GetActiveMissions().Any(mission =>
                 mission?.Data != null && mission.Data.isFacilityAction &&
                 mission.Data.requiredFacility == data.requiredFacility &&

@@ -110,10 +110,9 @@ public class DaySettlementPanel : MonoBehaviour
         int missionCount = summary.missionResults == null ? 0 : summary.missionResults.Count;
         int eventCount = summary.newEventTitles == null ? 0 : summary.newEventTitles.Count;
         int characterCount = summary.characterChanges == null ? 0 : summary.characterChanges.Count;
-        int facilityCount = summary.facilityUpgrades == null ? 0 : summary.facilityUpgrades.Count;
         RuntimeUIFactory.Text(content, $"第 {summary.day} 天", 26, 46);
         RuntimeUIFactory.Text(content,
-            $"任务结果 {missionCount} 项　新事件 {eventCount} 项\n弟子变化 {characterCount} 人　设施升级 {facilityCount} 项",
+            $"任务结果 {missionCount} 项　新事件 {eventCount} 项\n弟子变化 {characterCount} 人",
             18, 64);
         RuntimeUIFactory.Text(content,
             $"{FormatItemChanges(summary)}　声望 {Signed(summary.reputationChange)}",
@@ -175,12 +174,6 @@ public class DaySettlementPanel : MonoBehaviour
                     $"{item.siteName}：{ItemName(item.itemId)} 应产 {item.calculated}，入库 {item.received}" +
                     (item.lost > 0 ? $"，损失 {item.lost}" : string.Empty), 18, 42);
         }
-        RuntimeUIFactory.Text(content, "设施升级", 22, 38);
-        if (summary.facilityUpgrades == null || summary.facilityUpgrades.Count == 0)
-            RuntimeUIFactory.Text(content, "今日没有设施升级。", 18, 38);
-        else
-            foreach (FacilityUpgradeRecord item in summary.facilityUpgrades)
-                RuntimeUIFactory.Text(content, $"{FacilityName(item.facility)} Lv.{item.newLevel}", 18, 38);
     }
 
     private void AddPageTab(Transform tabs, SettlementPage page, string label)
@@ -266,18 +259,6 @@ public class DaySettlementPanel : MonoBehaviour
             case CultivationRealm.Foundation: return "筑基";
             case CultivationRealm.GoldenCore: return "金丹";
             default: return realm.ToString();
-        }
-    }
-    private static string FacilityName(FacilityType facility)
-    {
-        switch (facility)
-        {
-            case FacilityType.MissionHall: return "任务堂";
-            case FacilityType.Warehouse: return "仓库";
-            case FacilityType.TrainingRoom: return "修炼室";
-            case FacilityType.SecretRealm: return "秘境";
-            case FacilityType.AlchemyRoom: return "炼丹房";
-            default: return facility.ToString();
         }
     }
 }

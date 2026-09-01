@@ -64,10 +64,11 @@ public class WorldTimeTests
                 {
                     characterId = "disciple-1",
                     activity = MonthlyActivityType.Training,
-                    cultivationActionId = "meditate",
+                    cultivationActionId = "meditate_refine",
                     segments = new List<DailyScheduleSegment>
                     {
-                        new DailyScheduleSegment { startHour = 11f, endHour = 18f, label = "运转功法" }
+                        new DailyScheduleSegment { startHour = 11f, endHour = 18f,
+                            actionId = "meditate_refine", label = "运转功法" }
                     }
                 }
             }
@@ -85,7 +86,7 @@ public class WorldTimeTests
         Assert.AreEqual(4f, saved.selectedSpeed);
         Assert.IsTrue(saved.dayPrepared);
         Assert.AreEqual("14:35", time.CurrentDateTime.TimeLabel);
-        Assert.AreEqual("meditate", saved.dailySchedule.Get("disciple-1").cultivationActionId);
+        Assert.AreEqual("meditate_refine", saved.dailySchedule.Get("disciple-1").cultivationActionId);
         Assert.AreEqual("运转功法", time.GetCurrentActivityLabel("disciple-1"));
         Assert.IsTrue(time.IsPaused);
         Assert.IsTrue((time.PauseReasons & PauseReason.Player) != 0);

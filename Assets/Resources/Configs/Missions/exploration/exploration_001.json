@@ -7,8 +7,9 @@
 
     "missionType":"Exploration",
     "missionRank": 1,
+    "isPlayerAssignable": false,
+    "requiresFacility": true,
     "requiredFacility": "SecretRealm",
-    "requiredFacilityLevel": 1,
     "isFacilityAction": true,
     "needDays": 5,
 

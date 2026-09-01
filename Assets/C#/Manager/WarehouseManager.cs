@@ -194,13 +194,10 @@ public class WarehouseManager : MonoBehaviour
     public bool HasItem(string itemId, int count = 1) =>
         count >= 0 && GetItemCount(itemId) >= count;
 
-    /// <summary>仓库固定容量：至少 10，仓库建筑等级再提供额外槽位。</summary>
+    /// <summary>V24 固定容量；仓库开放状态不再提供等级成长。</summary>
     public int GetCapacity()
     {
-        int facilitySlots = PlayerManager.Instance == null
-            ? 10
-            : FacilityRules.WarehouseSlots(PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse));
-        return Mathf.Max(10, facilitySlots);
+        return FacilityRules.WarehouseSlots;
     }
 
     /// <summary>当前已占用的物品种类槽位数（数量为 0 的槽不计入）。</summary>

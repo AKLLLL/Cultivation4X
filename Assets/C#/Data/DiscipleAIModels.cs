@@ -31,6 +31,12 @@ public enum ScoreSource
     Event
 }
 
+public enum ActionExecutionKind
+{
+    AutonomousMission = 0,
+    SectDuty = 1
+}
+
 [Serializable]
 public class GoalCondition
 {
@@ -74,14 +80,16 @@ public class IdentityDefinition
 }
 
 /// <summary>
-/// 自主行为的决策描述。执行 100% 复用 Mission；本类不承担执行逻辑。
+/// 统一行为目录。自主外出通过 Mission 执行，日常宗务由宗务执行器落地。
 /// </summary>
 [Serializable]
 public class ActionDefinition
 {
     public string id;
     public string displayName;
+    public ActionExecutionKind executionKind = ActionExecutionKind.AutonomousMission;
     public string missionId;
+    public string sectDutyEffectId;
     public List<string> identityIds = new List<string>();
     public List<string> tags = new List<string>();
     public float baseline;
@@ -93,6 +101,17 @@ public class ActionDefinition
     /// </summary>
     public int minIntervalDays = 0;
     public List<ScoreTerm> scoreTerms = new List<ScoreTerm>();
+}
+
+public class ActionEvaluationContext
+{
+    public ActionExecutionKind ExecutionKind = ActionExecutionKind.AutonomousMission;
+    public int CurrentDay = -1;
+    public string TargetId;
+    public string TargetDisplayName;
+    public float ContextBonus;
+    public float ZoneSuitability = 1f;
+    public string DepartmentId;
 }
 
 /// <summary>
@@ -120,6 +139,10 @@ public class ActionScoreResult
     public string ReasonLabel;
     public string FilterReason;
     public float TechniqueContribution;
+    public float ContextContribution;
+    public string TargetId;
+    public string TargetDisplayName;
+    public string DepartmentId;
     public List<TermScore> Terms = new List<TermScore>();
     public bool Eligible => string.IsNullOrEmpty(FilterReason);
 }

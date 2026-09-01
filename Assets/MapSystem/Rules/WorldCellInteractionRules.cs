@@ -9,7 +9,10 @@ namespace Cultivation4X.WorldMap
     public enum CellInteractionOptionType
     {
         None = 0,
-        Explore = 1
+        Explore = 1,
+        PlanHerbZone = 2,
+        CancelFunctionalZone = 3,
+        ConfirmCancelFunctionalZone = 4
     }
 
     /// <summary>普通格子的交互选项（不依赖 WorldLocation）。</summary>
@@ -30,7 +33,7 @@ namespace Cultivation4X.WorldMap
         public const string ExploreCellOptionId = "cell_explore";
 
         public static List<CellInteractionOption> Generate(WorldMap map,
-            WorldMapProgressState progress, int cellIndex)
+            WorldMapProgressState progress, int cellIndex, bool confirmZoneCancellation = false)
         {
             List<CellInteractionOption> options = new List<CellInteractionOption>();
             if (map?.cells == null || progress == null ||
@@ -45,6 +48,32 @@ namespace Cultivation4X.WorldMap
                 displayName = explored ? "探索（已完成）" : "探索",
                 available = !explored && WorldMapContentRules.CanExplore(map, progress, cellIndex, out _)
             });
+
+            SectFunctionalZoneState zone = SectFunctionalZoneRules.GetZone(progress, cellIndex);
+            if (zone != null)
+            {
+                options.Add(new CellInteractionOption
+                {
+                    id = "cancel_" + zone.zoneId,
+                    optionType = confirmZoneCancellation
+                        ? CellInteractionOptionType.ConfirmCancelFunctionalZone
+                        : CellInteractionOptionType.CancelFunctionalZone,
+                    displayName = confirmZoneCancellation
+                        ? "确认撤销（全部进度将永久清空）"
+                        : "撤销功能区规划",
+                    available = true
+                });
+            }
+            else if (SectFunctionalZoneRules.CanPlan(map, progress, cellIndex, out _))
+            {
+                options.Add(new CellInteractionOption
+                {
+                    id = "plan_herb_zone",
+                    optionType = CellInteractionOptionType.PlanHerbZone,
+                    displayName = "规划为灵植区",
+                    available = true
+                });
+            }
             return options;
         }
     }

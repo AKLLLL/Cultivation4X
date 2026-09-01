@@ -4,8 +4,6 @@
   "description": "弟子自行前往山野探查，寻觅灵材。",
   "missionType": "Exploration",
   "missionRank": 1,
-  "requiredFacilityLevel": 0,
-  "usesFacilityLevelScaling": false,
   "isPlayerAssignable": false,
 
   "itemCosts": [],

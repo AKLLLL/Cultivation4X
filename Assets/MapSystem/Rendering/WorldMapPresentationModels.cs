@@ -11,6 +11,7 @@ namespace Cultivation4X.WorldMap
     {
         FactionSeat, Village, Cave, CaveResidence, PointOfInterest, ContentHint,
         SpiritSpring, SpiritMine, BeastLair, Ruin,
+        HerbZonePlanned, HerbZoneDeveloping, HerbZoneOperational,
         EnvironmentHint,
         EnvironmentMoisture, EnvironmentMineralVein, EnvironmentBeastTracks,
         EnvironmentRuinedWalls, EnvironmentSettlementSigns, EnvironmentCaveSigns
@@ -259,6 +260,24 @@ namespace Cultivation4X.WorldMap
                 contentMarkers.Select(item => item.cellIndex));
             result.AddRange(CreatePointOfInterestMarkers(map)
                 .Where(item => !contentCells.Contains(item.cellIndex)));
+            if (progress?.functionalZones != null)
+            {
+                foreach (SectFunctionalZoneState zone in progress.functionalZones
+                             .Where(item => item != null))
+                {
+                    result.Add(new WorldMapPresentationMarker
+                    {
+                        id = zone.zoneId,
+                        label = "灵植区·" + SectFunctionalZoneRules.StageName(zone.stage),
+                        kind = zone.stage == FunctionalZoneStage.Operational
+                            ? WorldMapMarkerKind.HerbZoneOperational
+                            : zone.stage == FunctionalZoneStage.Developing
+                                ? WorldMapMarkerKind.HerbZoneDeveloping
+                                : WorldMapMarkerKind.HerbZonePlanned,
+                        cellIndex = zone.cellIndex
+                    });
+                }
+            }
 
             int caveIndex = sect?.founding?.selectedWorldCellIndex ?? -1;
             if (map?.cells != null && caveIndex >= 0 && caveIndex < map.cells.Length)

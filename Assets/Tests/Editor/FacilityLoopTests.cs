@@ -30,15 +30,15 @@ public class FacilityLoopTests
     }
 
     [Test]
-    public void NewGame_HasStarterResourcesAndLevelOneFacilities()
+    public void PlayerDataDefaults_HaveStarterResourcesAndAvailableFacilities()
     {
         PlayerData player = new PlayerData();
         WarehouseData warehouse = new WarehouseData();
         Assert.AreEqual(100, warehouse.items.Single(item => item.itemId == FacilityRules.SpiritStoneId).count);
         Assert.AreEqual(5, warehouse.items.Single(item => item.itemId == FacilityRules.BasicMaterialId).count);
-        Assert.AreEqual(1, player.warehouseLevel);
-        Assert.AreEqual(1, player.secretRealmLevel);
-        Assert.AreEqual(1, player.alchemyRoomLevel);
+        CollectionAssert.Contains(player.availableFacilities, FacilityType.Warehouse);
+        CollectionAssert.Contains(player.availableFacilities, FacilityType.SecretRealm);
+        CollectionAssert.Contains(player.availableFacilities, FacilityType.AlchemyRoom);
     }
 
     [Test]
@@ -67,21 +67,20 @@ public class FacilityLoopTests
     }
 
     [Test]
-    public void FacilityUpgrade_IsAtomicAndUsesSharedResources()
+    public void FacilityAvailability_IsIdempotentAndDoesNotConsumeResources()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
         PlayerManager.Instance = player;
         WarehouseManager.Instance = warehouse;
-        FacilityUpgradeResult result = player.TryUpgradeFacility(FacilityType.Warehouse);
-        Assert.IsTrue(result.success, $"{result.reason}; spiritStones={warehouse.GetItemCount(FacilityRules.SpiritStoneId)}; material={warehouse.GetItemCount(FacilityRules.BasicMaterialId)}; level={player.playerData.warehouseLevel}");
-        Assert.AreEqual(2, player.playerData.warehouseLevel);
-        Assert.AreEqual(0, warehouse.GetItemCount(FacilityRules.SpiritStoneId));
-        Assert.AreEqual(0, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
-        FacilityUpgradeResult failed = player.TryUpgradeFacility(FacilityType.Warehouse);
-        Assert.IsFalse(failed.success);
-        Assert.AreEqual(2, player.playerData.warehouseLevel);
-        Assert.AreEqual(0, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
+        player.SetFacilityAvailableForStory(FacilityType.Warehouse, false);
+        Assert.IsFalse(player.HasFacility(FacilityType.Warehouse));
+        player.SetFacilityAvailableForStory(FacilityType.Warehouse);
+        player.SetFacilityAvailableForStory(FacilityType.Warehouse);
+        Assert.IsTrue(player.HasFacility(FacilityType.Warehouse));
+        Assert.AreEqual(1, player.playerData.availableFacilities.Count(item => item == FacilityType.Warehouse));
+        Assert.AreEqual(100, warehouse.GetItemCount(FacilityRules.SpiritStoneId));
+        Assert.AreEqual(5, warehouse.GetItemCount(FacilityRules.BasicMaterialId));
     }
 
     [Test]
@@ -112,11 +111,11 @@ public class FacilityLoopTests
     }
 
     [Test]
-    public void Warehouse_NewGameStartCapacityIsTenEvenWithLevelZeroWarehouse()
+    public void Warehouse_CapacityIsTenEvenWhenFunctionIsUnavailable()
     {
         PlayerManager player = Add<PlayerManager>("Player");
         PlayerManager.Instance = player;
-        player.playerData.warehouseLevel = 0;
+        player.SetFacilityAvailableForStory(FacilityType.Warehouse, false);
 
         WarehouseManager warehouse = Add<WarehouseManager>("Warehouse");
         WarehouseManager.Instance = warehouse;
@@ -127,13 +126,14 @@ public class FacilityLoopTests
     }
 
     [Test]
-    public void V1Save_MigratesAdditiveFacilityDefaults()
+    public void StateNormalization_InitializesFacilityAndOrganizationCollections()
     {
         GameState state = JsonConvert.DeserializeObject<GameState>("{\"version\":1,\"sect\":{\"missionHallLevel\":1},\"warehouse\":{\"items\":[]}}");
         SaveManager.MigrateState(state);
         Assert.AreEqual(SaveDataVersion.Current, state.version);
-        Assert.AreEqual(1, state.sect.warehouseLevel);
-        Assert.AreEqual(1, state.sect.secretRealmLevel);
+        Assert.IsNotNull(state.sect.availableFacilities);
+        Assert.IsNotNull(state.sect.departments);
+        Assert.IsNotNull(state.worldMapProgress.functionalZones);
         Assert.IsNotNull(state.dailyMissionCandidateIds);
     }
 
@@ -156,12 +156,12 @@ public class FacilityLoopTests
     }
 
     [Test]
-    public void FacilityActions_UseLevelSpecificDurationAndOutput()
+    public void FacilityActions_UseFixedDurationAndOutput()
     {
-        Assert.AreEqual(5, FacilityRules.SecretRealmDays(1));
-        Assert.AreEqual(8, FacilityRules.SecretRealmMaterialReward(3));
-        Assert.AreEqual(2, FacilityRules.AlchemyDays(3));
-        Assert.AreEqual(2, FacilityRules.AlchemyPillReward(3));
+        Assert.AreEqual(5, FacilityRules.SecretRealmDays);
+        Assert.AreEqual(3, FacilityRules.SecretRealmMaterialReward);
+        Assert.AreEqual(3, FacilityRules.AlchemyDays);
+        Assert.AreEqual(1, FacilityRules.AlchemyPillReward);
     }
 
     [Test]

@@ -184,6 +184,16 @@ namespace Cultivation4X.WorldMap
                     buffer.AddLine(center + new Vector2(-0.30f, 0.16f) * size,
                         center + new Vector2(0.25f, 0.10f) * size, line, color);
                     break;
+                case WorldMapMarkerKind.HerbZonePlanned:
+                case WorldMapMarkerKind.HerbZoneDeveloping:
+                case WorldMapMarkerKind.HerbZoneOperational:
+                    buffer.AddLine(center + Vector2.down * size * 0.42f,
+                        center + Vector2.up * size * 0.42f, line, color);
+                    buffer.AddRing(center + new Vector2(-0.19f, 0.12f) * size,
+                        size * 0.22f, line * 0.72f, color, 10);
+                    buffer.AddRing(center + new Vector2(0.19f, -0.10f) * size,
+                        size * 0.22f, line * 0.72f, color, 10);
+                    break;
                 case WorldMapMarkerKind.EnvironmentHint:
                     // 环境暗示使用轻量符号，与确认地点的实心图标保持明确层级差异。
                     buffer.AddRing(center, size * 0.28f, line * 0.72f, color, 8);

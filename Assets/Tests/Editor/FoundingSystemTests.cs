@@ -49,7 +49,7 @@ public class FoundingSystemTests
     }
 
     [Test]
-    public void V3Save_MigratesAsCompletedAndPreservesExistingFacilityLevels()
+    public void LegacyStateNormalization_InitializesFacilityAvailability()
     {
         GameState state = JsonConvert.DeserializeObject<GameState>(
             "{\"version\":3,\"sect\":{\"missionHallLevel\":2,\"trainingRoomLevel\":1,\"warehouseLevel\":1,\"secretRealmLevel\":1,\"alchemyRoomLevel\":1},\"characters\":[]}");
@@ -57,16 +57,15 @@ public class FoundingSystemTests
         Assert.AreEqual(SaveDataVersion.Current, state.version);
         Assert.IsTrue(state.sect.founding.completed);
         Assert.AreEqual(FoundingStage.Completed, state.sect.founding.stage);
-        Assert.AreEqual(2, state.sect.missionHallLevel);
+        Assert.IsNotNull(state.sect.availableFacilities);
     }
 
     [Test]
-    public void V4Save_PreservesZeroFacilitiesAndIncompleteFounding()
+    public void LegacyStateNormalization_PreservesIncompleteFounding()
     {
         GameState state = JsonConvert.DeserializeObject<GameState>(
             "{\"version\":4,\"sect\":{\"missionHallLevel\":0,\"trainingRoomLevel\":0,\"warehouseLevel\":0,\"secretRealmLevel\":0,\"alchemyRoomLevel\":0,\"founding\":{\"initialized\":true,\"completed\":false,\"stage\":\"Cave\",\"inheritancePreparationProgress\":42}}}");
         SaveManager.MigrateState(state);
-        Assert.AreEqual(0, state.sect.missionHallLevel);
         Assert.IsFalse(state.sect.founding.completed);
         Assert.AreEqual(42, state.sect.founding.inheritancePreparationProgress);
     }
@@ -125,7 +124,7 @@ public class FoundingSystemTests
         PlayerManager player = Add<PlayerManager>("Player");
         player.InitializeNewFoundingGame(91);
         Assert.AreEqual(100, warehouse.GetItemCount(FacilityRules.SpiritStoneId));
-        Assert.AreEqual(0, player.GetFacilityLevel(FacilityType.MissionHall));
+        Assert.IsFalse(player.HasFacility(FacilityType.MissionHall));
         Assert.AreEqual(10, player.playerData.founding.candidates.Count);
     }
 
@@ -159,7 +158,7 @@ public class FoundingSystemTests
         repair.PassOneDay();
         repair.PassOneDay();
         repair.PassOneDay();
-        Assert.AreEqual(1, player.GetFacilityLevel(FacilityType.TrainingRoom));
+        Assert.IsTrue(player.HasFacility(FacilityType.TrainingRoom));
         Assert.IsTrue(actor.CanDispatch());
     }
 
@@ -195,7 +194,7 @@ public class FoundingSystemTests
         NPCRuntime actor = npcs.GetRuntime(selected[0].candidateId);
         player.ProcessIdleFounderDay(actor);
         Assert.AreEqual(1 + selected[0].comprehension / 10, player.playerData.founding.inheritancePreparationProgress);
-        player.SetFacilityLevelForStory(FacilityType.InheritanceChamber, 1);
+        player.SetFacilityAvailableForStory(FacilityType.InheritanceChamber);
         player.ProcessIdleFounderDay(actor);
         Assert.AreEqual((1 + selected[0].comprehension / 10) * 2 + 1, player.playerData.founding.inheritancePreparationProgress);
     }
@@ -232,9 +231,9 @@ public class FoundingSystemTests
         state.stage = FoundingStage.Cave;
         state.selectedTechniqueId = "qingmu";
         state.inheritancePreparationProgress = 100;
-        player.SetFacilityLevelForStory(FacilityType.AlchemyRoom, 1);
+        player.SetFacilityAvailableForStory(FacilityType.AlchemyRoom);
         Assert.IsFalse(state.completed);
-        player.SetFacilityLevelForStory(FacilityType.TrainingRoom, 1);
+        player.SetFacilityAvailableForStory(FacilityType.TrainingRoom);
         Assert.IsTrue(state.completed);
         Assert.AreEqual(FoundingStage.Completed, state.stage);
     }
@@ -274,7 +273,7 @@ public class FoundingSystemTests
         state.selectedTechniqueId = "qingmu";
         state.stage = FoundingStage.Cave;
         state.inheritancePreparationProgress = 100;
-        player.SetFacilityLevelForStory(FacilityType.TrainingRoom, 1);
+        player.SetFacilityAvailableForStory(FacilityType.TrainingRoom);
         player.AddVillageRelation(50);
         missions.LoadMissionsFromJson();
         NPCRuntime actor = npcs.GetAllNPC()[0];
@@ -284,7 +283,7 @@ public class FoundingSystemTests
         Assert.AreEqual(50, state.village.reservedLabor);
         missions.GetActiveMissions().Single().FailMission(false);
         Assert.AreEqual(0, state.village.reservedLabor);
-        Assert.AreEqual(0, player.GetFacilityLevel(FacilityType.AlchemyRoom));
+        Assert.IsFalse(player.HasFacility(FacilityType.AlchemyRoom));
     }
 
     [Test]
@@ -353,7 +352,7 @@ public class FoundingSystemTests
             village = new VillageState(),
             externalThreat = new ActiveThreatState()
         };
-        MissionData ordinary = new MissionData { id = "perm-ordinary", missionRank = 1, requiredFacilityLevel = 0 };
+        MissionData ordinary = new MissionData { id = "perm-ordinary", missionRank = 1 };
 
         Assert.IsFalse(manager.IsMissionVisible(ordinary), "发展未完成前普通任务仍应按宗门成立状态解锁");
         player.playerData.founding.sectCreated = true;

@@ -347,7 +347,7 @@ public class FoundingPanel : MonoBehaviour
             if (repair == null || !System.Enum.TryParse(repair.foundingTargetId, out FacilityType facility)) continue;
             bool repairing = MissionManager.Instance.GetActiveMissions().Any(item => item.Data.id == missionId &&
                 (item.State == MissionState.Active || item.State == MissionState.WaitingNode));
-            string status = PlayerManager.Instance.GetFacilityLevel(facility) > 0 ? "已修复" : repairing ? "修复中" : "损坏";
+            string status = PlayerManager.Instance.HasFacility(facility) ? "已修复" : repairing ? "修复中" : "损坏";
             RuntimeUIFactory.Text(content, $"{repair.name}：{status}", 18, 34);
         }
 

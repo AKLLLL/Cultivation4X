@@ -15,6 +15,8 @@ public static class GlobalUIAssetBuilder
     private const string CommonPath = "Assets/UI/Prefabs/Common";
     private const string DisciplePath = "Assets/UI/Prefabs/Disciple";
     private const string MonthlyPlanPath = "Assets/UI/Prefabs/MonthlyPlan";
+    private const string MonthlyReportPath = "Assets/UI/Prefabs/MonthlyReport";
+    private const string SectOrganizationBodyPath = "Assets/Resources/Prefab/UI/SectOrganizationBody.prefab";
     private const string RootPath = "Assets/Resources/Prefab/UI/UIRoot.prefab";
     private const string ScenePath = "Assets/Scenes/SampleScene.unity";
 
@@ -30,11 +32,58 @@ public static class GlobalUIAssetBuilder
         DiscipleHistoryItemView historyItem = BuildDiscipleHistoryItem(font);
         GameObject discipleCenter = BuildDiscipleCenter(font, listItem, historyItem);
         GameObject monthlyPlan = BuildMonthlyPlan(font);
-        BuildUiRoot(font, theme, discipleCenter, monthlyPlan);
+        GameObject monthlyReport = BuildMonthlyReport(font);
+        BuildSectOrganizationBody();
+        BuildUiRoot(font, theme, discipleCenter, monthlyPlan, monthlyReport);
         MigrateSampleScene();
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log("Global UI V1 资产与 SampleScene 迁移完成。");
+    }
+
+    [MenuItem("Cultivation4X/UI/Migrate Growth Feedback V23")]
+    public static void MigrateGrowthFeedbackV23()
+    {
+        EnsureFolders();
+        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontPath);
+        UITheme theme = AssetDatabase.LoadAssetAtPath<UITheme>(ThemePath);
+        if (font == null || theme == null) throw new System.InvalidOperationException("缺少全局UI字体或主题");
+        DiscipleListItemView listItem = BuildDiscipleListItem(font);
+        DiscipleHistoryItemView historyItem = BuildDiscipleHistoryItem(font);
+        GameObject discipleCenter = BuildDiscipleCenter(font, listItem, historyItem);
+        GameObject monthlyPlan = AssetDatabase.LoadAssetAtPath<GameObject>($"{MonthlyPlanPath}/MonthlyPlan.prefab");
+        if (monthlyPlan == null) throw new System.InvalidOperationException("缺少月计划 Prefab");
+        GameObject monthlyReport = BuildMonthlyReport(font);
+        BuildUiRoot(font, theme, discipleCenter, monthlyPlan, monthlyReport);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("V23 弟子成长反馈 UI 迁移完成。");
+    }
+
+    [MenuItem("Cultivation4X/UI/Migrate Sect Organization V24")]
+    public static void MigrateSectOrganizationV24()
+    {
+        EnsureFolders();
+        BuildSectOrganizationBody();
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("V24 宗门功能区与部门滚动主体 Prefab 迁移完成。");
+    }
+
+    private static GameObject BuildSectOrganizationBody()
+    {
+        GameObject root = Panel(null, "SectOrganizationBody", UIComponentStyles.InfoCard);
+        LayoutElement size = root.AddComponent<LayoutElement>();
+        size.flexibleWidth = 1f;
+        size.flexibleHeight = 1f;
+        RectTransform content = CreateScrollContent(root.transform, "OrganizationScroll", out GameObject scrollRoot);
+        Stretch(scrollRoot.GetComponent<RectTransform>());
+        scrollRoot.GetComponent<LayoutElement>().flexibleWidth = 1f;
+        SectOrganizationBodyView view = root.AddComponent<SectOrganizationBodyView>();
+        view.Configure(content);
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, SectOrganizationBodyPath);
+        Object.DestroyImmediate(root);
+        return prefab;
     }
 
     [MenuItem("Cultivation4X/UI/Migrate World Time HUD V22")]
@@ -128,6 +177,7 @@ public static class GlobalUIAssetBuilder
         EnsureFolder("Assets/UI/Prefabs", "Common");
         EnsureFolder("Assets/UI/Prefabs", "Disciple");
         EnsureFolder("Assets/UI/Prefabs", "MonthlyPlan");
+        EnsureFolder("Assets/UI/Prefabs", "MonthlyReport");
         EnsureFolder("Assets/Resources/Prefab", "UI");
     }
 
@@ -204,8 +254,8 @@ public static class GlobalUIAssetBuilder
         Image image = root.GetComponent<Image>();
         image.color = new Color(0.075f, 0.105f, 0.085f, 0.96f);
         LayoutElement element = root.GetComponent<LayoutElement>();
-        element.minHeight = 78f;
-        element.preferredHeight = 78f;
+        element.minHeight = 94f;
+        element.preferredHeight = 94f;
         VerticalLayoutGroup layout = root.GetComponent<VerticalLayoutGroup>();
         layout.padding = new RectOffset(12, 12, 7, 7);
         layout.spacing = 3f;
@@ -236,8 +286,12 @@ public static class GlobalUIAssetBuilder
         LayoutElement realmSize = realm.GetComponent<LayoutElement>();
         realmSize.minWidth = 110f;
         realmSize.flexibleWidth = 1f;
+        TMP_Text activity = CreateText(root.transform, "修炼 · 打坐炼化", 14, font, 24);
+        activity.color = new Color(0.62f, 0.72f, 0.61f, 1f);
+        activity.enableWordWrapping = false;
+        activity.overflowMode = TextOverflowModes.Ellipsis;
         root.GetComponent<DiscipleListItemView>().Configure(name, realm, state,
-            image, root.GetComponent<Button>());
+            activity, image, root.GetComponent<Button>());
         string path = $"{DisciplePath}/DiscipleListItem.prefab";
         PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
@@ -319,13 +373,13 @@ public static class GlobalUIAssetBuilder
         tabBarSize.minHeight = UIComponentStyles.CompactTabBarHeight;
         tabBarSize.preferredHeight = UIComponentStyles.CompactTabBarHeight;
         tabBarSize.flexibleHeight = 0f;
-        string[] labels = { "概览", "能力", "关系", "履历" };
+        string[] labels = { "概览", "能力", "关系", "成长", "经历" };
         Button[] tabButtons = labels.Select(label => CreateTabButton(tabs, label, font)).ToArray();
 
         GameObject pages = new GameObject("Pages", typeof(RectTransform), typeof(LayoutElement));
         pages.transform.SetParent(center.transform, false);
         pages.GetComponent<LayoutElement>().flexibleHeight = 1f;
-        GameObject[] tabPages = new GameObject[4];
+        GameObject[] tabPages = new GameObject[5];
 
         RectTransform overviewContent = CreateScrollContent(pages.transform, "概览", out GameObject overviewRoot);
         Stretch(overviewRoot.GetComponent<RectTransform>());
@@ -374,11 +428,37 @@ public static class GlobalUIAssetBuilder
             pageTexts[index] = pageText;
             tabPages[tabIndex] = scrollRoot;
         }
-        RectTransform historyContent = CreateScrollContent(pages.transform, "履历", out GameObject historyRoot);
+        RectTransform growthContent = CreateScrollContent(pages.transform, "成长", out GameObject growthRoot);
+        Stretch(growthRoot.GetComponent<RectTransform>());
+        GameObject growthControls = new GameObject("GrowthPeriodControls", typeof(RectTransform),
+            typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+        growthControls.transform.SetParent(growthContent, false);
+        growthControls.GetComponent<LayoutElement>().preferredHeight = UIComponentStyles.CompactControlHeight;
+        HorizontalLayoutGroup growthControlsLayout = growthControls.GetComponent<HorizontalLayoutGroup>();
+        growthControlsLayout.spacing = 8f;
+        growthControlsLayout.childControlWidth = true;
+        growthControlsLayout.childControlHeight = true;
+        growthControlsLayout.childForceExpandWidth = false;
+        Button previousGrowth = CreateButton(growthControls.transform, "上一月", font);
+        ConfigureCompactActionButton(previousGrowth, 86f);
+        TMP_Text growthPeriod = CreateText(growthControls.transform, "第1年·第1月（本月已结算）", 16, font,
+            UIComponentStyles.CompactControlHeight);
+        growthPeriod.alignment = TextAlignmentOptions.Center;
+        growthPeriod.GetComponent<LayoutElement>().flexibleWidth = 1f;
+        Button nextGrowth = CreateButton(growthControls.transform, "下一月", font);
+        ConfigureCompactActionButton(nextGrowth, 86f);
+        TMP_Text growthText = CreateText(growthContent, "本月尚无已结算成长记录。", 16, font, 420f);
+        growthText.alignment = TextAlignmentOptions.TopLeft;
+        growthText.enableWordWrapping = true;
+        growthText.overflowMode = TextOverflowModes.Overflow;
+        growthText.GetComponent<LayoutElement>().preferredHeight = 420f;
+        tabPages[3] = growthRoot;
+
+        RectTransform historyContent = CreateScrollContent(pages.transform, "经历", out GameObject historyRoot);
         Stretch(historyRoot.GetComponent<RectTransform>());
-        TMP_Text historyEmpty = CreateText(historyContent, "暂无人生履历。", 16, font, 38);
+        TMP_Text historyEmpty = CreateText(historyContent, "暂无关键经历。", 16, font, 38);
         historyEmpty.alignment = TextAlignmentOptions.TopLeft;
-        tabPages[3] = historyRoot;
+        tabPages[4] = historyRoot;
 
         GameObject right = Column(root.transform, "CultivationObservation", 360f, 0f);
         AddPanelOutline(right);
@@ -396,7 +476,8 @@ public static class GlobalUIAssetBuilder
 
         root.GetComponent<DiscipleCenterView>().Configure(listContent, listItem, empty, name, realmText,
             ageText, state, health, naqiFill, naqiValue, masteryFill, masteryValue,
-            mentalText, dailyAuraText, pageTexts[0], pageTexts[1], historyContent, historyItem, historyEmpty,
+            mentalText, dailyAuraText, pageTexts[0], pageTexts[1], growthText, growthPeriod,
+            previousGrowth, nextGrowth, historyContent, historyItem, historyEmpty,
             currentAction, currentPlan, nextPlan, tabButtons, tabPages);
         string path = $"{DisciplePath}/DiscipleCenter.prefab";
         PrefabUtility.SaveAsPrefabAsset(root, path);
@@ -556,8 +637,82 @@ public static class GlobalUIAssetBuilder
         return AssetDatabase.LoadAssetAtPath<GameObject>(path);
     }
 
+    private static GameObject BuildMonthlyReport(TMP_FontAsset font)
+    {
+        GameObject root = Panel(null, "MonthlyReport", new Color(0.022f, 0.047f, 0.038f, 0.99f));
+        MonthlyReportView view = root.AddComponent<MonthlyReportView>();
+        VerticalLayoutGroup page = root.AddComponent<VerticalLayoutGroup>();
+        page.padding = new RectOffset(18, 18, 16, 16);
+        page.spacing = 10f;
+        page.childControlWidth = true;
+        page.childControlHeight = true;
+        page.childForceExpandWidth = true;
+        page.childForceExpandHeight = false;
+
+        GameObject header = new GameObject("Header", typeof(RectTransform), typeof(HorizontalLayoutGroup),
+            typeof(LayoutElement));
+        header.transform.SetParent(root.transform, false);
+        LayoutElement headerSize = header.GetComponent<LayoutElement>();
+        headerSize.minHeight = 48f;
+        headerSize.preferredHeight = 48f;
+        headerSize.flexibleHeight = 0f;
+        HorizontalLayoutGroup headerLayout = header.GetComponent<HorizontalLayoutGroup>();
+        headerLayout.spacing = 8f;
+        headerLayout.childAlignment = TextAnchor.MiddleLeft;
+        headerLayout.childControlWidth = true;
+        headerLayout.childControlHeight = true;
+        headerLayout.childForceExpandWidth = false;
+        headerLayout.childForceExpandHeight = false;
+        TMP_Text title = CreateText(header.transform, "宗门月报", 26f, font, 48f);
+        title.fontStyle = FontStyles.Bold;
+        title.GetComponent<LayoutElement>().flexibleWidth = 1f;
+        Button close = CreateButton(header.transform, "关闭", font);
+        ConfigureCompactActionButton(close, 78f);
+
+        GameObject controls = new GameObject("PeriodControls", typeof(RectTransform),
+            typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+        controls.transform.SetParent(root.transform, false);
+        LayoutElement controlsSize = controls.GetComponent<LayoutElement>();
+        controlsSize.minHeight = UIComponentStyles.CompactControlHeight;
+        controlsSize.preferredHeight = UIComponentStyles.CompactControlHeight;
+        controlsSize.flexibleHeight = 0f;
+        HorizontalLayoutGroup controlsLayout = controls.GetComponent<HorizontalLayoutGroup>();
+        controlsLayout.spacing = 8f;
+        controlsLayout.childAlignment = TextAnchor.MiddleLeft;
+        controlsLayout.childControlWidth = true;
+        controlsLayout.childControlHeight = true;
+        controlsLayout.childForceExpandWidth = false;
+        controlsLayout.childForceExpandHeight = false;
+        Button previous = CreateButton(controls.transform, "上一月", font);
+        ConfigureCompactActionButton(previous, 86f);
+        TMP_Text period = CreateText(controls.transform, "暂无已完成月份", 16f, font,
+            UIComponentStyles.CompactControlHeight);
+        period.alignment = TextAlignmentOptions.Center;
+        period.GetComponent<LayoutElement>().flexibleWidth = 1f;
+        Button next = CreateButton(controls.transform, "下一月", font);
+        ConfigureCompactActionButton(next, 86f);
+        Button toggle = CreateButton(controls.transform, "查看全部弟子", font);
+        ConfigureCompactActionButton(toggle, 128f);
+        TMP_Text toggleText = toggle.GetComponentInChildren<TMP_Text>(true);
+
+        RectTransform content = CreateScrollContent(root.transform, "MonthlyReportScroll", out GameObject scrollRoot);
+        scrollRoot.GetComponent<LayoutElement>().flexibleHeight = 1f;
+        TMP_Text contentText = CreateText(content, "完成首个30日结算后生成月报。", 16f, font, 400f);
+        contentText.alignment = TextAlignmentOptions.TopLeft;
+        contentText.enableWordWrapping = true;
+        contentText.overflowMode = TextOverflowModes.Overflow;
+        contentText.GetComponent<LayoutElement>().preferredHeight = -1f;
+        contentText.GetComponent<LayoutElement>().minHeight = 80f;
+
+        view.Configure(title, period, contentText, previous, next, toggle, toggleText, close);
+        string path = $"{MonthlyReportPath}/MonthlyReport.prefab";
+        PrefabUtility.SaveAsPrefabAsset(root, path);
+        Object.DestroyImmediate(root);
+        return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+    }
+
     private static void BuildUiRoot(TMP_FontAsset font, UITheme theme, GameObject discipleCenter,
-        GameObject monthlyPlan)
+        GameObject monthlyPlan, GameObject monthlyReport)
     {
         GameObject root = new GameObject("UIRoot", typeof(UIManager));
 
@@ -680,6 +835,16 @@ public static class GlobalUIAssetBuilder
                     blocksWorldInput = true,
                     cacheInstance = true,
                     prefab = monthlyPlan
+                },
+                new UIWindowRegistration
+                {
+                    id = UIWindowId.MonthlyReport,
+                    title = "宗门月报",
+                    layer = UIWindowLayer.Screen,
+                    escapePolicy = UIEscapePolicy.Allowed,
+                    blocksWorldInput = true,
+                    cacheInstance = true,
+                    prefab = monthlyReport
                 }
             });
         PrefabUtility.SaveAsPrefabAsset(root, RootPath);

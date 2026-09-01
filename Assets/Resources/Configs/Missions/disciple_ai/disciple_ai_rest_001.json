@@ -4,7 +4,6 @@
   "description": "弟子休整调息，恢复身心状态。",
   "missionType": "Disciple",
   "missionRank": 1,
-  "requiredFacilityLevel": 0,
   "isPlayerAssignable": false,
 
   "itemCosts": [],

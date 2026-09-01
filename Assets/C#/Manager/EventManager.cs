@@ -192,10 +192,10 @@ public class EventManager : MonoBehaviour
         if (outcome == null) return false;
         if (!CanApplyEffects(outcome.effects, activeEvent.Participants)) return false;
 
+        int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.ActiveDay;
         foreach (EventEffect effect in outcome.effects ?? Enumerable.Empty<EventEffect>())
-            ApplyEffect(effect, activeEvent.Participants);
+            ApplyEffect(effect, activeEvent.Participants, day);
 
-        int day = TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
         EventHistoryRecord record = new EventHistoryRecord
         {
             eventId = activeEvent.Definition.id,
@@ -206,7 +206,9 @@ public class EventManager : MonoBehaviour
         };
         history.Add(record);
         foreach (NPCRuntime participant in activeEvent.Participants.Values.Distinct())
-            participant.Character.AddLifeRecord(day, "Event", record.resultText, record.eventId);
+            ExperienceRecordRules.Add(participant.Character, day, ExperienceType.Event,
+                activeEvent.Definition.isCritical ? ExperienceImportance.Major : ExperienceImportance.Minor,
+                "event", record.resultText, record.eventId);
 
         string effectText = FormatEffectSummary(outcome.effects, activeEvent.Participants);
         Debug.Log(string.IsNullOrEmpty(effectText)
@@ -239,7 +241,7 @@ public class EventManager : MonoBehaviour
         return removals.All(item => WarehouseManager.Instance.GetItemCount(item.Key) >= item.Value);
     }
 
-    private void ApplyEffect(EventEffect effect, Dictionary<string, NPCRuntime> participants)
+    private void ApplyEffect(EventEffect effect, Dictionary<string, NPCRuntime> participants, int recordDay)
     {
         participants.TryGetValue(effect.participant ?? "actor", out NPCRuntime actor);
         participants.TryGetValue(effect.targetParticipant ?? string.Empty, out NPCRuntime target);
@@ -252,13 +254,14 @@ public class EventManager : MonoBehaviour
             case EventEffectType.AddTrait: actor?.Character.AddTrait(effect.value); break;
             case EventEffectType.RemoveTrait: actor?.Character.traitIds.Remove(effect.value); break;
             case EventEffectType.AddRelationship:
-                if (actor != null && target != null) NPCManager.Instance.AddRelationship(actor.CharacterId, target.CharacterId, effect.relationshipTag);
+                if (actor != null && target != null) NPCManager.Instance.AddRelationship(actor.CharacterId,
+                    target.CharacterId, effect.relationshipTag, recordDay: recordDay);
                 break;
-            case EventEffectType.Injure: if (actor != null) NPCManager.Instance.Injured(actor, Mathf.Max(1, effect.amount)); break;
+            case EventEffectType.Injure: if (actor != null) NPCManager.Instance.Injured(actor, Mathf.Max(1, effect.amount), recordDay); break;
             case EventEffectType.PermanentTrauma:
-                if (actor != null) NPCManager.Instance.ApplyPermanentTrauma(actor, effect.value);
+                if (actor != null) NPCManager.Instance.ApplyPermanentTrauma(actor, effect.value, recordDay);
                 break;
-            case EventEffectType.Kill: if (actor != null) NPCManager.Instance.Kill(actor, effect.value); break;
+            case EventEffectType.Kill: if (actor != null) NPCManager.Instance.Kill(actor, effect.value, recordDay); break;
             case EventEffectType.AddItem:
                 WarehouseManager.Instance?.AddItem(effect.value, effect.amount);
                 break;
@@ -269,11 +272,11 @@ public class EventManager : MonoBehaviour
                 pending.Add(new PendingEvent
                 {
                     eventId = effect.value,
-                    dueDay = (TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay) + Mathf.Max(1, effect.delayDays),
+                    dueDay = recordDay + Mathf.Max(1, effect.delayDays),
                     participantIds = participants.ToDictionary(pair => pair.Key, pair => pair.Value.CharacterId)
                 });
                 break;
-            case EventEffectType.Recruit: NPCManager.Instance?.RecruitFromTemplate(effect.value); break;
+            case EventEffectType.Recruit: NPCManager.Instance?.RecruitFromTemplate(effect.value, recordDay); break;
             case EventEffectType.AddInheritancePreparation:
                 PlayerManager.Instance?.AddInheritancePreparation(effect.amount, actor);
                 break;
@@ -532,7 +535,6 @@ public class EventManager : MonoBehaviour
             case EventSource.Injury: return 0.50f;
             case EventSource.SecretRealm: return 0.40f;
             case EventSource.Alchemy: return 0.25f;
-            case EventSource.FacilityUpgrade: return 0.30f;
             case EventSource.SectDaily: return 0.08f;
             case EventSource.Recruitment:
                 return NPCManager.Instance != null && NPCManager.Instance.GetLivingNPC().Count <= 2 ? 0.50f : 0.05f;
@@ -648,7 +650,7 @@ public class EventManager : MonoBehaviour
             else if (definition.tags.Contains("Recruitment")) definition.sources.Add(EventSource.Recruitment);
             else
             {
-                if (definition.tags.Contains("Cultivation")) { definition.sources.Add(EventSource.Training); definition.sources.Add(EventSource.FacilityUpgrade); }
+                if (definition.tags.Contains("Cultivation")) definition.sources.Add(EventSource.Training);
                 if (definition.tags.Contains("Health")) { definition.sources.Add(EventSource.Injury); definition.sources.Add(EventSource.Recovery); }
                 if (definition.tags.Contains("Adventure")) { definition.sources.Add(EventSource.MissionStart); definition.sources.Add(EventSource.MissionNode); definition.sources.Add(EventSource.MissionComplete); definition.sources.Add(EventSource.SecretRealm); }
                 if (definition.tags.Contains("Relationship")) definition.sources.Add(EventSource.SectDaily);

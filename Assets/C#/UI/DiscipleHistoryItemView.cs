@@ -22,7 +22,17 @@ public sealed class DiscipleHistoryItemView : MonoBehaviour
         typeText.text = snapshot.type;
         headingText.text = snapshot.heading;
         bodyText.text = snapshot.body;
-        typeMarker.color = TypeColor(snapshot.type);
+        Color typeColor = TypeColor(snapshot.type);
+        typeMarker.color = snapshot.isMajor
+            ? Color.Lerp(typeColor, new Color(0.92f, 0.68f, 0.24f, 1f), 0.45f)
+            : typeColor;
+        headingText.color = snapshot.isMajor
+            ? new Color(0.96f, 0.79f, 0.40f, 1f)
+            : new Color(0.86f, 0.84f, 0.74f, 1f);
+        Image background = GetComponent<Image>();
+        if (background != null) background.color = snapshot.isMajor
+            ? new Color(0.13f, 0.105f, 0.055f, 0.98f)
+            : new Color(0.055f, 0.095f, 0.073f, 0.98f);
     }
 
     private static Color TypeColor(string type)

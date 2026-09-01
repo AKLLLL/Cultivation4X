@@ -95,14 +95,15 @@ public class SectVitalityTests
     }
 
     [Test]
-    public void ProtectionArray_ReducesFailureInjuryAndMissionHallCannotUpgrade()
+    public void ProtectionArrayAvailability_ReducesFailureInjuryWithoutUpgradeApi()
     {
-        Assert.AreEqual(3, FacilityRules.FailureInjuryDays(0));
-        Assert.AreEqual(1, FacilityRules.FailureInjuryDays(1));
+        Assert.AreEqual(3, FacilityRules.FailureInjuryDays(false));
+        Assert.AreEqual(1, FacilityRules.FailureInjuryDays(true));
         GameObject go = new GameObject("Player");
         objects.Add(go);
         PlayerManager player = go.AddComponent<PlayerManager>();
-        Assert.IsFalse(player.TryUpgradeFacility(FacilityType.MissionHall).success);
+        player.SetFacilityAvailableForStory(FacilityType.MissionHall, false);
+        Assert.IsFalse(player.HasFacility(FacilityType.MissionHall));
     }
 
     [Test]

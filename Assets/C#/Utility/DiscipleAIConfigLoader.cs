@@ -54,7 +54,8 @@ public static class DiscipleAIConfigLoader
         if (MissionManager.Instance == null) return missing;
         foreach (ActionDefinition action in config.Actions)
         {
-            if (action == null || string.IsNullOrWhiteSpace(action.missionId)) continue;
+            if (action == null || action.executionKind != ActionExecutionKind.AutonomousMission ||
+                string.IsNullOrWhiteSpace(action.missionId)) continue;
             if (MissionManager.Instance.GetMissionData(action.missionId) == null)
                 missing.Add($"{action.id} -> {action.missionId}");
         }
@@ -65,7 +66,9 @@ public static class DiscipleAIConfigLoader
     {
         DiscipleAIConfig config = Load();
         return config.Actions
-            .Where(action => action != null && !string.IsNullOrWhiteSpace(action.missionId))
+            .Where(action => action != null &&
+                             action.executionKind == ActionExecutionKind.AutonomousMission &&
+                             !string.IsNullOrWhiteSpace(action.missionId))
             .Select(action => action.missionId)
             .Distinct()
             .ToList();
@@ -99,8 +102,20 @@ public static class DiscipleAIConfigLoader
                 Debug.LogError("[DiscipleAI] Action 缺少 ID");
                 continue;
             }
-            if (string.IsNullOrWhiteSpace(action.missionId))
-                Debug.LogError($"[DiscipleAI] Action 缺少 missionId: {action.id}");
+            if (action.executionKind == ActionExecutionKind.AutonomousMission)
+            {
+                if (string.IsNullOrWhiteSpace(action.missionId))
+                    Debug.LogError($"[DiscipleAI] Mission Action 缺少 missionId: {action.id}");
+                if (!string.IsNullOrWhiteSpace(action.sectDutyEffectId))
+                    Debug.LogError($"[DiscipleAI] Mission Action 不得配置 sectDutyEffectId: {action.id}");
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(action.sectDutyEffectId))
+                    Debug.LogError($"[DiscipleAI] 宗务 Action 缺少 sectDutyEffectId: {action.id}");
+                if (!string.IsNullOrWhiteSpace(action.missionId))
+                    Debug.LogError($"[DiscipleAI] 宗务 Action 不得配置 missionId: {action.id}");
+            }
             if (action.minIntervalDays < 0)
                 Debug.LogError($"[DiscipleAI] Action minIntervalDays 不能为负: {action.id}");
             if (action.identityIds != null)

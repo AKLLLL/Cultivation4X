@@ -293,7 +293,10 @@ namespace Cultivation4X.WorldMap
                     case WorldMapMarkerKind.SpiritMine:
                     case WorldMapMarkerKind.CaveResidence:
                     case WorldMapMarkerKind.BeastLair:
-                    case WorldMapMarkerKind.Ruin: target = confirmedLocations; break;
+                    case WorldMapMarkerKind.Ruin:
+                    case WorldMapMarkerKind.HerbZonePlanned:
+                    case WorldMapMarkerKind.HerbZoneDeveloping:
+                    case WorldMapMarkerKind.HerbZoneOperational: target = confirmedLocations; break;
                     default: target = locations; break;
                 }
                 Color color = MarkerColor(marker.kind);
@@ -459,6 +462,9 @@ namespace Cultivation4X.WorldMap
                 case WorldMapMarkerKind.SpiritMine: return new Color(0.68f, 0.78f, 0.96f);
                 case WorldMapMarkerKind.BeastLair: return new Color(0.92f, 0.34f, 0.18f);
                 case WorldMapMarkerKind.Ruin: return new Color(0.78f, 0.70f, 0.56f);
+                case WorldMapMarkerKind.HerbZonePlanned: return new Color(0.46f, 0.72f, 0.43f, 0.70f);
+                case WorldMapMarkerKind.HerbZoneDeveloping: return new Color(0.34f, 0.84f, 0.38f, 0.86f);
+                case WorldMapMarkerKind.HerbZoneOperational: return new Color(0.22f, 0.94f, 0.34f, 1f);
                 case WorldMapMarkerKind.EnvironmentHint: return new Color(0.72f, 0.90f, 0.78f, 0.58f);
                 case WorldMapMarkerKind.EnvironmentMoisture: return new Color(0.24f, 0.88f, 0.96f, 0.72f);
                 case WorldMapMarkerKind.EnvironmentMineralVein: return new Color(0.86f, 0.68f, 0.28f, 0.72f);

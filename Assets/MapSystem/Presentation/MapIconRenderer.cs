@@ -101,7 +101,41 @@ namespace Cultivation4X.WorldMap
                     AddWorldLocationIcon(map, location, locationCell);
                 }
             }
+            foreach (SectFunctionalZoneState zone in progress.functionalZones ??
+                         new List<SectFunctionalZoneState>())
+            {
+                if (zone == null || zone.cellIndex < 0 || zone.cellIndex >= map.cells.Length) continue;
+                if (knownCells != null && !knownCells.Contains(zone.cellIndex)) continue;
+                AddFunctionalZoneIcon(map, zone);
+            }
             SetSelectedCell(selectedCellIndex);
+        }
+
+        private void AddFunctionalZoneIcon(WorldMap map, SectFunctionalZoneState zone)
+        {
+            WorldCell cell = map.cells[zone.cellIndex];
+            Vector2 center = HexGeometry.GetCenter(cell);
+            float top = MapPresentationLayer.GetIconHeight(map, cell);
+            GameObject root = new GameObject("FunctionalZone_" + zone.zoneId, typeof(TerrainLabel));
+            root.transform.SetParent(transform, false);
+            Vector3 flatPosition = transform.TransformPoint(new Vector3(center.x, top, center.y));
+            root.transform.position = terrainRenderer != null
+                ? terrainRenderer.CurveWorldPosition(flatPosition)
+                : flatPosition;
+            iconObjects.Add(root);
+            farViewPersistentIcons.Add(root);
+            flatIconPositions.Add(flatPosition);
+            TerrainLabel label = root.GetComponent<TerrainLabel>();
+            string symbol = zone.stage == FunctionalZoneStage.Operational ? "圃" :
+                zone.stage == FunctionalZoneStage.Developing ? "芽" : "植";
+            Color color = zone.stage == FunctionalZoneStage.Operational
+                ? new Color(0.22f, 0.94f, 0.34f, 1f)
+                : zone.stage == FunctionalZoneStage.Developing
+                    ? new Color(0.34f, 0.84f, 0.38f, 0.88f)
+                    : new Color(0.46f, 0.72f, 0.43f, 0.72f);
+            label.Set(symbol, color);
+            label.SetCharacterSize(0.17f);
+            label.SetYAxisBillboard(true);
         }
 
         private static HashSet<int> CollectVisibleLocationCells(WorldMap map,

@@ -7182,17 +7182,6 @@ MonoBehaviour:
     foundedDay: 0
     influenceRadius: 0
     reputation: 0
-    trainingRoomLevel: 1
-    missionHallLevel: 1
-    infirmaryLevel: 1
-    warehouseLevel: 1
-    secretRealmLevel: 1
-    alchemyRoomLevel: 1
-    protectionArrayLevel: 1
-    inheritanceChamberLevel: 1
-    forgeRoomLevel: 1
-    formationPlatformLevel: 1
-    sectDutyWorkCredit: 0
     monthlyPlanTemplates: []
     founding:
       initialized: 1

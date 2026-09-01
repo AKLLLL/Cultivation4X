@@ -4,7 +4,6 @@
   "description": "弟子利用自由时间研读宗门传承，只提高个人功法掌握度。",
   "missionType": "Cultivation",
   "missionRank": 1,
-  "requiredFacilityLevel": 0,
   "isPlayerAssignable": false,
 
   "itemCosts": [],

@@ -18,6 +18,7 @@ public sealed class DiscipleListItemSnapshot
     public string name;
     public string realm;
     public string state;
+    public string activity;
     public float naqiProgress;
 }
 
@@ -26,6 +27,7 @@ public sealed class DiscipleHistoryItemSnapshot
     public string type;
     public string heading;
     public string body;
+    public bool isMajor;
 }
 
 public sealed class DiscipleCenterSnapshot
@@ -50,6 +52,11 @@ public sealed class DiscipleCenterSnapshot
     public string abilities;
     public string relationships;
     public string history;
+    public string growth;
+    public string growthPeriodLabel;
+    public int growthMonthIndex;
+    public bool canShowPreviousGrowth;
+    public bool canShowNextGrowth;
     public string observation;
     public string currentAction;
     public string currentPlan;
@@ -61,15 +68,15 @@ public sealed class DiscipleCenterSnapshot
 
 public static class DiscipleCenterSnapshotBuilder
 {
-    public static DiscipleCenterSnapshot Build(string selectedCharacterId = null)
+    public static DiscipleCenterSnapshot Build(string selectedCharacterId = null, int? growthMonthIndex = null)
     {
         IReadOnlyList<NPCRuntime> roster = NPCManager.Instance?.GetAllNPC();
         int day = TimeManager.Instance?.ActiveDay ?? 1;
-        return Build(roster, selectedCharacterId, day);
+        return Build(roster, selectedCharacterId, day, growthMonthIndex);
     }
 
     public static DiscipleCenterSnapshot Build(IReadOnlyList<NPCRuntime> roster,
-        string selectedCharacterId, int day)
+        string selectedCharacterId, int day, int? growthMonthIndex = null)
     {
         DiscipleCenterSnapshot snapshot = new DiscipleCenterSnapshot();
         List<NPCRuntime> living = (roster ?? Array.Empty<NPCRuntime>())
@@ -79,12 +86,15 @@ public static class DiscipleCenterSnapshotBuilder
 
         foreach (NPCRuntime npc in living)
         {
+            DiscipleCurrentState current = DiscipleCurrentStateBuilder.Build(npc);
             snapshot.disciples.Add(new DiscipleListItemSnapshot
             {
                 characterId = npc.CharacterId,
                 name = DisplayName(npc),
-                realm = Realm(npc),
+                realm = $"{Realm(npc)} · 纳气 {npc.Character.naqiProgress:0}%",
                 state = State(npc.State),
+                activity = current == null ? "自由 · 自由活动" :
+                    $"{DiscipleCurrentStateBuilder.ActivityName(current.actualActivity)} · {current.currentActionDisplayName}",
                 naqiProgress = npc.Character.naqiProgress
             });
         }
@@ -116,12 +126,57 @@ public static class DiscipleCenterSnapshotBuilder
         snapshot.abilities = BuildAbilities(selected);
         snapshot.relationships = BuildRelationships(character.relationships);
         snapshot.historyItems.AddRange(BuildHistory(character.lifeRecords));
-        snapshot.history = snapshot.historyItems.Count == 0 ? "暂无人生履历。" :
+        snapshot.history = snapshot.historyItems.Count == 0 ? "暂无关键经历。" :
             string.Join("\n\n", snapshot.historyItems.Select(item => $"{item.heading}\n{item.body}"));
+        BuildGrowth(snapshot, character, growthMonthIndex);
         BuildObservation(selected, day, out snapshot.currentAction, out snapshot.currentPlan,
             out snapshot.nextPlan);
         snapshot.observation = $"{snapshot.currentAction}\n\n{snapshot.currentPlan}\n\n{snapshot.nextPlan}";
         return snapshot;
+    }
+
+    private static void BuildGrowth(DiscipleCenterSnapshot snapshot, CharacterState character,
+        int? requestedMonthIndex)
+    {
+        PlayerData player = PlayerManager.Instance?.playerData;
+        GrowthFeedbackRules.Normalize(player);
+        SectGrowthFeedbackState feedback = player?.growthFeedback;
+        int currentMonth = feedback?.activeMonthIndex ?? MonthlyPlanRules.MonthIndex(TimeManager.Instance?.ActiveDay ?? 1);
+        List<int> available = (feedback?.reports ?? new List<SectMonthlyReport>())
+            .Select(item => item.monthIndex).Append(currentMonth).Distinct().OrderBy(item => item).ToList();
+        int month = requestedMonthIndex.HasValue && available.Contains(requestedMonthIndex.Value)
+            ? requestedMonthIndex.Value : currentMonth;
+        DiscipleMonthlyStats stats = month == currentMonth
+            ? feedback?.currentStats?.FirstOrDefault(item => item.discipleId == character.characterId)
+            : feedback?.reports?.FirstOrDefault(item => item.monthIndex == month)?.disciples?
+                .FirstOrDefault(item => item.discipleId == character.characterId);
+        snapshot.growthMonthIndex = month;
+        int availableIndex = available.IndexOf(month);
+        snapshot.canShowPreviousGrowth = availableIndex > 0;
+        snapshot.canShowNextGrowth = availableIndex >= 0 && availableIndex < available.Count - 1;
+        GameDateTime date = GameCalendarRules.FromActiveDay((month - 1) * GameCalendarRules.DaysPerMonth + 1, 0f);
+        snapshot.growthPeriodLabel = month == currentMonth
+            ? $"第{date.year}年·第{date.month}月（本月已结算）"
+            : $"第{date.year}年·第{date.month}月";
+        snapshot.growth = GrowthText(stats);
+    }
+
+    private static string GrowthText(DiscipleMonthlyStats stats)
+    {
+        if (stats == null || stats.settledDays <= 0) return "本月尚无已结算成长记录。";
+        string actions = stats.actionCounts == null || stats.actionCounts.Count == 0 ? "无" :
+            string.Join("\n", stats.actionCounts.OrderByDescending(item => item.count)
+                .ThenBy(item => item.actionId, StringComparer.Ordinal).Take(5)
+                .Select(item => $"{item.displayName ?? item.actionId} ×{item.count}"));
+        int occupied = stats.missionDays + stats.recoveryDays;
+        string evidence = $"安排修炼 {stats.plannedTrainingDays} 日，实际完成 {stats.actualTrainingDays} 日" +
+            (occupied > 0 ? $"；Mission或休养占用 {occupied} 日" : "；未记录Mission或休养占用") + "。";
+        return $"计划日数\n修炼 {stats.plannedTrainingDays}　宗务 {stats.plannedSectDutyDays}　自由 {stats.plannedFreeDays}\n\n" +
+               $"实际日数\n修炼 {stats.actualTrainingDays}　宗务 {stats.actualSectDutyDays}　自由 {stats.actualFreeDays}　" +
+               $"Mission {stats.missionDays}　休养 {stats.recoveryDays}\n\n" +
+               $"累计成长\n纳气 +{stats.naqiGain:0.0}%　灵气控制 +{stats.auraControlGain:0.0}　" +
+               $"功法理解 +{stats.techniqueProgressGain:0.0}　疲劳峰值 {stats.maxFatigue:0.0}\n\n" +
+               $"主要行动\n{actions}\n\n结算证据\n{evidence}";
     }
 
     private static string BuildOverview(NPCRuntime npc)
@@ -165,29 +220,48 @@ public static class DiscipleCenterSnapshotBuilder
     private static List<DiscipleHistoryItemSnapshot> BuildHistory(IEnumerable<LifeRecord> records)
     {
         return (records ?? Enumerable.Empty<LifeRecord>())
-            .Where(item => item != null)
+            .Where(item => item != null && item.importance != ExperienceImportance.Internal)
             .Select((item, index) => new { item, index })
             .OrderByDescending(pair => pair.item.day)
             .ThenByDescending(pair => pair.index)
             .Select(pair => new DiscipleHistoryItemSnapshot
             {
                 type = LifeCategory(pair.item.category),
-                heading = $"第 {pair.item.day} 天 · {LifeCategory(pair.item.category)}",
-                body = string.IsNullOrWhiteSpace(pair.item.text) ? "无详细记录" : pair.item.text
+                heading = $"{ExperienceDate(pair.item.day)} · {(pair.item.importance == ExperienceImportance.Major ? "重要" : "经历")}" +
+                          $" · {LifeCategory(pair.item.category)}",
+                body = string.IsNullOrWhiteSpace(ExperienceRecordRules.Format(pair.item))
+                    ? "无详细记录" : ExperienceRecordRules.Format(pair.item),
+                isMajor = pair.item.importance == ExperienceImportance.Major
             })
             .ToList();
+    }
+
+    private static string ExperienceDate(int worldDay)
+    {
+        if (worldDay <= 0) return "立宗前";
+        GameDateTime date = GameCalendarRules.FromActiveDay(worldDay, 0f);
+        return $"第{date.year}年·第{date.month}月·{ChineseDay(date.day)}";
+    }
+
+    private static string ChineseDay(int day)
+    {
+        string[] digits = { "零", "一", "二", "三", "四", "五", "六", "七", "八", "九" };
+        if (day <= 0) return "月初";
+        if (day < 10) return $"初{digits[day]}";
+        if (day == 10) return "初十";
+        if (day < 20) return $"十{digits[day - 10]}";
+        if (day == 20) return "二十";
+        if (day < 30) return $"二十{digits[day - 20]}";
+        return "三十";
     }
 
     private static void BuildObservation(NPCRuntime npc, int day, out string currentAction,
         out string currentPlan, out string nextPlan)
     {
-        Mission mission = npc.CurrentMission;
-        string scheduledAction = TimeManager.Instance?.GetCurrentActivityLabel(npc.CharacterId);
-        currentAction = string.IsNullOrWhiteSpace(scheduledAction)
-            ? (mission?.Data == null
-                ? $"{State(npc.State)}（剩余 {Math.Max(0, npc.StateRemainDays)} 天）"
-                : $"{mission.Data.name}（剩余 {mission.RemainingDays} 天）")
-            : $"当前时段：{scheduledAction}";
+        DiscipleCurrentState current = DiscipleCurrentStateBuilder.Build(npc);
+        currentAction = current == null ? "暂无当前行动" :
+            $"今日计划：{ActivityName(current.scheduledActivity)}\n" +
+            $"当前实际行动：{DiscipleCurrentStateBuilder.ActivityName(current.actualActivity)} · {current.currentActionDisplayName}";
         MonthlyPlanTemplate template = MonthlyPlanRules.GetTemplateFor(npc.CharacterId);
         currentPlan = template == null ? "未绑定计划（全部自由）" : $"{template.name}\n{Plan(template)}";
         nextPlan = $"明日安排\n{ActivityName(MonthlyPlanRules.ActivityFor(npc, day + 1))}";
@@ -290,6 +364,11 @@ public static class DiscipleCenterSnapshotBuilder
             case "Decision": return "决策";
             case "Event": return "事件";
             case "Relationship": return "关系";
+            case "Technique": return "功法";
+            case "Cultivation": return "修炼";
+            case "Plan": return "计划";
+            case "Fatigue": return "状态";
+            case "Department": return "部门";
             case "Breakthrough": return "突破";
             case "Injury": return "受伤";
             case "Death": return "生死";

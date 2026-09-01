@@ -235,7 +235,7 @@ public static class ExternalThreatRules
             power = CharacterCapabilityRules.CalculateCombatPower(item, 0)
         }).ToList();
         float preparation = plan == CombatPlanType.SimpleDefense
-            ? Mathf.Min(1.35f, 1.2f + 0.05f * PlayerManager.Instance.GetFacilityLevel(FacilityType.ProtectionArray))
+            ? (PlayerManager.Instance.HasFacility(FacilityType.ProtectionArray) ? 1.25f : 1.2f)
             : 1f;
         record.combat = CombatResolver.Resolve(new CombatRequest
         {
@@ -261,7 +261,7 @@ public static class ExternalThreatRules
         List<NPCRuntime> party = NormalizeParty(participants);
         if (definition == null || party.Count == 0 || plan == CombatPlanType.RetreatToCave) return null;
         float preparation = plan == CombatPlanType.SimpleDefense
-            ? Mathf.Min(1.35f, 1.2f + 0.05f * (PlayerManager.Instance?.GetFacilityLevel(FacilityType.ProtectionArray) ?? 0))
+            ? (PlayerManager.Instance?.HasFacility(FacilityType.ProtectionArray) == true ? 1.25f : 1.2f)
             : 1f;
         return CombatResolver.Resolve(new CombatRequest
         {

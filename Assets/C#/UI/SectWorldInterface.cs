@@ -21,6 +21,7 @@ public sealed class SectWorldInterface : MonoBehaviour
     private bool sectManagerNextRight;
     private readonly List<Button> sectManagerTabButtons = new List<Button>();
     private int sectManagerTabIndex;
+    private string pendingDepartmentDeletionId;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -73,12 +74,12 @@ public sealed class SectWorldInterface : MonoBehaviour
         sectManagerTabIndex = 0;
 
         RuntimeUIFactory.Text(layoutPanel, $"{sect.sectName} · 宗门管理", 30, 48);
-        RectTransform tabBar = RuntimeUIFactory.TabBar(layoutPanel, "SectManagerTabs", 44);
-        string[] tabs = { "宗门概况", "弟子", "建设", "资源", "事务" };
+        RectTransform tabBar = RuntimeUIFactory.CompactTabBar(layoutPanel, "SectManagerTabs");
+        string[] tabs = { "宗门概况", "弟子", "功能区", "部门", "资源", "事务" };
         for (int index = 0; index < tabs.Length; index++)
         {
             int captured = index;
-            Button button = RuntimeUIFactory.TabButton(tabBar, tabs[index], index == 0);
+            Button button = RuntimeUIFactory.CompactTabButton(tabBar, tabs[index], index == 0);
             button.onClick.AddListener(() => SelectSectManagerTab(captured));
             sectManagerTabButtons.Add(button);
         }
@@ -94,22 +95,23 @@ public sealed class SectWorldInterface : MonoBehaviour
         sectManagerTabIndex = index;
         for (int i = 0; i < sectManagerTabButtons.Count; i++)
             sectManagerTabButtons[i].GetComponent<Image>().color = i == index
-                ? new Color(0.55f, 0.36f, 0.13f, 1f)
-                : new Color(0.20f, 0.17f, 0.13f, 1f);
+                ? UIComponentStyles.TabSelected
+                : UIComponentStyles.TabNormal;
         ShowSectManagerTab(index);
     }
 
     private void ShowSectManagerTab(int index)
     {
         if (sectManagerContent == null) return;
-        bool twoColumns = index != 1;
-        RebuildSectManagerColumns(twoColumns);
+        if (index == 2 || index == 3) RebuildSectOrganizationBody();
+        else RebuildSectManagerColumns(index != 1);
         switch (index)
         {
             case 0: ShowSectOverview(); break;
             case 1: ShowSectDisciples(); break;
-            case 2: ShowSectConstruction(); break;
-            case 3: ShowSectResources(); break;
+            case 2: ShowFunctionalZones(); break;
+            case 3: ShowDepartments(); break;
+            case 4: ShowSectResources(); break;
             default: ShowSectAffairs(); break;
         }
     }
@@ -144,6 +146,16 @@ public sealed class SectWorldInterface : MonoBehaviour
         AddSectInfoRow("基础材料", materials.ToString());
         AddSectInfoRow("声望", sect.reputation.ToString());
         AddSectInfoRow("影响范围", $"核心{core}　影响{influence}　外缘{outer}");
+        Button monthlyReport = AddSectButton("宗门月报", 46);
+        monthlyReport.interactable = GrowthFeedbackRules.LatestReport(sect) != null;
+        monthlyReport.onClick.AddListener(() =>
+        {
+            SectMonthlyReport latest = GrowthFeedbackRules.LatestReport(PlayerManager.Instance?.playerData);
+            bool unread = TimeManager.Instance?.UnreadDaySettlement?.isMonthEnd == true &&
+                TimeManager.Instance.UnreadDaySettlement.monthIndex == latest?.monthIndex;
+            UIManager.Instance?.OpenWindow(UIWindowId.MonthlyReport,
+                new MonthlyReportContext(latest?.monthIndex, unread));
+        });
     }
 
     private void ShowSectDisciples()
@@ -167,34 +179,60 @@ public sealed class SectWorldInterface : MonoBehaviour
         AddSectInfoText("点击弟子进入已有弟子详情。", 13);
     }
 
-    private void ShowSectConstruction()
+    private void ShowFunctionalZones()
     {
-        AddSectInfoText("已有建筑", 16);
-        AddBuildingRow("藏经阁", PlayerManager.Instance == null
-            ? 0 : PlayerManager.Instance.GetFacilityLevel(FacilityType.InheritanceChamber));
-        AddBuildingRow("炼丹房", PlayerManager.Instance == null
-            ? 0 : PlayerManager.Instance.GetFacilityLevel(FacilityType.AlchemyRoom));
-        AddBuildingRow("修炼室", PlayerManager.Instance == null
-            ? 0 : PlayerManager.Instance.GetFacilityLevel(FacilityType.TrainingRoom));
-        AddBuildingRow("仓库", PlayerManager.Instance == null
-            ? 0 : PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse));
-        AddBuildingRow("任务堂", PlayerManager.Instance == null
-            ? 0 : PlayerManager.Instance.GetFacilityLevel(FacilityType.MissionHall));
+        WorldMap map = WorldMapSession.Current;
+        WorldMapProgressState progress = WorldMapSession.Progress;
+        List<SectFunctionalZoneState> zones = progress?.functionalZones?
+            .Where(zone => zone != null).OrderBy(zone => zone.cellIndex).ToList()
+            ?? new List<SectFunctionalZoneState>();
+        AddSectInfoText("灵植区", 18);
+        AddSectInfoText("从世界地图普通格的“行动”页规划。阶段进度来自弟子真实宗务行动。", 13);
+        if (zones.Count == 0)
+        {
+            AddSectInfoText("尚未规划功能区。", 15);
+        }
+        foreach (SectFunctionalZoneState zone in zones)
+        {
+            WorldCell cell = map?.cells != null && zone.cellIndex >= 0 && zone.cellIndex < map.cells.Length
+                ? map.cells[zone.cellIndex] : null;
+            SectDepartmentState department = SectOrganizationRules.Get(
+                PlayerManager.Instance?.playerData, zone.assignedDepartmentId);
+            Button locate = AddSectButton(
+                $"{SectFunctionalZoneRules.DisplayName(map, zone)}　{SectFunctionalZoneRules.StageName(zone.stage)}\n" +
+                $"{SectFunctionalZoneRules.ProgressText(zone)}　适宜度：{SectFunctionalZoneRules.SuitabilityName(cell)} " +
+                $"×{SectFunctionalZoneRules.SuitabilityMultiplier(cell):0.0}　负责：{department?.name ?? "未绑定"}", 64);
+            int capturedCell = zone.cellIndex;
+            locate.onClick.AddListener(() => LocateFunctionalZone(capturedCell));
+        }
 
-        AddSectInfoText("可建设", 16);
-        Button future = AddSectButton(
-            "药园（未开放）\n需要：基础材料 20　灵石 10", 52);
-        future.interactable = false;
+        AddSectInfoText("已开放宗门功能", 18);
+        foreach (FacilityType facility in System.Enum.GetValues(typeof(FacilityType)))
+        {
+            if (facility == FacilityType.SecretRealm) continue;
+            AddFacilityStateRow(facility);
+        }
+        AddFacilityActionButtons();
+    }
 
-        Button upgrade = AddSectButton( "设施升级（仓库/修炼室/秘境/炼丹房）", 46);
-        upgrade.onClick.AddListener(() => FindRuntime<SectDevelopmentPanel>()?.OpenFromSectLayout());
+    private void ShowDepartments()
+    {
+        PlayerData player = PlayerManager.Instance?.playerData;
+        if (player == null) return;
+        if (player.departments == null) player.departments = new List<SectDepartmentState>();
+        AddSectInfoText("部门只提高弟子响应本部门区域的倾向，不会独占功能区。", 14);
+        if (player.departments.Count == 0) AddSectInfoText("尚未创建部门。", 15);
+        foreach (SectDepartmentState department in player.departments.Where(item => item != null).ToList())
+            AddDepartmentEditor(player, department);
 
-        Button scripture = AddSectButton( "藏经阁（功法研究）", 44);
-        scripture.onClick.AddListener(OpenScriptureSummary);
-        Button alchemy = AddSectButton( "炼丹房（炼制丹药）", 44);
-        alchemy.onClick.AddListener(() => FindRuntime<AlchemyPanel>()?.OpenFromSectLayout());
-        Button training = AddSectButton( "修炼室（安排修炼）", 44);
-        training.onClick.AddListener(OpenTrainingSummary);
+        string suggestedName = NextDepartmentName(player);
+        Button create = AddSectButton($"创建“{suggestedName}”", 46);
+        create.onClick.AddListener(() =>
+        {
+            if (!SectOrganizationRules.TryCreate(player, suggestedName, out _, out string reason))
+                Debug.LogWarning(reason);
+            PersistSectOrganization();
+        });
     }
 
     private void ShowSectResources()
@@ -210,10 +248,17 @@ public sealed class SectWorldInterface : MonoBehaviour
                 : $"{WarehouseManager.Instance.GetUsedSlotCount()}/{WarehouseManager.Instance.GetCapacity()}");
         AddSectInfoRow("丹药", CountItemsByType(ItemType.Pill).ToString());
         AddSectInfoRow("法宝", CountItemsByType(ItemType.Weapon).ToString());
+        List<SectFunctionalZoneState> zones = WorldMapSession.Progress?.functionalZones?
+            .Where(zone => zone != null).ToList() ?? new List<SectFunctionalZoneState>();
+        AddSectInfoRow("灵植区", zones.Count.ToString());
+        AddSectInfoRow("药圃", zones.Count(zone => zone.stage == FunctionalZoneStage.Operational).ToString());
+        AddSectInfoRow("青灵草",
+            (WarehouseManager.Instance?.GetItemCount(SectFunctionalZoneRules.HerbItemId) ?? 0).ToString());
 
         AddSectInfoText("生产", 16);
-        AddSectInfoText("药园：未建设", 13);
-        AddSectInfoText("炼丹房：通过宗门建设/炼丹房开放", 13);
+        AddSectInfoText("灵植区由宗务行动推进；药圃照料充足后，弟子可执行采收。", 13);
+        AddSectInfoText(PlayerManager.Instance?.HasFacility(FacilityType.AlchemyRoom) == true
+            ? "炼丹房：已开放" : "炼丹房：未开放", 13);
         Button warehouse = AddSectButton( "打开仓库", 46);
         warehouse.onClick.AddListener(OpenWarehouse);
     }
@@ -313,19 +358,248 @@ public sealed class SectWorldInterface : MonoBehaviour
         RuntimeUIFactory.Text(target, textValue, fontSize, 30);
     }
 
-    private void AddBuildingRow(string name, int level)
-    {
-        RectTransform target = NextSectColumn();
-        if (target == null) return;
-        RuntimeUIFactory.Text(target,
-            level > 0 ? $"{name}　等级{level}" : $"{name}　未建设", 15, 32);
-    }
-
     private Button AddSectButton(string label, float height = 44)
     {
         RectTransform target = NextSectColumn();
         if (target == null) return null;
         return RuntimeUIFactory.Button(target, label, height);
+    }
+
+    private void RebuildSectOrganizationBody()
+    {
+        if (sectManagerContent == null) return;
+        Clear(sectManagerContent);
+        GameObject prefab = Resources.Load<GameObject>("Prefab/UI/SectOrganizationBody");
+        SectOrganizationBodyView view = prefab == null ? null :
+            Instantiate(prefab, sectManagerContent).GetComponent<SectOrganizationBodyView>();
+        if (view?.Content != null)
+        {
+            sectManagerLeftColumn = view.Content;
+            sectManagerRightColumn = null;
+            sectManagerNextRight = false;
+            return;
+        }
+        GameDebugConfig.LogWorldMapWarning("缺少 SectOrganizationBody Prefab，使用兼容布局");
+        sectManagerLeftColumn = CreateSectManagerColumn(sectManagerContent);
+        sectManagerRightColumn = null;
+        sectManagerNextRight = false;
+    }
+
+    private void AddFacilityStateRow(FacilityType facility)
+    {
+        AddSectInfoRow(FacilityName(facility),
+            PlayerManager.Instance?.HasFacility(facility) == true ? "已开放" : "未开放");
+    }
+
+    private void AddFacilityActionButtons()
+    {
+        Button scripture = AddSectButton("藏经阁（功法研究）", 44);
+        scripture.interactable = PlayerManager.Instance?.HasFacility(FacilityType.InheritanceChamber) == true;
+        scripture.onClick.AddListener(OpenScriptureSummary);
+        Button alchemy = AddSectButton("炼丹房（炼制丹药）", 44);
+        alchemy.interactable = PlayerManager.Instance?.HasFacility(FacilityType.AlchemyRoom) == true;
+        alchemy.onClick.AddListener(() => FindRuntime<AlchemyPanel>()?.OpenFromSectLayout());
+        Button training = AddSectButton("修炼室（安排修炼）", 44);
+        training.interactable = PlayerManager.Instance?.HasFacility(FacilityType.TrainingRoom) == true;
+        training.onClick.AddListener(OpenTrainingSummary);
+    }
+
+    private void AddDepartmentEditor(PlayerData player, SectDepartmentState department)
+    {
+        List<NPCRuntime> living = NPCManager.Instance?.GetAllNPC()
+            .Where(npc => npc?.Character?.IsAlive == true)
+            .OrderBy(npc => npc.CharacterId, System.StringComparer.Ordinal).ToList()
+            ?? new List<NPCRuntime>();
+        List<string> livingIds = living.Select(npc => npc.CharacterId).ToList();
+        string leaderName = living.FirstOrDefault(npc => npc.CharacterId == department.leaderDiscipleId)
+            ?.Character?.displayName ?? "未设置";
+        int zoneCount = WorldMapSession.Progress?.functionalZones?.Count(zone =>
+            zone?.assignedDepartmentId == department.departmentId) ?? 0;
+        AddSectInfoText($"{department.name}　成员{department.memberDiscipleIds?.Count ?? 0}　负责区域{zoneCount}\n负责人：{leaderName}", 17);
+
+        TMP_InputField nameInput = CreateDepartmentNameInput(NextSectColumn(), department.name);
+        Button rename = AddSectButton("保存部门名称", 42);
+        rename.onClick.AddListener(() =>
+        {
+            if (!SectOrganizationRules.TryRename(player, department.departmentId,
+                    nameInput.text, out string reason)) Debug.LogWarning(reason);
+            PersistSectOrganization();
+        });
+
+        AddSectInfoText("成员", 15);
+        foreach (NPCRuntime npc in living)
+        {
+            bool belongsHere = department.memberDiscipleIds?.Contains(npc.CharacterId) == true;
+            SectDepartmentState other = SectOrganizationRules.DepartmentFor(player, npc.CharacterId);
+            Button member = AddSectButton(
+                belongsHere ? $"移出　{npc.Character.displayName}" : $"加入　{npc.Character.displayName}", 40);
+            member.interactable = other == null || other == department;
+            string discipleId = npc.CharacterId;
+            member.onClick.AddListener(() =>
+            {
+                List<string> next = new List<string>(department.memberDiscipleIds ?? new List<string>());
+                bool wasMember = next.Contains(discipleId);
+                bool wasLeader = department.leaderDiscipleId == discipleId;
+                if (wasMember) next.Remove(discipleId); else next.Add(discipleId);
+                if (!SectOrganizationRules.TrySetMembers(player, department.departmentId,
+                        next, livingIds, out string reason)) Debug.LogWarning(reason);
+                else
+                {
+                    CharacterState character = NPCManager.Instance?.GetRuntime(discipleId)?.Character;
+                    if (wasLeader && wasMember)
+                        ExperienceGenerator.WriteDepartmentChange(character, CurrentRecordDay(), department,
+                            "department_leader_ended");
+                    ExperienceGenerator.WriteDepartmentChange(character, CurrentRecordDay(), department,
+                        wasMember ? "department_left" : "department_joined");
+                }
+                PersistSectOrganization();
+            });
+        }
+
+        if (department.memberDiscipleIds?.Count > 0)
+        {
+            AddSectInfoText("负责人", 15);
+            foreach (string memberId in department.memberDiscipleIds.ToList())
+            {
+                NPCRuntime npc = living.FirstOrDefault(item => item.CharacterId == memberId);
+                if (npc == null) continue;
+                Button leader = AddSectButton(
+                    department.leaderDiscipleId == memberId
+                        ? $"取消负责人　{npc.Character.displayName}"
+                        : $"设为负责人　{npc.Character.displayName}", 40);
+                leader.onClick.AddListener(() =>
+                {
+                    string previous = department.leaderDiscipleId;
+                    string next = department.leaderDiscipleId == memberId ? null : memberId;
+                    if (!SectOrganizationRules.TrySetLeader(player, department.departmentId,
+                            next, out string reason)) Debug.LogWarning(reason);
+                    else
+                    {
+                        if (!string.IsNullOrWhiteSpace(previous) && previous != next)
+                            ExperienceGenerator.WriteDepartmentChange(
+                                NPCManager.Instance?.GetRuntime(previous)?.Character, CurrentRecordDay(), department,
+                                "department_leader_ended");
+                        if (!string.IsNullOrWhiteSpace(next) && previous != next)
+                            ExperienceGenerator.WriteDepartmentChange(
+                                NPCManager.Instance?.GetRuntime(next)?.Character, CurrentRecordDay(), department,
+                                "department_leader_started");
+                    }
+                    PersistSectOrganization();
+                });
+            }
+        }
+
+        List<SectFunctionalZoneState> zones = WorldMapSession.Progress?.functionalZones?
+            .Where(zone => zone != null).OrderBy(zone => zone.cellIndex).ToList()
+            ?? new List<SectFunctionalZoneState>();
+        if (zones.Count > 0)
+        {
+            AddSectInfoText("负责区域", 15);
+            foreach (SectFunctionalZoneState zone in zones)
+            {
+                bool assignedHere = zone.assignedDepartmentId == department.departmentId;
+                bool assignedElsewhere = !string.IsNullOrWhiteSpace(zone.assignedDepartmentId) && !assignedHere;
+                Button bind = AddSectButton(
+                    $"{(assignedHere ? "解除" : "绑定")}　{SectFunctionalZoneRules.DisplayName(WorldMapSession.Current, zone)}", 40);
+                bind.interactable = !assignedElsewhere;
+                bind.onClick.AddListener(() =>
+                {
+                    string reason;
+                    bool success = assignedHere
+                        ? SectOrganizationRules.TryUnassignZone(WorldMapSession.Progress, zone.zoneId, out reason)
+                        : SectOrganizationRules.TryAssignZone(player, WorldMapSession.Progress,
+                            department.departmentId, zone.zoneId, out reason);
+                    if (!success) Debug.LogWarning(reason);
+                    PersistSectOrganization();
+                });
+            }
+        }
+
+        bool confirming = pendingDepartmentDeletionId == department.departmentId;
+        Button delete = AddSectButton(confirming
+            ? "确认删除部门（区域将解除绑定）" : "删除部门", 42);
+        delete.onClick.AddListener(() =>
+        {
+            if (!confirming)
+            {
+                pendingDepartmentDeletionId = department.departmentId;
+                ShowSectManagerTab(sectManagerTabIndex);
+                return;
+            }
+            List<string> formerMembers = new List<string>(department.memberDiscipleIds ?? new List<string>());
+            if (!SectOrganizationRules.TryDelete(player, WorldMapSession.Progress,
+                    department.departmentId, out string reason)) Debug.LogWarning(reason);
+            else
+                foreach (string memberId in formerMembers)
+                    ExperienceGenerator.WriteDepartmentChange(
+                        NPCManager.Instance?.GetRuntime(memberId)?.Character, CurrentRecordDay(), department,
+                        "department_left");
+            pendingDepartmentDeletionId = null;
+            PersistSectOrganization();
+        });
+    }
+
+    private static TMP_InputField CreateDepartmentNameInput(Transform parent, string value)
+    {
+        GameObject root = new GameObject("DepartmentNameInput", typeof(RectTransform), typeof(Image),
+            typeof(TMP_InputField), typeof(LayoutElement));
+        root.transform.SetParent(parent, false);
+        root.GetComponent<Image>().color = UIComponentStyles.InfoCard;
+        root.GetComponent<LayoutElement>().preferredHeight = 44f;
+        TMP_Text text = RuntimeUIFactory.Text(root.transform, value, 18, 42);
+        text.rectTransform.anchorMin = Vector2.zero;
+        text.rectTransform.anchorMax = Vector2.one;
+        text.rectTransform.offsetMin = new Vector2(10f, 3f);
+        text.rectTransform.offsetMax = new Vector2(-10f, -3f);
+        text.alignment = TextAlignmentOptions.MidlineLeft;
+        TMP_InputField input = root.GetComponent<TMP_InputField>();
+        input.textComponent = text;
+        input.textViewport = root.GetComponent<RectTransform>();
+        input.characterLimit = 12;
+        input.text = value;
+        return input;
+    }
+
+    private void PersistSectOrganization()
+    {
+        WorldMapSession.NotifyProgressChanged();
+        SaveManager.Instance?.AutoSave();
+        ShowSectManagerTab(sectManagerTabIndex);
+    }
+
+    private static int CurrentRecordDay() => TimeManager.Instance?.ActiveDay ?? 0;
+
+    private static string NextDepartmentName(PlayerData player)
+    {
+        if (player?.departments?.Any(item => item?.name == "百草堂") != true) return "百草堂";
+        int sequence = 2;
+        string candidate;
+        do candidate = $"百草堂{sequence++}";
+        while (player.departments.Any(item => item?.name == candidate));
+        return candidate;
+    }
+
+    private void LocateFunctionalZone(int cellIndex)
+    {
+        if (UIManager.Instance != null) UIManager.Instance.ClosePanel(layoutPanel.gameObject);
+        else layoutPanel.gameObject.SetActive(false);
+        FindObjectOfType<WorldMap3DController>()?.SelectCellFromUi(cellIndex);
+    }
+
+    private static string FacilityName(FacilityType type)
+    {
+        switch (type)
+        {
+            case FacilityType.MissionHall: return "任务堂";
+            case FacilityType.Warehouse: return "仓库";
+            case FacilityType.TrainingRoom: return "修炼室";
+            case FacilityType.AlchemyRoom: return "炼丹房";
+            case FacilityType.InheritanceChamber: return "传承石室";
+            case FacilityType.ForgeRoom: return "炼器台";
+            case FacilityType.FormationPlatform: return "阵法台";
+            case FacilityType.ProtectionArray: return "护山阵";
+            default: return type.ToString();
+        }
     }
 
     private int CountItemsByType(ItemType type)
@@ -389,14 +663,13 @@ public sealed class SectWorldInterface : MonoBehaviour
 
     private void OpenTrainingSummary()
     {
-        PlayerData sect = PlayerManager.Instance?.playerData;
-        int level = PlayerManager.Instance == null
-            ? 0
-            : PlayerManager.Instance.GetFacilityLevel(FacilityType.TrainingRoom);
+        bool available = PlayerManager.Instance?.HasFacility(FacilityType.TrainingRoom) == true;
         Clear(summaryPanel);
         RuntimeUIFactory.Text(summaryPanel, "修炼室", 30, 48);
         RuntimeUIFactory.Text(summaryPanel,
-            $"设施等级：Lv.{level}\n当前效果：纳气效率 x{(level <= 0 ? 0.8f : level == 1 ? 1f : level == 2 ? 1.1f : 1.2f):0.0}\n存活弟子：{LivingDiscipleCount()}",
+            $"功能状态：{(available ? "已开放" : "未开放")}\n" +
+            $"当前效果：纳气效率 x{FacilityRules.TrainingMultiplier(available):0.0}\n" +
+            $"存活弟子：{LivingDiscipleCount()}",
             19, 86);
         AddEntry(summaryPanel, "查看弟子", OpenSectDisciplesPage);
         AddCloseButton(summaryPanel);

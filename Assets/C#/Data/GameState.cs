@@ -5,9 +5,9 @@ using Cultivation4X.WorldMap;
 public static class SaveDataVersion
 {
     /// <summary>
-    /// 22：加入自动世界时钟、小时、速度与当日锁定日程，不兼容旧档。
+    /// 25：加入阶段性修行叙事、经历保留策略和月度叙事幂等状态，不兼容旧档。
     /// </summary>
-    public const int Current = 22;
+    public const int Current = 25;
 }
 
 [Serializable]

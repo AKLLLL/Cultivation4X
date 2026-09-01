@@ -3,7 +3,7 @@ using UnityEngine;
 
 public enum UIWindowLayer { HUD, Screen, Modal, Overlay }
 public enum UIEscapePolicy { Allowed, Blocked }
-public enum UIWindowId { DiscipleCenter, MonthlyPlan }
+public enum UIWindowId { DiscipleCenter, MonthlyPlan, MonthlyReport }
 
 public interface IUIWindowContext { }
 

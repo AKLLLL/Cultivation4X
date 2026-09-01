@@ -98,10 +98,16 @@ public class RelationshipRecord
 [Serializable]
 public class LifeRecord
 {
+    public string id;
     public int day;
     public string category;
     public string text;
     public string sourceId;
+    public ExperienceType type;
+    public ExperienceImportance importance = ExperienceImportance.Minor;
+    public ExperienceRetention retention = ExperienceRetention.Recent;
+    public string descriptionKey;
+    public List<ExperienceValue> values = new List<ExperienceValue>();
 }
 
 [Serializable]
@@ -152,14 +158,8 @@ public class CharacterState
             traitIds.Add(traitId);
     }
 
-    public void AddLifeRecord(int day, string category, string text, string sourceId = null)
+    public LifeRecord AddLifeRecord(int day, string category, string text, string sourceId = null)
     {
-        lifeRecords.Add(new LifeRecord
-        {
-            day = day,
-            category = category,
-            text = text,
-            sourceId = sourceId
-        });
+        return ExperienceRecordRules.AddLegacy(this, day, category, text, sourceId);
     }
 }

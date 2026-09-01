@@ -30,13 +30,6 @@ public class MissionDayResult
 }
 
 [Serializable]
-public class FacilityUpgradeRecord
-{
-    public FacilityType facility;
-    public int newLevel;
-}
-
-[Serializable]
 public class ItemDayChange
 {
     public string itemId;
@@ -53,7 +46,7 @@ public class ResourceProductionRecord
     public int received;
     public int lost;
 }
-//每日结算数据模型：资源变化、任务结果、弟子状态变化、新事件、设施升级记录。
+//每日结算数据模型：资源变化、任务结果、弟子状态变化与新事件。
 [Serializable]
 public class DaySettlementSummary
 {
@@ -65,6 +58,6 @@ public class DaySettlementSummary
     public List<ResourceProductionRecord> resourceProduction = new List<ResourceProductionRecord>();
     public List<MissionDayResult> missionResults = new List<MissionDayResult>();
     public List<CharacterDayChange> characterChanges = new List<CharacterDayChange>();
+    public List<DiscipleDayResult> discipleResults = new List<DiscipleDayResult>();
     public List<string> newEventTitles = new List<string>();
-    public List<FacilityUpgradeRecord> facilityUpgrades = new List<FacilityUpgradeRecord>();
 }

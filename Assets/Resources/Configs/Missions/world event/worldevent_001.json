@@ -8,6 +8,8 @@
 
     "missionType":"WorldEvent",
 
+    "isMajorExperience": true,
+
     "needDays":5,
 
 

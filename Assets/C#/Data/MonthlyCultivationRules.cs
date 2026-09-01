@@ -11,7 +11,7 @@ public class MonthlyPlanTemplate
 {
     public string id;
     public string name;
-    public List<MonthlyActivityType> days = Enumerable.Repeat(MonthlyActivityType.Free, GameCalendarRules.DaysPerMonth).ToList();
+    public List<MonthlyActivityType> days = new List<MonthlyActivityType>();
     public List<string> discipleIds = new List<string>();
 }
 
@@ -27,8 +27,12 @@ public static class MonthlyPlanRules
         GetTemplates().FirstOrDefault(template => template != null && template.id == templateId);
 
     public static MonthlyPlanTemplate GetTemplateFor(string characterId) =>
+        GetTemplateFor(PlayerManager.Instance?.playerData, characterId);
+
+    public static MonthlyPlanTemplate GetTemplateFor(PlayerData player, string characterId) =>
         string.IsNullOrWhiteSpace(characterId) ? null :
-        GetTemplates().FirstOrDefault(template => template?.discipleIds?.Contains(characterId) == true);
+        player?.monthlyPlanTemplates?.FirstOrDefault(template =>
+            template?.discipleIds?.Contains(characterId) == true);
 
     public static MonthlyPlanTemplate CreateTemplate(string name = null)
     {
@@ -38,7 +42,8 @@ public static class MonthlyPlanRules
         MonthlyPlanTemplate template = new MonthlyPlanTemplate
         {
             id = Guid.NewGuid().ToString("N"),
-            name = string.IsNullOrWhiteSpace(name) ? $"计划模板 {player.monthlyPlanTemplates.Count + 1}" : name.Trim()
+            name = string.IsNullOrWhiteSpace(name) ? $"计划模板 {player.monthlyPlanTemplates.Count + 1}" : name.Trim(),
+            days = Enumerable.Repeat(MonthlyActivityType.Free, DaysPerMonth).ToList()
         };
         player.monthlyPlanTemplates.Add(template);
         return template;
@@ -96,6 +101,18 @@ public static class MonthlyPlanRules
         if (plan == null || index < 0 || index >= DaysPerMonth) return MonthlyActivityType.Free;
         Normalize(plan);
         return plan.days[index];
+    }
+
+    public static bool HasScheduledActivityAfter(PlayerData player, string characterId, int day,
+        MonthlyActivityType activity)
+    {
+        MonthlyPlanTemplate plan = GetTemplateFor(player, characterId);
+        if (plan == null) return false;
+        Normalize(plan);
+        int currentIndex = DayOfMonth(day) - 1;
+        for (int index = Mathf.Max(0, currentIndex + 1); index < DaysPerMonth; index++)
+            if (plan.days[index] == activity) return true;
+        return false;
     }
 
     public static bool TrySetDay(MonthlyPlanTemplate plan, int dayOfMonth, MonthlyActivityType activity, out string reason)
@@ -273,7 +290,10 @@ public static class DailyCultivationSimulator
         TechniqueDefinition technique = TechniqueRules.MainTechnique(state);
         float refining = SpiritRootRules.RefiningMultiplier(state.spiritRoot.quality) * (technique?.refiningMultiplier ?? 1f);
         float fatigueEfficiency = 1f - 0.3f * Mathf.Clamp01(fatigueBefore / 100f);
-        float gain = consumed * action.cultivationEfficiency * refining * resultMultiplier * fatigueEfficiency;
+        bool trainingRoomAvailable = PlayerManager.Instance == null ||
+                                     PlayerManager.Instance.HasFacility(FacilityType.TrainingRoom);
+        float gain = consumed * action.cultivationEfficiency * refining * resultMultiplier * fatigueEfficiency *
+                     FacilityRules.TrainingMultiplier(trainingRoomAvailable);
         if (state.realmLayer >= 3 && state.naqiProgress >= 100f) gain = 0f;
         float actualGain = RealmProgressionRules.AddNaqi(npc, gain, day);
         float controlGain = action.auraControlGain * (outcome == CultivationActionOutcome.Failed ? 0.25f : outcome == CultivationActionOutcome.Excellent ? 1.5f : 1f);
@@ -289,8 +309,6 @@ public static class DailyCultivationSimulator
             eventDescription = $"{action.displayName}：{(outcome == CultivationActionOutcome.Failed ? "受挫" : outcome == CultivationActionOutcome.Excellent ? "优秀" : "完成")}，纳气 +{actualGain:0.00}%"
         };
         state.latestCultivationResult = result;
-        if (outcome == CultivationActionOutcome.Failed)
-            state.AddLifeRecord(day, "Cultivation", $"{action.displayName}受挫，但仍积累了少量经验", action.id);
         EventManager.Instance?.TryTriggerSource(EventSource.Training, npc);
         return result;
     }
@@ -448,12 +466,15 @@ public static class RealmProgressionRules
             if (state.realmLayer >= 3)
             {
                 state.naqiProgress = 100f;
-                state.AddLifeRecord(day, "Cultivation", "练气三层圆满", "qi_refining_complete");
+                ExperienceRecordRules.Add(state, day, ExperienceType.CultivationMilestone,
+                    ExperienceImportance.Major, "qi_complete", "练气三层圆满", "qi_refining_complete");
                 TimeManager.Instance?.RecordDayNotice($"{state.displayName} 已达练气圆满");
                 break;
             }
             state.realmLayer++; state.naqiProgress = 0f;
-            state.AddLifeRecord(day, "Cultivation", $"自动进入练气{state.realmLayer}层", "qi_refining_layer");
+            ExperienceRecordRules.Add(state, day, ExperienceType.CultivationMilestone,
+                ExperienceImportance.Major, "qi_layer", $"自动进入练气{state.realmLayer}层", "qi_refining_layer",
+                new[] { ExperienceRecordRules.Value("layer", state.realmLayer) });
             TimeManager.Instance?.RecordDayNotice($"{state.displayName} 进入练气{state.realmLayer}层");
         }
         return applied;

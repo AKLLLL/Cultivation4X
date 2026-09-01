@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using UnityEngine;
 using Cultivation4X.WorldMap;
@@ -13,6 +14,7 @@ public static class ConfigValidator
         ValidateResources();
         ValidateMissions();
         ValidateWorldTime();
+        ValidateDiscipleActions();
         ValidateTechniques();
         ValidateFounding();
         ValidateExternalThreats();
@@ -96,6 +98,12 @@ public static class ConfigValidator
                     Debug.LogError($"任务天数无效: {mission.id}");
                 else if (mission.requiredCombatPower < 0 || mission.excellentScore < 0)
                     Debug.LogError($"任务能力阈值无效: {mission.id}");
+                else if (mission.isFacilityAction != mission.requiresFacility)
+                    Debug.LogError($"设施行动必须显式要求已开放功能: {mission.id}");
+                else if ((mission.isStoryAction || mission.missionType == MissionType.WorldEvent ||
+                          mission.threatMissionKind != ThreatMissionKind.None) &&
+                         !mission.isMajorExperience)
+                    Debug.LogError($"剧情或外部威胁任务必须标记重大经历: {mission.id}");
             }
             catch (Exception exception) { Debug.LogError($"任务配置解析失败 {file.name}: {exception.Message}"); }
         }
@@ -141,6 +149,37 @@ public static class ConfigValidator
         {
             Debug.LogError($"立宗配置解析失败: {exception.Message}");
         }
+    }
+
+    private static void ValidateDiscipleActions()
+    {
+        DiscipleAIConfig config = DiscipleAIConfigLoader.Load();
+        HashSet<string> supported = new HashSet<string>
+        {
+            SectDutyEffectIds.OpenHerbLand,
+            SectDutyEffectIds.PlantHerbs,
+            SectDutyEffectIds.CareHerbs,
+            SectDutyEffectIds.HarvestHerbs,
+            SectDutyEffectIds.GeneralMaintenance
+        };
+        List<ActionDefinition> duties = config.Actions.Where(action =>
+            action?.executionKind == ActionExecutionKind.SectDuty).ToList();
+        if (duties.Count != supported.Count || duties.Any(action =>
+                string.IsNullOrWhiteSpace(action.sectDutyEffectId) ||
+                !supported.Contains(action.sectDutyEffectId)) ||
+            duties.GroupBy(action => action.sectDutyEffectId).Any(group => group.Count() != 1))
+            Debug.LogError("宗务行为配置必须完整且每种效果只有一个定义");
+        if (Resources.Load<TextAsset>("Configs/Items/" + SectFunctionalZoneRules.HerbItemId) == null &&
+            !Resources.LoadAll<TextAsset>("Configs/Items").Any(file =>
+            {
+                try
+                {
+                    ItemData item = JsonConvert.DeserializeObject<ItemData>(file.text);
+                    return item?.itemId == SectFunctionalZoneRules.HerbItemId;
+                }
+                catch (Exception) { return false; }
+            }))
+            Debug.LogError($"灵植区产物配置不存在: {SectFunctionalZoneRules.HerbItemId}");
     }
 
     private static void ValidateTechniques()

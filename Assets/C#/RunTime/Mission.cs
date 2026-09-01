@@ -25,7 +25,6 @@ public class Mission
     // 当前任务最终奖励。
     // 任务运行过程中可以不断修改。
     private Reward reward;
-    private readonly int facilityLevel;
     public int CapabilityScore { get; private set; } = 100;
     public MissionResultTier ResultTier { get; private set; } = MissionResultTier.Qualified;
     private bool hasCapabilitySnapshot;
@@ -36,10 +35,9 @@ public class Mission
     public string NodeFailureReason { get; private set; }
 
    
-    public Mission(MissionData data, int facilityLevel = 1)
+    public Mission(MissionData data)
     {
         Data = data;
-        this.facilityLevel = facilityLevel;
         // 创建奖励
         reward = CreateReward(data);
         State = MissionState.NotStarted;
@@ -74,9 +72,9 @@ public class Mission
                     });
             }
         }
-        if (data.isFacilityAction && data.usesFacilityLevelScaling &&
-            FacilityRules.UsesLevelScaledAction(data.requiredFacility) && reward.Items.Count == 1)
-            reward.Items[0].count = FacilityRules.ActionOutput(data.requiredFacility, facilityLevel);
+        if (data.isFacilityAction && !data.isStoryAction &&
+            FacilityRules.UsesFixedFacilityAction(data.requiredFacility) && reward.Items.Count == 1)
+            reward.Items[0].count = FacilityRules.ActionOutput(data.requiredFacility);
         
         return reward;
     }
@@ -91,9 +89,9 @@ public class Mission
         CaptureCapabilitySnapshot();
         State = MissionState.Active;
         // 从配置读取耗时
-        RemainingDays = Data.isFacilityAction && Data.usesFacilityLevelScaling &&
-            FacilityRules.UsesLevelScaledAction(Data.requiredFacility)
-            ? FacilityRules.ActionDays(Data.requiredFacility, facilityLevel)
+        RemainingDays = Data.isFacilityAction && !Data.isStoryAction &&
+            FacilityRules.UsesFixedFacilityAction(Data.requiredFacility)
+            ? FacilityRules.ActionDays(Data.requiredFacility)
             : Data.needDays;
         // NPC进入任务状态
         NPCManager.Instance.StartMission(npc, this);
@@ -332,10 +330,8 @@ public class Mission
                 projection.TryGetValue(effect.itemId, out int available);
                 if (available <= 0)
                 {
-                    int level = PlayerManager.Instance == null ? 1 :
-                        PlayerManager.Instance.GetFacilityLevel(FacilityType.Warehouse);
                     if (!WarehouseManager.IsCapacityExemptItem(effect.itemId) &&
-                        projection.Count(item => !WarehouseManager.IsCapacityExemptItem(item.Key)) >= FacilityRules.WarehouseSlots(level))
+                        projection.Count(item => !WarehouseManager.IsCapacityExemptItem(item.Key)) >= FacilityRules.WarehouseSlots)
                     {
                         NodeFailureReason = $"仓库容量不足，无法添加物品：{effect.itemId}";
                         return false;
@@ -499,8 +495,8 @@ public class Mission
         {
             NPCManager.Instance.Injured(
                 AssignedNPC,
-                FacilityRules.FailureInjuryDays(PlayerManager.Instance == null ? 0 :
-                    PlayerManager.Instance.GetFacilityLevel(FacilityType.ProtectionArray))
+                FacilityRules.FailureInjuryDays(
+                    PlayerManager.Instance?.HasFacility(FacilityType.ProtectionArray) == true)
             );
 
             Debug.Log(
@@ -532,7 +528,6 @@ public class Mission
     public Mission(MissionData data, MissionSaveData saved, NPCRuntime npc)
     {
         Data = data;
-        facilityLevel = 1;
         reward = saved.reward ?? CreateReward(data);
         State = saved.state;
         RemainingDays = saved.remainingDays;

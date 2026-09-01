@@ -7,15 +7,17 @@ public sealed class DiscipleListItemView : MonoBehaviour
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text realmText;
     [SerializeField] private TMP_Text stateText;
+    [SerializeField] private TMP_Text activityText;
     [SerializeField] private Image selectionImage;
     [SerializeField] private Button button;
 
     public void Configure(TMP_Text newNameText, TMP_Text newRealmText, TMP_Text newStateText,
-        Image newSelectionImage, Button newButton)
+        TMP_Text newActivityText, Image newSelectionImage, Button newButton)
     {
         nameText = newNameText;
         realmText = newRealmText;
         stateText = newStateText;
+        activityText = newActivityText;
         selectionImage = newSelectionImage;
         button = newButton;
     }
@@ -26,9 +28,11 @@ public sealed class DiscipleListItemView : MonoBehaviour
         ConfigureSingleLine(nameText);
         ConfigureSingleLine(realmText);
         ConfigureSingleLine(stateText);
+        ConfigureSingleLine(activityText);
         nameText.text = snapshot.name;
         realmText.text = snapshot.realm;
         stateText.text = snapshot.state;
+        if (activityText != null) activityText.text = snapshot.activity;
         Image stateBackground = stateText.transform.parent.GetComponent<Image>();
         if (stateBackground != null) stateBackground.color = StateColor(snapshot.state);
         selectionImage.color = selected

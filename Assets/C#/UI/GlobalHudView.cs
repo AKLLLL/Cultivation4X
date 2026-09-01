@@ -256,6 +256,13 @@ public sealed class GlobalHudView : MonoBehaviour
 
     private static void OpenLatestSettlement()
     {
+        DaySettlementSummary unread = TimeManager.Instance?.UnreadDaySettlement;
+        if (unread?.isMonthEnd == true && GrowthFeedbackRules.LatestReport(PlayerManager.Instance?.playerData) != null)
+        {
+            UIManager.Instance?.OpenWindow(UIWindowId.MonthlyReport,
+                new MonthlyReportContext(unread.monthIndex, true));
+            return;
+        }
         DaySettlementPanel panel = Object.FindObjectOfType<DaySettlementPanel>(true);
         panel?.OpenLatest();
     }

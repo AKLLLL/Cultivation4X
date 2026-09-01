@@ -31,6 +31,7 @@ namespace Cultivation4X.WorldMap
         private Button confirmButton;
         private int selectedInfoTab;
         private int lastSelectedCellIndex = int.MinValue;
+        private int pendingZoneCancellationCell = -1;
         private bool shouldShowMapControls;
 
         internal Canvas HudCanvas => hudCanvas;
@@ -191,6 +192,7 @@ namespace Cultivation4X.WorldMap
             if (lastSelectedCellIndex != selectedCellIndex)
             {
                 lastSelectedCellIndex = selectedCellIndex;
+                pendingZoneCancellationCell = -1;
                 selectedInfoTab = 0;
                 RefreshInfoTabVisuals();
             }
@@ -262,6 +264,28 @@ namespace Cultivation4X.WorldMap
             AddInfoRow(strategyCard, "危险", $"{DangerLabel(WorldMapProgressRules.GetDanger(cell))} | 地点：{markers}");
             AddInfoRow(strategyCard, "认知", known ? "已知" : "未知");
             AddInfoRow(strategyCard, "控制关系", control);
+
+            RectTransform zoneCard = AddInfoCard("功能区规划");
+            SectFunctionalZoneState zone = SectFunctionalZoneRules.GetZone(progress, selectedCellIndex);
+            AddInfoRow(zoneCard, "探索状态", known ? "已完成探索" : "尚未完成探索");
+            AddInfoRow(zoneCard, "影响等级", InfluenceSummary(map, progress, selectedCellIndex));
+            AddInfoRow(zoneCard, "当前用途", zone == null ? "普通地块" : "灵植区");
+            if (zone == null)
+            {
+                bool canPlan = SectFunctionalZoneRules.CanPlan(map, progress, selectedCellIndex,
+                    out string reason);
+                AddInfoRow(zoneCard, "规划资格", canPlan ? "可规划" : reason);
+            }
+            else
+            {
+                AddInfoRow(zoneCard, "阶段", SectFunctionalZoneRules.StageName(zone.stage));
+                AddInfoRow(zoneCard, "进度", SectFunctionalZoneRules.ProgressText(zone));
+                AddInfoRow(zoneCard, "环境适宜度",
+                    $"{SectFunctionalZoneRules.SuitabilityMultiplier(cell):0.0} 倍");
+                SectDepartmentState department = SectOrganizationRules.Get(
+                    PlayerManager.Instance?.playerData, zone.assignedDepartmentId);
+                AddInfoRow(zoneCard, "负责部门", department?.name ?? "未绑定");
+            }
         }
 
         private void ShowLocationTab(WorldMap map, WorldMapProgressState progress,
@@ -350,7 +374,8 @@ namespace Cultivation4X.WorldMap
 
             // 格子行动独立于地点；普通格始终由这一来源生成探索选项。
             foreach (CellInteractionOption option in
-                     WorldCellInteractionRules.Generate(map, progress, selectedCellIndex))
+                     WorldCellInteractionRules.Generate(map, progress, selectedCellIndex,
+                         pendingZoneCancellationCell == selectedCellIndex))
             {
                 if (option == null) continue;
                 hasContent = true;
@@ -479,6 +504,19 @@ namespace Cultivation4X.WorldMap
             Refresh(WorldMapSession.Current, WorldMapSession.Progress, lastSelectedCellIndex,
                 false, WorldMapProgressRules.GetSectBase(WorldMapSession.Progress) != null,
                 true, PlayerManager.Instance?.playerData);
+        }
+
+        internal void RequestZoneCancellationConfirmation(int cellIndex)
+        {
+            pendingZoneCancellationCell = cellIndex;
+            selectedInfoTab = 2;
+            RefreshInfoTabVisuals();
+            RefreshPresentationWithCurrentSelection();
+        }
+
+        internal void ClearZoneCancellationConfirmation()
+        {
+            pendingZoneCancellationCell = -1;
         }
 
         private static string PlacementLocationText(WorldMap map, int cellIndex)

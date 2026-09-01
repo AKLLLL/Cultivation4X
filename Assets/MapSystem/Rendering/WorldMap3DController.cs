@@ -128,6 +128,14 @@ namespace Cultivation4X.WorldMap
             RefreshPresentation();
         }
 
+        public void SelectCellFromUi(int cellIndex)
+        {
+            WorldMap map = WorldMapSession.Current;
+            if (interaction == null || map?.cells == null || cellIndex < 0 || cellIndex >= map.cells.Length)
+                return;
+            interaction.SelectCell(cellIndex);
+        }
+
         private void OpenLocationMissions(WorldLocation location)
         {
             if (location == null) return;
@@ -178,6 +186,28 @@ namespace Cultivation4X.WorldMap
             {
                 case CellInteractionOptionType.Explore:
                     OpenSelectedAction(MapActionType.Explore);
+                    break;
+                case CellInteractionOptionType.PlanHerbZone:
+                    if (SectFunctionalZoneRules.TryPlan(WorldMapSession.Current, WorldMapSession.Progress,
+                        interaction.SelectedCellIndex, out _, out string planReason))
+                    {
+                        WorldMapSession.NotifyProgressChanged();
+                        SaveManager.Instance?.AutoSave();
+                    }
+                    else GameDebugConfig.LogWorldMapWarning(planReason);
+                    break;
+                case CellInteractionOptionType.CancelFunctionalZone:
+                    hud?.RequestZoneCancellationConfirmation(interaction.SelectedCellIndex);
+                    break;
+                case CellInteractionOptionType.ConfirmCancelFunctionalZone:
+                    if (SectFunctionalZoneRules.TryCancel(WorldMapSession.Progress,
+                        interaction.SelectedCellIndex, out string cancelReason))
+                    {
+                        hud?.ClearZoneCancellationConfirmation();
+                        WorldMapSession.NotifyProgressChanged();
+                        SaveManager.Instance?.AutoSave();
+                    }
+                    else GameDebugConfig.LogWorldMapWarning(cancelReason);
                     break;
                 default:
                     GameDebugConfig.LogWorldMap($"[CellInteraction] 未支持的格子交互: {option.id}");

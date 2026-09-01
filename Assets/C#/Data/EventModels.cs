@@ -43,7 +43,6 @@ public enum EventSource
     Training,
     Injury,
     Recovery,
-    FacilityUpgrade,
     SecretRealm,
     Alchemy,
     SectDaily,

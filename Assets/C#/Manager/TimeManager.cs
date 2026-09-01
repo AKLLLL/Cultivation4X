@@ -36,7 +36,6 @@ public class TimeManager : MonoBehaviour
     public event Action<DaySettlementSummary> OnDayEnded;
     public event Action<GameDateTime> OnMonthStarted;
     public event Action<DaySettlementSummary> OnMonthEnded;
-    private readonly System.Collections.Generic.List<FacilityUpgradeRecord> facilityUpgrades = new System.Collections.Generic.List<FacilityUpgradeRecord>();
     private readonly System.Collections.Generic.Dictionary<string, int> preAdvanceItemChanges =
         new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
     private readonly System.Collections.Generic.List<string> threatNotices = new System.Collections.Generic.List<string>();
@@ -273,7 +272,8 @@ public class TimeManager : MonoBehaviour
             isAdvancingDay = true;
             Debug.Log($"完成第 {CurrentDay} 天结算");
 
-            NPCManager.Instance?.OnDayPassed();
+            List<DiscipleDayExecutionResult> executions = NPCManager.Instance?.ProcessDayWithResults() ??
+                new List<DiscipleDayExecutionResult>();
             Cultivation4X.WorldMap.WorldMapContentEffects.ApplyDaily(CurrentDay);
             MissionManager.Instance?.ProcessDay(CurrentDay);
             ExternalThreatRules.ProcessDay(CurrentDay);
@@ -283,10 +283,11 @@ public class TimeManager : MonoBehaviour
             List<ResourceProductionRecord> monthlyProduction = monthEnd
                 ? ResourceManager.MonthUpdate(CurrentDay, CurrentDay / GameCalendarRules.DaysPerMonth)
                 : new List<ResourceProductionRecord>();
-            UnreadDaySettlement = BuildSettlement(before, monthlyProduction);
+            UnreadDaySettlement = BuildSettlement(before, monthlyProduction, executions);
             UnreadDaySettlement.isMonthEnd = monthEnd;
             UnreadDaySettlement.monthIndex = MonthlyPlanRules.MonthIndex(CurrentDay);
             DiscipleDecisionManager.Instance?.ProcessSettledDay(CurrentDay);
+            GrowthFeedbackRules.ProcessSettledDay(PlayerManager.Instance?.playerData, CurrentDay, UnreadDaySettlement);
             // 最终自动存档必须已经处于次日 00:00，不能写入 24:00 或上一日锁定日程。
             CurrentHour = 0f;
             dailySchedule = null;
@@ -335,6 +336,8 @@ public class TimeManager : MonoBehaviour
     {
         if (dailySchedule?.day == ActiveDay) return;
         DailyScheduleState state = new DailyScheduleState { day = ActiveDay };
+        DiscipleAIConfig aiConfig = null;
+        IdentityDefinition sectDutyIdentity = null;
         foreach (NPCRuntime npc in NPCManager.Instance?.GetLivingNPC() ?? Enumerable.Empty<NPCRuntime>())
         {
             if (npc?.Character == null || string.IsNullOrWhiteSpace(npc.CharacterId)) continue;
@@ -349,28 +352,41 @@ public class TimeManager : MonoBehaviour
             };
             if (entry.missionOccupied)
             {
-                entry.segments.Add(Segment(config.dayStartHour, config.dayEndingHour,
+                entry.segments.Add(Segment(config.dayStartHour, config.dayEndingHour, mission.Data?.id,
                     mission.Data?.name ?? "执行任务"));
             }
             else if (activity == MonthlyActivityType.Training)
             {
                 entry.cultivationActionId = DailyCultivationSimulator.SelectActionId(npc, ActiveDay);
-                entry.segments.Add(Segment(6f, 11f, "吸收天地灵气"));
-                entry.segments.Add(Segment(11f, 18f,
+                entry.segments.Add(Segment(6f, 11f, "absorb_aura", "吸收天地灵气"));
+                entry.segments.Add(Segment(11f, 18f, entry.cultivationActionId,
                     DailyCultivationSimulator.ActionName(entry.cultivationActionId)));
-                entry.segments.Add(Segment(18f, 20f, "调息"));
+                entry.segments.Add(Segment(18f, 20f, "cultivation_recovery", "调息"));
             }
             else if (activity == MonthlyActivityType.SectDuty)
             {
-                entry.segments.Add(Segment(6f, 12f, "处理宗门事务"));
-                entry.segments.Add(Segment(12f, 18f, "宗门劳作"));
-                entry.segments.Add(Segment(18f, 20f, "整理交接"));
+                if (aiConfig == null)
+                {
+                    aiConfig = DiscipleAIConfigLoader.Load();
+                    sectDutyIdentity = aiConfig.Identities.FirstOrDefault(item => item != null && item.autonomyEnabled);
+                }
+                SectDutyDecision preview = SectDutyResolver.Resolve(npc, ActiveDay, aiConfig, sectDutyIdentity,
+                    PlayerManager.Instance?.playerData, Cultivation4X.WorldMap.WorldMapSession.Current,
+                    Cultivation4X.WorldMap.WorldMapSession.Progress);
+                string actionId = preview?.Action?.id ?? "sect_general_maintenance";
+                string targetName = preview?.Zone == null ? null :
+                    Cultivation4X.WorldMap.SectFunctionalZoneRules.DisplayName(
+                        Cultivation4X.WorldMap.WorldMapSession.Current, preview.Zone);
+                string actionName = preview?.Action?.displayName ?? "日常宗门维护";
+                string label = string.IsNullOrWhiteSpace(targetName) ? actionName : $"{actionName} · {targetName}";
+                entry.segments.Add(Segment(6f, 18f, actionId, label));
+                entry.segments.Add(Segment(18f, 20f, "sect_duty_handover", "整理交接"));
             }
             else
             {
-                entry.segments.Add(Segment(6f, 12f, "自由活动"));
-                entry.segments.Add(Segment(12f, 18f, "游历休整"));
-                entry.segments.Add(Segment(18f, 20f, "自省"));
+                entry.segments.Add(Segment(6f, 12f, "free_activity", "自由活动"));
+                entry.segments.Add(Segment(12f, 18f, "free_rest", "游历休整"));
+                entry.segments.Add(Segment(18f, 20f, "free_reflection", "自省"));
             }
             state.disciples.Add(entry);
         }
@@ -379,8 +395,8 @@ public class TimeManager : MonoBehaviour
         NotifyTimeChanged();
     }
 
-    private static DailyScheduleSegment Segment(float start, float end, string label) =>
-        new DailyScheduleSegment { startHour = start, endHour = end, label = label };
+    private static DailyScheduleSegment Segment(float start, float end, string actionId, string label) =>
+        new DailyScheduleSegment { startHour = start, endHour = end, actionId = actionId, label = label };
 
     private bool CanWorldClockRun()
     {
@@ -432,11 +448,6 @@ public class TimeManager : MonoBehaviour
         }
     }
 
-    public void RecordFacilityUpgrade(FacilityType facility, int newLevel)
-    {
-        facilityUpgrades.Add(new FacilityUpgradeRecord { facility = facility, newLevel = newLevel });
-    }
-
     public void RecordPreAdvanceItemChange(string itemId, int countChange)
     {
         if (isAdvancingDay || string.IsNullOrWhiteSpace(itemId) || countChange == 0) return;
@@ -482,13 +493,15 @@ public class TimeManager : MonoBehaviour
                 result.characters[npc.CharacterId] = new CharacterSnapshot
                 { currentAura = npc.CurrentAura, naqiProgress = npc.Character.naqiProgress,
                     techniqueUnderstanding = TechniqueRules.MainUnderstanding(npc.Character), auraControl = npc.Character.auraControl,
-                    fatigue = npc.Character.fatigue, realmLayer = npc.RealmLayer, realm = npc.Realm, health = npc.Health };
+                    fatigue = npc.Character.fatigue, realmLayer = npc.RealmLayer, realm = npc.Realm, health = npc.Health,
+                    techniqueId = npc.Character.mainTechniqueId };
             }
         return result;
     }
 
     private DaySettlementSummary BuildSettlement(DayStartSnapshot before,
-        System.Collections.Generic.List<ResourceProductionRecord> monthlyProduction)
+        System.Collections.Generic.List<ResourceProductionRecord> monthlyProduction,
+        System.Collections.Generic.List<DiscipleDayExecutionResult> executions)
     {
         System.Collections.Generic.Dictionary<string, int> after = CaptureWarehouseCounts();
         DaySettlementSummary result = new DaySettlementSummary
@@ -507,12 +520,14 @@ public class TimeManager : MonoBehaviour
             resourceProduction = monthlyProduction ?? new System.Collections.Generic.List<ResourceProductionRecord>(),
             missionResults = MissionManager.Instance == null ? new System.Collections.Generic.List<MissionDayResult>() : MissionManager.Instance.ConsumeDailyResults(),
             newEventTitles = (EventManager.Instance == null ? new System.Collections.Generic.List<string>() : EventManager.Instance.ConsumeNewEventTitles())
-                .Concat(threatNotices).ToList(),
-            facilityUpgrades = new System.Collections.Generic.List<FacilityUpgradeRecord>(facilityUpgrades)
+                .Concat(threatNotices).ToList()
         };
-        facilityUpgrades.Clear();
         threatNotices.Clear();
         preAdvanceItemChanges.Clear();
+        Dictionary<string, DiscipleDayExecutionResult> executionById = (executions ??
+                new System.Collections.Generic.List<DiscipleDayExecutionResult>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.discipleId))
+            .GroupBy(item => item.discipleId).ToDictionary(group => group.Key, group => group.First());
         if (NPCManager.Instance != null)
             foreach (NPCRuntime npc in NPCManager.Instance.GetAllNPC())
             {
@@ -534,6 +549,47 @@ public class TimeManager : MonoBehaviour
                         cultivationResult = npc.Character.latestCultivationResult?.date == CurrentDay ? npc.Character.latestCultivationResult : null,
                         realmBefore = old.realm, realmAfter = npc.Realm,
                         healthBefore = old.health, healthAfter = npc.Health });
+                if (!executionById.TryGetValue(npc.CharacterId, out DiscipleDayExecutionResult execution)) continue;
+                string techniqueId = string.IsNullOrWhiteSpace(npc.Character.mainTechniqueId)
+                    ? old.techniqueId : npc.Character.mainTechniqueId;
+                float understandingAfter = TechniqueRules.MainUnderstanding(npc.Character);
+                float understandingBefore = old.techniqueId == techniqueId ? old.techniqueUnderstanding : 0f;
+                float positiveNaqi = execution.cultivationResult?.naqiGain ?? Mathf.Max(0f,
+                    (npc.RealmLayer - old.realmLayer) * 100f + npc.Character.naqiProgress - old.naqiProgress);
+                result.discipleResults.Add(new DiscipleDayResult
+                {
+                    discipleId = npc.CharacterId,
+                    displayName = npc.Character.displayName,
+                    worldDay = CurrentDay,
+                    scheduledActivity = execution.scheduledActivity,
+                    actualActivity = execution.actualActivity,
+                    actionId = execution.actionId,
+                    actionDisplayName = execution.actionDisplayName,
+                    targetId = execution.targetId,
+                    targetDisplayName = execution.targetDisplayName,
+                    departmentId = execution.departmentId,
+                    executed = execution.executed,
+                    failureReason = execution.failureReason,
+                    naqiGain = Mathf.Max(0f, positiveNaqi),
+                    auraControlGain = npc.Character.auraControl - old.auraControl,
+                    techniqueProgressGain = understandingAfter - understandingBefore,
+                    fatigueChange = npc.Character.fatigue - old.fatigue,
+                    fatiguePeak = Mathf.Max(old.fatigue, npc.Character.fatigue),
+                    fatigueBefore = old.fatigue,
+                    fatigueAfter = npc.Character.fatigue,
+                    naqiBefore = old.naqiProgress,
+                    naqiAfter = npc.Character.naqiProgress,
+                    auraControlBefore = old.auraControl,
+                    auraControlAfter = npc.Character.auraControl,
+                    realmLayerBefore = old.realmLayer,
+                    realmLayerAfter = npc.RealmLayer,
+                    techniqueId = techniqueId,
+                    techniqueUnderstandingBefore = understandingBefore,
+                    techniqueUnderstandingAfter = understandingAfter,
+                    techniqueStageBefore = TechniqueRules.PersonalStage(understandingBefore),
+                    techniqueStageAfter = TechniqueRules.PersonalStage(understandingAfter),
+                    cultivationResult = execution.cultivationResult
+                });
             }
         return result;
     }
@@ -566,6 +622,7 @@ public class TimeManager : MonoBehaviour
         public float techniqueUnderstanding;
         public float auraControl;
         public float fatigue;
+        public string techniqueId;
         public int realmLayer;
         public CultivationRealm realm;
         public HealthState health;

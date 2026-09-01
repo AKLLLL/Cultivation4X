@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -46,6 +47,43 @@ public class MonthlyCultivationTests
         MonthlyPlanRules.Normalize(plan);
         Assert.AreEqual(30, plan.days.Count);
         Assert.IsTrue(plan.days.All(item => item == MonthlyActivityType.Free));
+    }
+
+    [Test]
+    public void NewTemplate_StartsWithExactlyThirtyFreeDays()
+    {
+        Add<PlayerManager>("Player");
+        MonthlyPlanTemplate plan = MonthlyPlanRules.CreateTemplate("新计划");
+
+        Assert.NotNull(plan);
+        Assert.AreEqual(MonthlyPlanRules.DaysPerMonth, plan.days.Count);
+        Assert.IsTrue(plan.days.All(item => item == MonthlyActivityType.Free));
+    }
+
+    [Test]
+    public void JsonRoundTrip_PreservesAllThirtyPlannedDays()
+    {
+        List<MonthlyActivityType> expectedDays = Enumerable
+            .Repeat(MonthlyActivityType.Training, 15)
+            .Concat(Enumerable.Repeat(MonthlyActivityType.SectDuty, 10))
+            .Concat(Enumerable.Repeat(MonthlyActivityType.Free, 5))
+            .ToList();
+        MonthlyPlanTemplate source = new MonthlyPlanTemplate
+        {
+            id = "roundtrip",
+            name = "存读档计划",
+            days = expectedDays,
+            discipleIds = new List<string> { "disciple-a", "disciple-b" }
+        };
+
+        MonthlyPlanTemplate restored = JsonConvert.DeserializeObject<MonthlyPlanTemplate>(
+            JsonConvert.SerializeObject(source));
+        MonthlyPlanRules.Normalize(restored);
+
+        Assert.NotNull(restored);
+        Assert.AreEqual(source.name, restored.name);
+        CollectionAssert.AreEqual(expectedDays, restored.days);
+        CollectionAssert.AreEqual(source.discipleIds, restored.discipleIds);
     }
 
     [Test]
@@ -143,6 +181,25 @@ public class MonthlyCultivationTests
             }
         }
         Assert.That(completedDay, Is.InRange(85, 100));
+    }
+
+    [Test]
+    public void MissingTrainingRoomAppliesTheFixedPointEightPenalty()
+    {
+        PlayerManager player = Add<PlayerManager>("Player");
+        NPCRuntime withoutRoom = Runtime("training-room-comparison");
+        NPCRuntime withRoom = Runtime("training-room-comparison");
+        string actionId = DailyCultivationSimulator.Definitions[0].id;
+
+        player.SetFacilityAvailableForStory(FacilityType.TrainingRoom, false);
+        DailyCultivationResult penalized = DailyCultivationSimulator.SimulateTrainingDay(
+            withoutRoom, 5, actionId);
+        player.SetFacilityAvailableForStory(FacilityType.TrainingRoom, true);
+        DailyCultivationResult normal = DailyCultivationSimulator.SimulateTrainingDay(
+            withRoom, 5, actionId);
+
+        Assert.Greater(normal.naqiGain, 0f);
+        Assert.AreEqual(normal.naqiGain * 0.8f, penalized.naqiGain, 0.001f);
     }
 
     [Test]

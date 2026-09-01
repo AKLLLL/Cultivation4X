@@ -342,7 +342,7 @@ public class WorldMapContentTests
     [Test]
     public void CurrentVersion_RoundTripsAndRejectsIllegalContentState()
     {
-        Assert.AreEqual(22, SaveDataVersion.Current);
+        Assert.AreEqual(25, SaveDataVersion.Current);
         WorldMap map = WorldGenerator.Generate(new MapGenerationSettings { width = 32, height = 24, seed = 5105 });
         WorldMapProgressState progress = new WorldMapProgressState();
         WorldMapContentRules.EnsureCandidates(map, progress);
@@ -657,6 +657,12 @@ public class WorldMapContentTests
             sect = new PlayerData
             {
                 sectId = "player_sect", sectName = "测试宗", influenceRadius = 2, foundedDay = 0,
+                growthFeedback = new SectGrowthFeedbackState
+                {
+                    activeMonthIndex = MonthlyPlanRules.MonthIndex(3),
+                    lastProcessedDay = 2,
+                    lastFinalizedMonthIndex = 0
+                },
                 founding = new FoundingState
                 {
                     initialized = true, stage = FoundingStage.Cave, selectedWorldCellIndex = home,

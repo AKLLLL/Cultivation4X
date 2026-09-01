@@ -71,7 +71,7 @@ public class AlchemyPanel : MonoBehaviour
             AddCloseButton();
             return;
         }
-        if (PlayerManager.Instance.GetFacilityLevel(FacilityType.AlchemyRoom) <= 0)
+        if (!PlayerManager.Instance.HasFacility(FacilityType.AlchemyRoom))
         {
             RuntimeUIFactory.Text(panel, "丹房尚未建成。青木长生诀理解达到100%并获得青石村支持后，可在“洞府立宗”中建设。", 18, 72);
             AddCloseButton();
@@ -98,11 +98,10 @@ public class AlchemyPanel : MonoBehaviour
         }
         else
         {
-            int level = PlayerManager.Instance.GetFacilityLevel(FacilityType.AlchemyRoom);
             foreach (MissionData data in recipes)
             {
-                int days = data.usesFacilityLevelScaling ? FacilityRules.AlchemyDays(level) : data.needDays;
-                int pills = data.usesFacilityLevelScaling ? FacilityRules.AlchemyPillReward(level) :
+                int days = !data.isStoryAction ? FacilityRules.AlchemyDays : data.needDays;
+                int pills = !data.isStoryAction ? FacilityRules.AlchemyPillReward :
                     (data.itemRewards == null ? 0 : data.itemRewards.Sum(item => item.count));
                 RuntimeUIFactory.Text(panel,
                     $"{data.name}\n耗时 {days} 天｜消耗 {FormatCosts(data.itemCosts)}｜产出 丹药 x{pills}",

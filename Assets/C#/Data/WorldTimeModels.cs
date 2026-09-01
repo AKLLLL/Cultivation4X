@@ -62,6 +62,7 @@ public class DailyScheduleSegment
 {
     public float startHour;
     public float endHour;
+    public string actionId;
     public string label;
 
     public bool Contains(float hour) => hour >= startHour && hour < endHour;
@@ -82,6 +83,9 @@ public class DiscipleDailySchedule
         DailyScheduleSegment segment = segments?.FirstOrDefault(item => item != null && item.Contains(hour));
         return string.IsNullOrWhiteSpace(segment?.label) ? "自由活动" : segment.label;
     }
+
+    public DailyScheduleSegment SegmentAt(float hour) =>
+        segments?.FirstOrDefault(item => item != null && item.Contains(hour));
 }
 
 [Serializable]

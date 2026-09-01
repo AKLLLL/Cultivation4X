@@ -8,8 +8,8 @@
 
     "missionType":"Production",
     "missionRank":1,
+    "requiresFacility":true,
     "requiredFacility":"AlchemyRoom",
-    "requiredFacilityLevel":1,
 
     "itemCosts":[{"itemId":"LingShi_001","count":20},{"itemId":"material_001","count":3}],
     "isFacilityAction":true,

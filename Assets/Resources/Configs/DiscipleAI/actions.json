@@ -2,6 +2,7 @@
   {
     "id": "cultivate",
     "displayName": "研读传承",
+    "executionKind": "AutonomousMission",
     "missionId": "disciple_ai_cultivate_001",
     "tags": [ "cultivation", "research" ],
     "identityIds": [ "inner_disciple" ],
@@ -19,6 +20,7 @@
   {
     "id": "rest",
     "displayName": "静养",
+    "executionKind": "AutonomousMission",
     "missionId": "disciple_ai_rest_001",
     "tags": [ "recovery" ],
     "identityIds": [ "inner_disciple" ],
@@ -32,6 +34,7 @@
   {
     "id": "explore",
     "displayName": "山野探索",
+    "executionKind": "AutonomousMission",
     "missionId": "disciple_ai_explore_001",
     "tags": [ "exploration" ],
     "identityIds": [ "inner_disciple" ],
@@ -47,6 +50,7 @@
   {
     "id": "social",
     "displayName": "同门往来",
+    "executionKind": "AutonomousMission",
     "missionId": "disciple_ai_social_001",
     "tags": [ "social" ],
     "identityIds": [ "inner_disciple" ],
@@ -62,6 +66,7 @@
   {
     "id": "alchemy",
     "displayName": "炼丹",
+    "executionKind": "AutonomousMission",
     "missionId": "production_001",
     "tags": [ "alchemy" ],
     "identityIds": [ "inner_disciple" ],
@@ -70,6 +75,79 @@
     "scoreTerms": [
       { "source": "Goal", "key": "obtain_resources", "weight": 7, "curve": [ [0, 0], [1, 1] ] },
       { "source": "Trait", "key": "diligent", "weight": 1, "curve": [ [0, 0], [1, 1] ] }
+    ]
+  },
+  {
+    "id": "sect_open_herb_land",
+    "displayName": "开垦灵植地",
+    "executionKind": "SectDuty",
+    "sectDutyEffectId": "open_herb_land",
+    "tags": [ "sect_duty", "herb", "labor" ],
+    "identityIds": [ "inner_disciple" ],
+    "baseline": 1,
+    "scoreTerms": [
+      { "source": "Trait", "key": "diligent", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Trait", "key": "lazy", "weight": -2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "WoodAffinity", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "FatigueRatio", "weight": -2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Environment", "key": "ZoneSuitability", "weight": 2, "curve": [ [0, 0], [1, 1] ] }
+    ]
+  },
+  {
+    "id": "sect_plant_herbs",
+    "displayName": "试种灵草",
+    "executionKind": "SectDuty",
+    "sectDutyEffectId": "plant_herbs",
+    "tags": [ "sect_duty", "herb" ],
+    "identityIds": [ "inner_disciple" ],
+    "baseline": 1,
+    "scoreTerms": [
+      { "source": "Trait", "key": "diligent", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "WoodAffinity", "weight": 3, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "FatigueRatio", "weight": -2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Environment", "key": "ZoneSuitability", "weight": 2, "curve": [ [0, 0], [1, 1] ] }
+    ]
+  },
+  {
+    "id": "sect_care_herbs",
+    "displayName": "照料灵草",
+    "executionKind": "SectDuty",
+    "sectDutyEffectId": "care_herbs",
+    "tags": [ "sect_duty", "herb" ],
+    "identityIds": [ "inner_disciple" ],
+    "baseline": 1,
+    "scoreTerms": [
+      { "source": "Trait", "key": "diligent", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "WoodAffinity", "weight": 3, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "FatigueRatio", "weight": -2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Environment", "key": "ZoneSuitability", "weight": 2, "curve": [ [0, 0], [1, 1] ] }
+    ]
+  },
+  {
+    "id": "sect_harvest_herbs",
+    "displayName": "采收灵草",
+    "executionKind": "SectDuty",
+    "sectDutyEffectId": "harvest_herbs",
+    "tags": [ "sect_duty", "herb", "resource" ],
+    "identityIds": [ "inner_disciple" ],
+    "baseline": 2,
+    "scoreTerms": [
+      { "source": "Trait", "key": "diligent", "weight": 1, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "WoodAffinity", "weight": 2, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "FatigueRatio", "weight": -2, "curve": [ [0, 0], [1, 1] ] }
+    ]
+  },
+  {
+    "id": "sect_general_maintenance",
+    "displayName": "日常宗门维护",
+    "executionKind": "SectDuty",
+    "sectDutyEffectId": "general_sect_maintenance",
+    "tags": [ "sect_duty" ],
+    "identityIds": [ "inner_disciple" ],
+    "baseline": 1,
+    "scoreTerms": [
+      { "source": "Trait", "key": "diligent", "weight": 1, "curve": [ [0, 0], [1, 1] ] },
+      { "source": "Ability", "key": "FatigueRatio", "weight": -2, "curve": [ [0, 0], [1, 1] ] }
     ]
   }
 ]

@@ -377,8 +377,8 @@ public class MissionPanel : MonoBehaviour
     {
         if (data == null) return;
         string reason = GeneralLockReason(data);
-        int days = data.isFacilityAction && FacilityRules.UsesLevelScaledAction(data.requiredFacility) && PlayerManager.Instance != null
-            ? FacilityRules.ActionDays(data.requiredFacility, PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) : data.needDays;
+        int days = data.isFacilityAction && !data.isStoryAction && FacilityRules.UsesFixedFacilityAction(data.requiredFacility)
+            ? FacilityRules.ActionDays(data.requiredFacility) : data.needDays;
         Button button = RuntimeUIFactory.Button(dynamicList, string.IsNullOrEmpty(reason)
             ? $"{data.name}　{days}天　消耗 {FormatMissionCosts(data)}" : $"{data.name}（{reason}）", 48);
         button.interactable = string.IsNullOrEmpty(reason);
@@ -422,7 +422,8 @@ public class MissionPanel : MonoBehaviour
     {
         if (PlayerManager.Instance == null || WarehouseManager.Instance == null) return "系统未初始化";
         if (!MissionManager.Instance.IsMissionVisible(data)) return "当前宗门状态未开放";
-        if (data.requiredFacilityLevel > PlayerManager.Instance.GetFacilityLevel(data.requiredFacility)) return "设施等级不足";
+        if (data.requiresFacility && !PlayerManager.Instance.HasFacility(data.requiredFacility))
+            return "对应宗门功能尚未开放";
         if (data.foundingAction == FoundingActionKind.BuildRouteFacility)
         {
             if (PlayerManager.Instance.playerData.founding.inheritancePreparationProgress < FoundingRules.MaxUnderstanding) return "传承整理未达到100%";

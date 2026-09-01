@@ -21,6 +21,10 @@ public sealed class DiscipleCenterView : UIWindowView
     [SerializeField] private TMP_Text dailyAuraText;
     [SerializeField] private TMP_Text abilitiesText;
     [SerializeField] private TMP_Text relationshipsText;
+    [SerializeField] private TMP_Text growthText;
+    [SerializeField] private TMP_Text growthPeriodText;
+    [SerializeField] private Button previousGrowthButton;
+    [SerializeField] private Button nextGrowthButton;
     [SerializeField] private RectTransform historyContent;
     [SerializeField] private DiscipleHistoryItemView historyItemPrefab;
     [SerializeField] private TMP_Text historyEmptyText;
@@ -40,6 +44,8 @@ public sealed class DiscipleCenterView : UIWindowView
         TMP_Text newStateText, TMP_Text newHealthText, Image newNaqiFill, TMP_Text newNaqiText,
         Image newMasteryFill, TMP_Text newMasteryText, TMP_Text newMentalText,
         TMP_Text newDailyAuraText, TMP_Text newAbilitiesText, TMP_Text newRelationshipsText,
+        TMP_Text newGrowthText, TMP_Text newGrowthPeriodText, Button newPreviousGrowthButton,
+        Button newNextGrowthButton,
         RectTransform newHistoryContent,
         DiscipleHistoryItemView newHistoryItemPrefab, TMP_Text newHistoryEmptyText,
         TMP_Text newCurrentActionText, TMP_Text newCurrentPlanText, TMP_Text newNextPlanText,
@@ -61,6 +67,10 @@ public sealed class DiscipleCenterView : UIWindowView
         dailyAuraText = newDailyAuraText;
         abilitiesText = newAbilitiesText;
         relationshipsText = newRelationshipsText;
+        growthText = newGrowthText;
+        growthPeriodText = newGrowthPeriodText;
+        previousGrowthButton = newPreviousGrowthButton;
+        nextGrowthButton = newNextGrowthButton;
         historyContent = newHistoryContent;
         historyItemPrefab = newHistoryItemPrefab;
         historyEmptyText = newHistoryEmptyText;
@@ -74,6 +84,8 @@ public sealed class DiscipleCenterView : UIWindowView
     private void Awake()
     {
         presenter = new DiscipleCenterPresenter(this);
+        previousGrowthButton?.onClick.AddListener(() => presenter.MoveGrowthPeriod(-1));
+        nextGrowthButton?.onClick.AddListener(() => presenter.MoveGrowthPeriod(1));
         for (int index = 0; index < (tabButtons?.Length ?? 0); index++)
         {
             int captured = index;
@@ -122,6 +134,10 @@ public sealed class DiscipleCenterView : UIWindowView
         Set(dailyAuraText, hasSelection ? $"当前灵气：{snapshot.currentAura:0.0} / {snapshot.auraCapacity:0.0}　控制 {snapshot.auraControl:0.0}　疲劳 {snapshot.fatigue:0.0}" : string.Empty);
         Set(abilitiesText, snapshot.abilities);
         Set(relationshipsText, snapshot.relationships);
+        Set(growthText, snapshot.growth);
+        Set(growthPeriodText, snapshot.growthPeriodLabel);
+        if (previousGrowthButton != null) previousGrowthButton.interactable = snapshot.canShowPreviousGrowth;
+        if (nextGrowthButton != null) nextGrowthButton.interactable = snapshot.canShowNextGrowth;
         RenderHistory(snapshot.historyItems);
         Set(currentActionText, hasSelection ? snapshot.currentAction : "暂无当前行动");
         Set(currentPlanText, hasSelection ? snapshot.currentPlan : "暂无本月计划");

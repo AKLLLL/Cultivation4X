@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using Cultivation4X.WorldMap;
 using UnityEngine;
 
 public class NPCManager : MonoBehaviour
@@ -156,11 +157,14 @@ public class NPCManager : MonoBehaviour
     }
 
 
-    public void Injured(NPCRuntime npc, int days)
+    public void Injured(NPCRuntime npc, int days, int recordDay = -1)
     {
         if (npc == null || !npc.Character.IsAlive) return;
+        int day = ResolveRecordDay(recordDay);
         npc.Character.health = days >= 5 ? HealthState.SeriousInjury : HealthState.LightInjury;
-        npc.Character.AddLifeRecord(CurrentDay, "Injury", $"受伤，需要休养 {days} 天");
+        ExperienceRecordRules.Add(npc.Character, day, ExperienceType.Injury, ExperienceImportance.Minor,
+            "injury", $"受伤，需要休养 {days} 天", null,
+            new[] { ExperienceRecordRules.Value("days", days) });
         EventManager.Instance?.TryTriggerSource(EventSource.Injury, npc);
         bool missionCanContinue = npc.CurrentMission != null &&
             (npc.CurrentMission.State == MissionState.Active || npc.CurrentMission.State == MissionState.WaitingNode);
@@ -171,11 +175,13 @@ public class NPCManager : MonoBehaviour
         if (mission != null) npc.CurrentMission = null;
     }
 
-    public void ApplyPermanentTrauma(NPCRuntime npc, string traitId)
+    public void ApplyPermanentTrauma(NPCRuntime npc, string traitId, int recordDay = -1)
     {
         if (npc == null || !npc.Character.IsAlive) return;
         npc.Character.health = HealthState.PermanentTrauma;
         npc.Character.AddTrait(traitId);
+        ExperienceRecordRules.Add(npc.Character, ResolveRecordDay(recordDay), ExperienceType.Injury,
+            ExperienceImportance.Major, "permanent_trauma", "遭受永久创伤", traitId);
         Mission mission = npc.CurrentMission;
         if (mission != null) mission.FailMission(false);
     }
@@ -222,7 +228,7 @@ public class NPCManager : MonoBehaviour
     /// 文本参数缺省时使用默认文本；旧的三参数调用源码兼容。
     /// </summary>
     public bool AddRelationship(string sourceId, string targetId, RelationshipTag tag,
-        string sourceRecordText = null, string targetRecordText = null)
+        string sourceRecordText = null, string targetRecordText = null, int recordDay = -1)
     {
         NPCRuntime source = GetRuntime(sourceId);
         NPCRuntime target = GetRuntime(targetId);
@@ -231,39 +237,47 @@ public class NPCManager : MonoBehaviour
         target.Character.relationships = target.Character.relationships ?? new List<RelationshipRecord>();
         if (source.Character.relationships.Any(r => r.targetCharacterId == targetId && r.tag == tag)
             || target.Character.relationships.Any(r => r.targetCharacterId == sourceId && r.tag == tag)) return false;
+        int day = ResolveRecordDay(recordDay);
         source.Character.relationships.Add(new RelationshipRecord
         {
             sourceCharacterId = sourceId,
             targetCharacterId = targetId,
             tag = tag,
-            createdDay = CurrentDay
+            createdDay = day
         });
         target.Character.relationships.Add(new RelationshipRecord
         {
             sourceCharacterId = targetId,
             targetCharacterId = sourceId,
             tag = tag,
-            createdDay = CurrentDay
+            createdDay = day
         });
-        source.Character.AddLifeRecord(CurrentDay, "Relationship",
-            string.IsNullOrWhiteSpace(sourceRecordText)
+        ExperienceRecordRules.Add(source.Character, day, ExperienceType.Relationship, ExperienceImportance.Major,
+            "relationship", string.IsNullOrWhiteSpace(sourceRecordText)
                 ? DefaultRelationshipRecordText(source, target, tag)
-                : sourceRecordText);
-        target.Character.AddLifeRecord(CurrentDay, "Relationship",
-            string.IsNullOrWhiteSpace(targetRecordText)
+                : sourceRecordText, targetId, new[]
+                {
+                    ExperienceRecordRules.Value("relationshipTag", tag.ToString())
+                });
+        ExperienceRecordRules.Add(target.Character, day, ExperienceType.Relationship, ExperienceImportance.Major,
+            "relationship", string.IsNullOrWhiteSpace(targetRecordText)
                 ? DefaultRelationshipRecordText(target, source, tag)
-                : targetRecordText);
+                : targetRecordText, sourceId, new[]
+                {
+                    ExperienceRecordRules.Value("relationshipTag", tag.ToString())
+                });
         return true;
     }
 
     /// <summary>
     /// 关系结果兜底：没有可建关系的目标时，只给当事人写一条 Relationship 履历。
     /// </summary>
-    public void RecordRelationshipOutcome(string characterId, string text)
+    public void RecordRelationshipOutcome(string characterId, string text, int recordDay = -1)
     {
         NPCRuntime runtime = GetRuntime(characterId);
         if (runtime == null || !runtime.Character.IsAlive || string.IsNullOrWhiteSpace(text)) return;
-        runtime.Character.AddLifeRecord(CurrentDay, "Relationship", text);
+        ExperienceRecordRules.Add(runtime.Character, ResolveRecordDay(recordDay), ExperienceType.Relationship,
+            ExperienceImportance.Major, "relationship", text);
     }
 
     private static string DefaultRelationshipRecordText(NPCRuntime subject, NPCRuntime other, RelationshipTag tag)
@@ -287,9 +301,10 @@ public class NPCManager : MonoBehaviour
         }
     }
 
-    public bool Kill(NPCRuntime npc, string cause)
+    public bool Kill(NPCRuntime npc, string cause, int recordDay = -1)
     {
         if (npc == null || !npc.Character.IsAlive) return false;
+        int day = ResolveRecordDay(recordDay);
         Mission currentMission = npc.CurrentMission;
         // 防止全员死亡坏档：最后一名弟子转为永久创伤。
         if (GetLivingNPC().Count <= 1)
@@ -297,7 +312,8 @@ public class NPCManager : MonoBehaviour
             if (currentMission != null) currentMission.FailMission(false);
             npc.Character.health = HealthState.PermanentTrauma;
             npc.Character.AddTrait("near_death_survivor");
-            npc.Character.AddLifeRecord(CurrentDay, "NearDeath", $"死里逃生：{cause}");
+            ExperienceRecordRules.Add(npc.Character, day, ExperienceType.NearDeath, ExperienceImportance.Major,
+                "near_death", $"死里逃生：{cause}", cause);
             Recover(npc);
             return false;
         }
@@ -308,12 +324,15 @@ public class NPCManager : MonoBehaviour
         npc.Character.activityState = NPCState.Idle;
         npc.State = NPCState.Idle;
         npc.CurrentMission = null;
-        npc.Character.AddLifeRecord(CurrentDay, "Death", cause);
+        SectOrganizationRules.CleanupMembers(PlayerManager.Instance?.playerData,
+            GetLivingNPC().Select(item => item.CharacterId));
+        ExperienceRecordRules.Add(npc.Character, day, ExperienceType.Death, ExperienceImportance.Major,
+            "death", cause, cause);
         SaveManager.Instance?.AutoSave();
         return true;
     }
 
-    public NPCRuntime RecruitFromTemplate(string templateId)
+    public NPCRuntime RecruitFromTemplate(string templateId, int recordDay = -1)
     {
         NPCData template = Resources.LoadAll<NPCData>("NPC")
             .FirstOrDefault(data => data.npcID == templateId);
@@ -340,7 +359,8 @@ public class NPCManager : MonoBehaviour
         if (!npcMap.ContainsKey(template)) npcMap[template] = runtime;
         npcById[state.characterId] = runtime;
         runtimes.Add(runtime);
-        state.AddLifeRecord(CurrentDay, "Recruit", "加入宗门");
+        ExperienceRecordRules.Add(state, ResolveRecordDay(recordDay), ExperienceType.Recruitment,
+            ExperienceImportance.Minor, "recruit", "加入宗门", templateId);
         return runtime;
     }
 
@@ -351,7 +371,20 @@ public class NPCManager : MonoBehaviour
     /// </summary>
     public void OnDayPassed()
     {
-        foreach (var npc in runtimes)
+        ProcessDayWithResults();
+    }
+
+    /// <summary>
+    /// 每天推进并返回实际执行证据。旧入口继续保留，但午夜结算应消费本结果。
+    /// </summary>
+    public List<DiscipleDayExecutionResult> ProcessDayWithResults()
+    {
+        List<DiscipleDayExecutionResult> results = new List<DiscipleDayExecutionResult>();
+        bool worldChanged = false;
+        DiscipleAIConfig aiConfig = null;
+        IdentityDefinition identity = null;
+        foreach (var npc in runtimes.Where(item => item?.Character != null)
+                     .OrderBy(item => item.CharacterId, StringComparer.Ordinal))
         {
             DailyCultivationSimulator.StartDay(npc);
             DiscipleMentalStateRules.RestoreDaily(npc);
@@ -360,11 +393,6 @@ public class NPCManager : MonoBehaviour
             if (wasInjured && npc.State == NPCState.Idle) Recover(npc);
             if (!npc.Character.IsAlive) continue;
             int day = CurrentDay;
-            Mission activeMission = npc.CurrentMission;
-            if (activeMission != null && (activeMission.State == MissionState.Active || activeMission.State == MissionState.WaitingNode))
-            {
-                continue;
-            }
             MonthlyActivityType activity;
             string lockedActionId;
             if (TimeManager.Instance == null ||
@@ -373,14 +401,78 @@ public class NPCManager : MonoBehaviour
                 activity = MonthlyPlanRules.ActivityFor(npc, day);
                 lockedActionId = null;
             }
-            if (npc.State == NPCState.Idle)
+            DiscipleDayExecutionResult execution = new DiscipleDayExecutionResult
             {
-                if (activity == MonthlyActivityType.Training)
-                    DailyCultivationSimulator.SimulateTrainingDay(npc, day, lockedActionId);
-                else if (activity == MonthlyActivityType.SectDuty)
-                    ProcessSectDutyDay();
+                discipleId = npc.CharacterId,
+                scheduledActivity = activity,
+                actualActivity = DiscipleCurrentStateBuilder.ActivityKind(activity),
+                executed = false
+            };
+            Mission activeMission = npc.CurrentMission;
+            if (activeMission != null && (activeMission.State == MissionState.Active || activeMission.State == MissionState.WaitingNode))
+            {
+                execution.actualActivity = DiscipleActivityKind.Mission;
+                execution.actionId = activeMission.Data?.id;
+                execution.actionDisplayName = activeMission.Data?.name ?? "执行任务";
+                execution.executed = true;
+                results.Add(execution);
+                continue;
             }
+            if (wasInjured || npc.State != NPCState.Idle || npc.Character.health != HealthState.Healthy)
+            {
+                execution.actualActivity = DiscipleActivityKind.Recovery;
+                execution.actionId = "recovery";
+                execution.actionDisplayName = "休养";
+                execution.failureReason = npc.Character.health == HealthState.PermanentTrauma ? "永久创伤" : "伤病休养";
+                results.Add(execution);
+                continue;
+            }
+            if (activity == MonthlyActivityType.Training)
+            {
+                DailyCultivationResult cultivation = DailyCultivationSimulator.SimulateTrainingDay(npc, day, lockedActionId);
+                execution.actualActivity = DiscipleActivityKind.Training;
+                execution.actionId = cultivation?.selectedActionId ?? lockedActionId;
+                execution.actionDisplayName = cultivation?.selectedActionName ?? DailyCultivationSimulator.ActionName(lockedActionId);
+                execution.executed = cultivation != null;
+                execution.failureReason = cultivation == null ? "修炼未执行" : null;
+                execution.cultivationResult = cultivation;
+            }
+            else if (activity == MonthlyActivityType.SectDuty)
+            {
+                if (aiConfig == null)
+                {
+                    aiConfig = DiscipleAIConfigLoader.Load();
+                    identity = aiConfig.Identities.FirstOrDefault(item => item != null && item.autonomyEnabled);
+                }
+                SectDutyDecision decision = SectDutyResolver.Resolve(npc, day, aiConfig, identity,
+                    PlayerManager.Instance?.playerData, WorldMapSession.Current, WorldMapSession.Progress);
+                SectDutyExecutionOutcome outcome = SectDutyExecutor.Execute(
+                    decision, WorldMapSession.Current, WorldMapSession.Progress);
+                execution.actualActivity = DiscipleActivityKind.SectDuty;
+                execution.actionId = outcome.actionId;
+                execution.actionDisplayName = string.IsNullOrWhiteSpace(outcome.targetDisplayName)
+                    ? outcome.actionDisplayName ?? "宗门事务"
+                    : $"{outcome.actionDisplayName ?? "宗门事务"} · {outcome.targetDisplayName}";
+                execution.targetId = outcome.targetId;
+                execution.targetDisplayName = outcome.targetDisplayName;
+                execution.departmentId = outcome.departmentId;
+                execution.executed = outcome.executed;
+                execution.failureReason = outcome.failureReason;
+                worldChanged |= outcome.worldChanged;
+            }
+            else
+            {
+                execution.actualActivity = DiscipleActivityKind.Free;
+                execution.actionId = "free_day";
+                execution.actionDisplayName = "自由活动";
+                execution.executed = true;
+            }
+            results.Add(execution);
         }
+        SectOrganizationRules.CleanupMembers(PlayerManager.Instance?.playerData,
+            runtimes.Where(item => item?.Character?.IsAlive == true).Select(item => item.CharacterId));
+        if (worldChanged) WorldMapSession.NotifyProgressChanged();
+        return results;
     }
 
     public void ApplyNightlyCultivationSettlement()
@@ -389,18 +481,8 @@ public class NPCManager : MonoBehaviour
             if (npc?.Character?.IsAlive == true) DailyCultivationSimulator.ApplyNightLeak(npc);
     }
 
-    private static void ProcessSectDutyDay()
-    {
-        PlayerData player = PlayerManager.Instance?.playerData;
-        if (player == null) return;
-        player.sectDutyWorkCredit++;
-        if (player.sectDutyWorkCredit < 5) return;
-        player.sectDutyWorkCredit -= 5;
-        if (WarehouseManager.Instance == null || !WarehouseManager.Instance.TryAddItem(FacilityRules.BasicMaterialId, 1))
-            TimeManager.Instance?.RecordDayNotice("宗门事务产出的基础材料因仓库容量不足而损失");
-    }
-
     private int CurrentDay => TimeManager.Instance == null ? 0 : TimeManager.Instance.CurrentDay;
+    private int ResolveRecordDay(int requested) => requested >= 0 ? requested : CurrentDay;
 
     public void RestoreCharacters(IEnumerable<CharacterState> states)
     {

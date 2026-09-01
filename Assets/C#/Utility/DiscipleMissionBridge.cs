@@ -43,8 +43,8 @@ public static class DiscipleMissionBridge
         { reason = "需要消耗资源"; return false; }
         if (data.isFacilityAction)
         {
-            int level = PlayerManager.Instance == null ? 0 : PlayerManager.Instance.GetFacilityLevel(data.requiredFacility);
-            if (level < data.requiredFacilityLevel) { reason = "设施等级不足"; return false; }
+            if (data.requiresFacility && PlayerManager.Instance?.HasFacility(data.requiredFacility) != true)
+            { reason = "对应宗门功能尚未开放"; return false; }
             bool occupied = MissionManager.Instance.GetActiveMissions().Any(mission =>
                 mission?.Data != null && mission.Data.isFacilityAction &&
                 mission.Data.requiredFacility == data.requiredFacility &&

@@ -150,7 +150,7 @@ public sealed class GlobalUICoreTests
         SerializedObject serialized = new SerializedObject(root.GetComponent<UIManager>());
         Assert.That(serialized.FindProperty("theme").objectReferenceValue, Is.Not.Null);
         SerializedProperty registrations = serialized.FindProperty("windowRegistrations");
-        Assert.That(registrations.arraySize, Is.EqualTo(2));
+        Assert.That(registrations.arraySize, Is.EqualTo(3));
         for (int index = 0; index < registrations.arraySize; index++)
             Assert.That(registrations.GetArrayElementAtIndex(index).FindPropertyRelative("prefab").objectReferenceValue,
                 Is.Not.Null);
@@ -164,6 +164,72 @@ public sealed class GlobalUICoreTests
         Assert.That(hud.FindProperty("speed1Button").objectReferenceValue, Is.Not.Null);
         Assert.That(hud.FindProperty("speed2Button").objectReferenceValue, Is.Not.Null);
         Assert.That(hud.FindProperty("speed4Button").objectReferenceValue, Is.Not.Null);
+    }
+
+    [TestCase(1920f, 1080f)]
+    [TestCase(1280f, 720f)]
+    public void SectOrganizationBodyPrefab_UsesFullSizeScrollableContent(float width, float height)
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/Resources/Prefab/UI/SectOrganizationBody.prefab");
+        Assert.That(prefab, Is.Not.Null);
+        SectOrganizationBodyView prefabView = prefab.GetComponent<SectOrganizationBodyView>();
+        Assert.That(prefabView, Is.Not.Null);
+        Assert.That(prefabView.Content, Is.Not.Null);
+
+        GameObject host = new GameObject("UITest_SectOrganizationHost", typeof(RectTransform));
+        RectTransform hostRect = host.GetComponent<RectTransform>();
+        hostRect.sizeDelta = new Vector2(width, height);
+        GameObject instance = UnityEngine.Object.Instantiate(prefab, host.transform, false);
+        instance.name = "UITest_SectOrganizationBody";
+        Canvas.ForceUpdateCanvases();
+        hostRect.ForceUpdateRectTransforms();
+
+        RectTransform root = instance.GetComponent<RectTransform>();
+        ScrollRect scroll = instance.GetComponentInChildren<ScrollRect>(true);
+        Assert.That(scroll, Is.Not.Null);
+        Assert.That(scroll.content, Is.SameAs(instance.GetComponent<SectOrganizationBodyView>().Content));
+        Assert.That(root.rect.width, Is.EqualTo(width).Within(0.5f));
+        Assert.That(root.rect.height, Is.EqualTo(height).Within(0.5f));
+        Assert.That(scroll.GetComponent<RectTransform>().rect.width, Is.EqualTo(width).Within(0.5f));
+        Assert.That(scroll.GetComponent<RectTransform>().rect.height, Is.EqualTo(height).Within(0.5f));
+        Assert.That(instance.GetComponent<LayoutElement>().flexibleWidth, Is.EqualTo(1f));
+        Assert.That(instance.GetComponent<LayoutElement>().flexibleHeight, Is.EqualTo(1f));
+    }
+
+    [Test]
+    public void SectManagerUsesSixCompactPublicTabs()
+    {
+        foreach (SectWorldInterface existing in Resources.FindObjectsOfTypeAll<SectWorldInterface>())
+            UnityEngine.Object.DestroyImmediate(existing.gameObject);
+
+        GameObject playerObject = new GameObject("UITest_SectPlayer", typeof(PlayerManager));
+        PlayerManager player = playerObject.GetComponent<PlayerManager>();
+        PlayerManager.Instance = player;
+        player.playerData.sectName = "测试宗";
+        player.playerData.founding = new FoundingState
+        {
+            initialized = true,
+            sectCreated = true,
+            completed = true,
+            stage = FoundingStage.Completed
+        };
+        GameObject interfaceObject = new GameObject("UITest_SectWorldInterface", typeof(SectWorldInterface));
+        SectWorldInterface sectInterface = interfaceObject.GetComponent<SectWorldInterface>();
+        InvokePrivateAwake(sectInterface);
+        sectInterface.OpenSectLayout();
+
+        RectTransform tabs = FindChild(interfaceObject.transform, "SectManagerTabs").GetComponent<RectTransform>();
+        HorizontalLayoutGroup layout = tabs.GetComponent<HorizontalLayoutGroup>();
+        Assert.That(tabs.childCount, Is.EqualTo(6));
+        Assert.That(layout.childForceExpandWidth, Is.False);
+        Assert.That(layout.childControlWidth, Is.True);
+        foreach (Transform child in tabs)
+        {
+            LayoutElement size = child.GetComponent<LayoutElement>();
+            Assert.That(size.preferredWidth, Is.EqualTo(UIComponentStyles.CompactTabButtonWidth).Within(0.5f));
+            Assert.That(size.preferredHeight, Is.EqualTo(UIComponentStyles.CompactTabBarHeight).Within(0.5f));
+        }
     }
 
     [TestCase(1920f, 1080f)]
@@ -310,6 +376,7 @@ public sealed class GlobalUICoreTests
         SerializedObject centerView = new SerializedObject(center.GetComponent<DiscipleCenterView>());
         TMP_Text overviewName = centerView.FindProperty("nameText").objectReferenceValue as TMP_Text;
         SerializedProperty pages = centerView.FindProperty("tabPages");
+        Assert.That(pages.arraySize, Is.EqualTo(5));
         GameObject overviewPage = pages.GetArrayElementAtIndex(0).objectReferenceValue as GameObject;
         Assert.That(overviewName.transform.IsChildOf(overviewPage.transform), Is.True);
         for (int index = 1; index < pages.arraySize; index++)
@@ -334,6 +401,48 @@ public sealed class GlobalUICoreTests
         TMP_Text planText = currentPlan.GetComponentsInChildren<TMP_Text>(true).Last();
         Assert.That(currentPlan.GetComponent<LayoutElement>().preferredHeight, Is.GreaterThanOrEqualTo(180f));
         Assert.That(planText.overflowMode, Is.EqualTo(TextOverflowModes.Ellipsis));
+    }
+
+    [TestCase(1920f, 1080f)]
+    [TestCase(1280f, 720f)]
+    public void MonthlyReportPrefab_HasRequiredReferencesAndFitsReferenceSizes(float width, float height)
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/UI/Prefabs/MonthlyReport/MonthlyReport.prefab");
+        Assert.That(prefab, Is.Not.Null);
+        MonthlyReportView prefabView = prefab.GetComponent<MonthlyReportView>();
+        Assert.That(prefabView, Is.Not.Null);
+        SerializedObject serialized = new SerializedObject(prefabView);
+        Assert.That(serialized.FindProperty("contentText").objectReferenceValue, Is.Not.Null);
+        Assert.That(serialized.FindProperty("toggleAllButton").objectReferenceValue, Is.Not.Null);
+
+        GameObject instance = UnityEngine.Object.Instantiate(prefab);
+        RectTransform rect = instance.GetComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.zero;
+        rect.sizeDelta = new Vector2(width * 0.94f, height * 0.93f);
+        InvokePrivateAwake(instance.GetComponent<MonthlyReportView>());
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+        Assert.That(rect.rect.width, Is.GreaterThan(1000f));
+
+        RectTransform header = FindChild(instance.transform, "Header").GetComponent<RectTransform>();
+        RectTransform controls = FindChild(instance.transform, "PeriodControls").GetComponent<RectTransform>();
+        RectTransform scroll = FindChild(instance.transform, "MonthlyReportScroll").GetComponent<RectTransform>();
+        Assert.That(header.rect.height, Is.InRange(47.5f, 48.5f));
+        Assert.That(controls.rect.height, Is.InRange(39.5f, 40.5f));
+        Assert.That(header.GetComponent<HorizontalLayoutGroup>().childForceExpandHeight, Is.False);
+        Assert.That(controls.GetComponent<HorizontalLayoutGroup>().childForceExpandHeight, Is.False);
+        Assert.That(header.GetComponent<LayoutElement>().flexibleHeight, Is.EqualTo(0f));
+        Assert.That(controls.GetComponent<LayoutElement>().flexibleHeight, Is.EqualTo(0f));
+        Assert.That(scroll.rect.height, Is.GreaterThan(rect.rect.height * 0.65f));
+        foreach (Button button in instance.GetComponentsInChildren<Button>(true))
+            Assert.That(button.GetComponent<RectTransform>().rect.height, Is.InRange(39.5f, 40.5f));
+        Assert.That(FindChild(instance.transform, "DiscipleGrowthCard"), Is.Not.Null);
+        Assert.That(FindChild(instance.transform, "ExperienceHighlightsCard"), Is.Not.Null);
+        Assert.That(FindChild(instance.transform, "SectResourcesCard"), Is.Not.Null);
+        UnityEngine.Object.DestroyImmediate(instance);
     }
 
     [Test]
@@ -668,10 +777,10 @@ public sealed class GlobalUICoreTests
         return handlers?.GetInvocationList().Any(handler => ReferenceEquals(handler.Target, presenter)) == true;
     }
 
-    private static void InvokePrivateAwake(MonthlyPlanPanel view)
+    private static void InvokePrivateAwake(MonoBehaviour view)
     {
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
                                                      System.Reflection.BindingFlags.NonPublic;
-        typeof(MonthlyPlanPanel).GetMethod("Awake", flags).Invoke(view, null);
+        view.GetType().GetMethod("Awake", flags).Invoke(view, null);
     }
 }

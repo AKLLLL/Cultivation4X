@@ -269,8 +269,7 @@ public class ExternalThreatPanel : MonoBehaviour
             text.AppendLine($"威胁战力：{definition.threatPower}　我方取得先手修正 1.10");
         if (threat.intelligence >= 75)
         {
-            int level = PlayerManager.Instance?.GetFacilityLevel(FacilityType.ProtectionArray) ?? 0;
-            float defense = Mathf.Min(1.35f, 1.2f + 0.05f * level);
+            float defense = PlayerManager.Instance?.HasFacility(FacilityType.ProtectionArray) == true ? 1.25f : 1.2f;
             text.AppendLine($"情报修正 {1f + 0.0025f * threat.intelligence:0.00}　正面 1.00　简单防御 {defense:0.00}（材料×{definition.defenseMaterialCost}）");
         }
         return text.ToString();
